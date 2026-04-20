@@ -16,3 +16,6 @@ dev = [
     "ruff>=0.15.11",
     "ty>=0.0.31",
 ]
+
+[tool.ty.src]
+exclude = ["uv.lock"]
