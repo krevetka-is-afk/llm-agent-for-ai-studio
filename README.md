@@ -5,13 +5,13 @@
 
 ### Пререквизит
 
-uv & ≥python3.14
+`uv` & `≥python3.14`
 
 ### Клонируем репозиторий
 
 ```bash
-git clone ...
-cd ...
+git clone https://github.com/krevetka-is-afk/llm-agent-for-ai-studio.git
+cd llm-agent-for-ai-studio
 ```
 
 ### Устанавливаем зависимости
