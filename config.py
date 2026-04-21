@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 from dataclasses import dataclass
 
 DEFAULT_BASE_URL = "https://ai.api.cloud.yandex.net/v1"
+DEFAULT_INSTRUCTIONS_FOR_AI = "Ты — текстовый агент, который ведёт диалог\
+ и даёт информативные ответы на вопросы пользователя."
 
 
 @dataclass(frozen=True)
@@ -16,10 +18,10 @@ class Settings:
     temperature: float
     max_output_tokens: int
     timeout: float
+    instructions: str
 
     @classmethod
     def load_settings(cls) -> Settings:
-
         load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=True)
 
         folder_id = _required_env("YANDEX_FOLDER_ID")
@@ -30,6 +32,8 @@ class Settings:
                 model if model.startswith("gpt://") else f"gpt://{folder_id}/{model}"
             )
 
+        instructions = os.getenv("INSTRUCTIONS_FOR_AI", DEFAULT_INSTRUCTIONS_FOR_AI)
+
         return Settings(
             api_key=_required_env("YANDEX_API_KEY"),
             folder_id=folder_id,
@@ -38,6 +42,7 @@ class Settings:
             temperature=_env_float("YANDEX_TEMPERATURE", default=0.5),
             max_output_tokens=_env_int("YANDEX_MAX_OUTPUT_TOKENS", default=1000),
             timeout=_env_float("YANDEX_TIMEOUT", default=36.6),
+            instructions=instructions,
         )
 
 
