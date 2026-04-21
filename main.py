@@ -5,7 +5,11 @@ from yandex_cloud import get_client, ask
 def main():
     settings = Settings.load_settings()
     client = get_client(settings)
-    answer = ask(client, settings, prompt="Как дела?", is_background=True)
+
+    conv = client.conversations.create()
+    # print("conversation_id:", conv.id)
+
+    answer = ask(client, settings, prompt="Как дела?", is_background=False, conversation_id=conv.id)
     print(answer)
 
 

@@ -13,18 +13,23 @@ def get_client(settings: Settings) -> OpenAI:
     )
 
 
-def ask(client: OpenAI, settings: Settings, prompt: str, is_background=False) -> str:
+def ask(client: OpenAI, settings: Settings, prompt: str, is_background=False, conversation_id=None) -> str:
     response = client.responses.create(
         model=settings.model_uri,
+        instructions=settings.instructions,
         input=prompt,
+        conversation=conversation_id,
         temperature=settings.temperature,
         max_output_tokens=settings.max_output_tokens,
         background=is_background
     )
+
+    # print(conversation_id)
+
     if not is_background:
         return response.output_text
 
-    print("please wait", response.id)
+    # print("please wait", response.id)
 
     while True:
         status = client.responses.retrieve(response.id)
