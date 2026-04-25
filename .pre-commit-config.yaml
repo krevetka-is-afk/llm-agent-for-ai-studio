@@ -11,20 +11,20 @@ repos:
 
   - repo: local
     hooks:
-      - id: ty-check
-        name: ty check
-        description: Type checker
-        entry: uvx ty check
+      - id: ruff-check
+        name: ruff check and fix
+        args: [ --fix ]
+        entry: uvx ruff check
         language: system
         types_or: [python, pyi]
         pass_filenames: true
 
   - repo: local
     hooks:
-      - id: ruff-check
-        name: ruff check and fix
-        args: [ --fix ]
-        entry: uvx ruff check
+      - id: ty-check
+        name: ty check
+        description: Type checker
+        entry: uvx ty check
         language: system
         types_or: [python, pyi]
         pass_filenames: true
