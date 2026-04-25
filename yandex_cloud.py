@@ -4,6 +4,9 @@ from openai import OpenAI
 from config import Settings
 
 
+# from tools import Tools
+
+
 def get_client(settings: Settings) -> OpenAI:
     return OpenAI(
         api_key=settings.api_key,
@@ -13,7 +16,7 @@ def get_client(settings: Settings) -> OpenAI:
     )
 
 
-def ask(client: OpenAI, settings: Settings, prompt: str, is_background=False, conversation_id=None) -> str:
+def ask(client: OpenAI, settings: Settings, tools: dict, prompt: str, is_background=False, conversation_id=None) -> str:
     response = client.responses.create(
         model=settings.model_uri,
         instructions=settings.instructions,
@@ -21,7 +24,8 @@ def ask(client: OpenAI, settings: Settings, prompt: str, is_background=False, co
         conversation=conversation_id,
         temperature=settings.temperature,
         max_output_tokens=settings.max_output_tokens,
-        background=is_background
+        background=is_background,
+        # tools=tools,
     )
 
     # print(conversation_id)
