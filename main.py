@@ -1,39 +1,50 @@
-from create_search_index import create_search_index
+import asyncio
+import logging
+import uuid
+from datetime import datetime, timezone
+
+from agents.items import ToolCallItem
+from chatkit.types import ThreadMetadata, UserMessageItem
+
 from config import Settings
-from upload_files import upload_file
-from yandex_cloud import get_client, ask
-from tools import Tools
+from memory_store import MemoryStore
+from rag_agent_server import DEFAULT_THREAD_ID, RagChatkitServer
+from utils import _extract_text
+
+logging.basicConfig(level=logging.INFO, filename='app.log', format='%(asctime)s – %(name)s – %(levelname)s – %(message)s')
 
 
-# from search_in_search_index import search_in_search_index
+async def get_streaming_response(server, thread, item, context={}) -> bool:
+    is_done = False
+    async for event in server.respond(
+        thread=thread,
+        item=item,
+        context=context,
+    ):  
+        if isinstance(item, ToolCallItem):
+            if item.raw_item.name == "finish_dialog":
+                is_done = True
+        text = _extract_text(event)
+        if text:
+            print(text, end="", flush=True)
+    return is_done
+        
 
-
-def main():
-    chat_loop()
-
-
-MENU = '''
-to upload file type /upload_file <path_to_file>
-to create search index type /create_search_index <vector_store_name>
-to search in search index type /search_in_search_index <query>
-to exit type /exit
-'''
-
-
-def chat_loop() -> None:
+async def chat_loop() -> None:
     print("Welcome to Yandex Cloud Chat!")
-    print(MENU)
 
     settings = Settings.load_settings()
-    tools = Tools.load_tools()
-    client = get_client(settings)
-    conv = client.conversations.create()
-    uploaded_files_ids = []
-    created_vector_store_ids = []
-
-    print("conversation_id:", conv.id)
 
     exit_chat = False
+
+    store = MemoryStore()
+
+    rag_server = RagChatkitServer(store, settings)
+    thread = ThreadMetadata(
+        id=DEFAULT_THREAD_ID,
+        created_at=datetime.now(timezone.utc),
+        metadata={}
+    )
 
     while not exit_chat:
         user_prompt = input("> ")
@@ -42,50 +53,22 @@ def chat_loop() -> None:
             exit_chat = True
             break
 
-        elif user_prompt.startswith("/upload_file"):
-            path_to_file = user_prompt.strip().split()[1]
-            try:
-                file_id = upload_file(client=client, path_to_file=path_to_file)
-                uploaded_files_ids.append(file_id)
-            except Exception as e:
-                print("Error uploading file: ", e)
+        item = UserMessageItem(
+            id=str(uuid.uuid4()),
+            thread_id=thread.id,
+            created_at=datetime.now(timezone.utc),
+            content=[{
+                "type": "input_text",
+                "text": user_prompt,
+            }],
+            inference_options={}
+        )
+        print("> Assistant: ", end="", flush=True)
+        exit_chat = await get_streaming_response(rag_server, thread, item)
+        print(flush=True)
 
-        elif user_prompt.startswith("/create_search_index"):
-            vector_store_name = user_prompt.strip().split()[1]
-            try:
-                vector_store_id = create_search_index(client=client, file_ids=uploaded_files_ids,
-                                                      vector_store_name=vector_store_name)
-                created_vector_store_ids.append(vector_store_id)
-            except Exception as e:
-                print("Error creating index: ", e)
-
-
-        # TODO: редакиторивание стора
-
-        # TODO: перейти на стриминг
-
-        # TODO: завершения диалога
-
-        # Пока без поиска это отдельная функция
-        # elif user_prompt.startswith("/search_in_search_index"):
-        #     user_query = user_prompt.strip().split()[1]
-        #     try:
-        #         search_in_search_index(client=client, vector_store_id=vector_store_id[0], query=user_query)
-        #     except Exception as e:
-        #         print("Error searching index: ", e)
-
-        else:
-            answer = ask(
-                client,
-                settings,
-                tools=tools.weather_tool,
-                prompt=user_prompt,
-                is_background=False,
-                conversation_id=conv.id
-            )
-
-            print(answer)
-
+def main():
+    asyncio.run(chat_loop())
 
 if __name__ == "__main__":
     main()

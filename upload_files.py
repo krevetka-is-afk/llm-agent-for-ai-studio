@@ -1,18 +1,29 @@
+import logging
 from pathlib import Path
-from openai import OpenAI
+
+from agents import RunContextWrapper, function_tool
+
+from chatkit.agents import AgentContext
 
 
 def local_path(path: str) -> Path:
     return Path(__file__).parent / path
 
 
-def upload_file(client: OpenAI, path_to_file: str) -> str:
-    print(f"Загружаем файл {path_to_file}...")
+@function_tool
+def upload_file(ctx: RunContextWrapper[AgentContext], filename: str) -> str:
+    """
+    Upload a file to storage by its name.
+    Returns a file ID that must be saved for later use in create_vector_index.
+    """
+    logging.info(f"Загружаем файл {filename}...")
+
+    client = ctx.context.request_context['client']
 
     f = client.files.create(
-        file=open(local_path(path_to_file), "rb"),
+        file=open(local_path(filename), "rb"),
         purpose="assistants",
     )
-    print(f"Файл {path_to_file} загружен:", f.id)
+    logging.info(f"Файл {filename} загружен: {f.id}")
 
     return f.id

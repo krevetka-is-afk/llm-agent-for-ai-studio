@@ -1,8 +1,8 @@
+import os
+from dataclasses import dataclass
 from pathlib import Path
 
-import os
 from dotenv import load_dotenv
-from dataclasses import dataclass
 
 DEFAULT_BASE_URL = "https://ai.api.cloud.yandex.net/v1"
 DEFAULT_INSTRUCTIONS_FOR_AI = "Ты — текстовый агент, который ведёт диалог\
