@@ -5,7 +5,6 @@ from chatkit.agents import AgentContext, stream_agent_response
 from chatkit.server import ChatKitServer
 from chatkit.store import Store
 from chatkit.types import (
-    ClientToolCallItem,
     ThreadMetadata,
     ThreadStreamEvent,
     UserMessageItem,
@@ -31,13 +30,13 @@ class RagChatkitServer(ChatKitServer[dict[str, Any]]):
     async def respond(
             self,
             thread: ThreadMetadata,
-            item: UserMessageItem,
+            input_user_message: UserMessageItem | None,
             context: dict[str, Any],
     ) -> AsyncIterator[ThreadStreamEvent]:
-        if isinstance(item, ClientToolCallItem):
+        if input_user_message is None:
             return
 
-        user_message = _user_message_text(item)
+        user_message = _user_message_text(input_user_message)
 
         agent_context = AgentContext(
             thread=thread,
@@ -58,10 +57,10 @@ class RagChatkitServer(ChatKitServer[dict[str, Any]]):
         async for event in stream_agent_response(agent_context, result):
             yield event
 
-
         logging.info(f"last response_id = {result.raw_responses[-1].response_id}")
         thread.metadata["last_response_id"] = result.raw_responses[-1].response_id
         await self.store.save_thread(thread, context)
+
 
 def _user_message_text(item: UserMessageItem) -> str:
     parts: list[str] = []

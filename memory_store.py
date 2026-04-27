@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from chatkit.store import NotFoundError, Store
@@ -89,7 +89,7 @@ class MemoryStore(Store[dict[str, Any]]):
         state = self._threads.get(thread_id)
         if state is None:
             state = _ThreadState(
-                thread=ThreadMetadata(id=thread_id, created_at=datetime.utcnow()),
+                thread=ThreadMetadata(id=thread_id, created_at=datetime.now(timezone.utc)),
                 items=[],
             )
             self._threads[thread_id] = state
@@ -105,7 +105,7 @@ class MemoryStore(Store[dict[str, Any]]):
     ) -> Page[ThreadItem]:
         items = [item.model_copy(deep=True) for item in self._items(thread_id)]
         items.sort(
-            key=lambda item: getattr(item, "created_at", datetime.utcnow()),
+            key=lambda item: getattr(item, "created_at", datetime.now(timezone.utc)),
             reverse=(order == "desc"),
         )
 

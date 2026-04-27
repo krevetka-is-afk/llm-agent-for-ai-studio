@@ -1,21 +1,12 @@
-import time
 
-from agents import Agent, FileSearchTool, OpenAIProvider, RunConfig, Runner, RunResultStreaming
-from chatkit.agents import AgentContext, stream_agent_response
-from chatkit.server import ChatKitServer
-from chatkit.store import Store
-from chatkit.types import (
-    ClientToolCallItem,
-    ThreadMetadata,
-    ThreadStreamEvent,
-    UserMessageItem,
-)
+from agents import Agent, OpenAIProvider, RunConfig, Runner, RunResultStreaming
 from openai import OpenAI
 
 from config import Settings
 from upload_files import upload_file
 from create_search_index import create_search_index
 from finish_dialog import finish_dialog
+
 
 def get_client(settings: Settings) -> OpenAI:
     return OpenAI(
@@ -27,7 +18,7 @@ def get_client(settings: Settings) -> OpenAI:
 
 
 SUPPORT_AGENT_INSTRUCTIONS = """
-You are a helpful support assistant. 
+You are a helpful support assistant.
 You can help users search through their files and create search indexes.
 
 ## Tools Available
