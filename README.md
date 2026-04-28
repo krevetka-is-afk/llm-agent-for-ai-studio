@@ -38,5 +38,5 @@ uv run pre-commit run --all-files
 >Перед запуском добавьте переменные окружения (минимально необходимые обозначены в [.env.example](.env.example))
 
 ```bash
-uv run main.py
+uv run --env-file .env.example main.py [--file-dir]
 ```
