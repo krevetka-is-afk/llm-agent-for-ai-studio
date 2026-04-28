@@ -11,7 +11,8 @@ from chatkit.types import (
 )
 
 from .config import Settings
-from .rag_agent import RAGAgent, get_client
+from .rag_agent import RAGAgent
+from .utils import get_client, wait_for_response_completed
 
 DEFAULT_THREAD_ID = "demo_default_thread"
 
@@ -48,6 +49,9 @@ class RagChatkitServer(ChatKitServer[dict[str, Any]]):
         )
 
         previous_response_id = thread.metadata.get("last_response_id")
+
+        if previous_response_id is not None:
+            wait_for_response_completed(self.client, previous_response_id)
 
         result = self.agent.invoke(
             user_message,

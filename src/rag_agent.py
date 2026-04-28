@@ -1,20 +1,11 @@
-
 from agents import Agent, OpenAIProvider, RunConfig, Runner, RunResultStreaming
 from openai import OpenAI
 
 from .config import Settings
-from .upload_files import upload_file
 from .create_search_index import create_search_index
 from .finish_dialog import finish_dialog
-
-
-def get_client(settings: Settings) -> OpenAI:
-    return OpenAI(
-        api_key=settings.api_key,
-        project=settings.folder_id,
-        base_url=settings.base_url,
-        timeout=settings.timeout,
-    )
+from .search_in_search_index import search_in_vector_index
+from .upload_files import upload_file
 
 
 SUPPORT_AGENT_INSTRUCTIONS = """
@@ -24,6 +15,7 @@ You can help users search through their files and create search indexes.
 ## Tools Available
 - `upload_file(filename)` — uploads a file to storage, returns file_id
 - `create_vector_index(file_ids, name)` — creates a vector search index with name, returns index_id
+- `search_in_vector_index(vector_store_id, query)` - find relevant information from vector store 
 - `finish_dialog` - finishes dialog after task completed
 
 ## Behavior
@@ -44,6 +36,7 @@ If the user wants to:
 ## Rules
 - Never call `create_vector_index` before all files are uploaded
 - If something fails, inform the user briefly and ask how to proceed
+- Use the search_vector_store tool to find relevant information before answering
 - After creating index ask user if he want to do anything else and if not call finish_dialog tool and return goodbuy message
 """.strip()
 
@@ -54,7 +47,7 @@ class RAGAgent:
             model=settings.model_uri,
             name="Rag Agent",
             instructions=SUPPORT_AGENT_INSTRUCTIONS,
-            tools=[upload_file, create_search_index, finish_dialog],
+            tools=[upload_file, create_search_index, finish_dialog, search_in_vector_index],
         )
 
         self.run_config = RunConfig(
@@ -62,7 +55,7 @@ class RAGAgent:
                 api_key=settings.api_key,
                 project=settings.folder_id,
                 base_url=settings.base_url,
-                use_responses=True
+                use_responses=True,
             )
         )
 
@@ -72,6 +65,5 @@ class RAGAgent:
             message,
             context=context,
             run_config=self.run_config,
-            max_turns=10,
             previous_response_id=previous_response_id,
         )

@@ -15,20 +15,13 @@ from chatkit.types import (
 from src.config import Settings
 from src.memory_store import MemoryStore
 from src.rag_agent_server import DEFAULT_THREAD_ID, RagChatkitServer
-from src.utils import _extract_text
+from src.utils import get_streaming_response
 
 logging.basicConfig(level=logging.INFO, filename='app.log',
                     format='%(asctime)s – %(name)s – %(levelname)s – %(message)s')
 
 
-async def get_streaming_response(server, thread, item, context={}):
-    async for event in server.respond(thread=thread, input_user_message=item, context=context):
-        text = _extract_text(event)
-        if text:
-            print(text, end="", flush=True)
-
-
-class GlobalState:
+class ConversationState:
     def __init__(self, base_dir: str):
         self.base_dir = Path(base_dir).resolve()
         self.is_done = False
@@ -57,7 +50,7 @@ async def chat_loop() -> None:
     settings = Settings.load_settings()
 
     store = MemoryStore()
-    gs = GlobalState(args.files_dir)
+    conv_state = ConversationState(args.files_dir)
 
     rag_server = RagChatkitServer(store, settings)
     thread = ThreadMetadata(
@@ -66,11 +59,11 @@ async def chat_loop() -> None:
         metadata={}
     )
 
-    while not gs.is_done:
+    while not conv_state.is_done:
         user_prompt = input("> ")
         if user_prompt == "/exit":
             print("Goodbye!")
-            gs.set_done()
+            conv_state.set_done()
             break
 
         item = UserMessageItem(
@@ -81,7 +74,7 @@ async def chat_loop() -> None:
             inference_options=InferenceOptions()
         )
         print("> Assistant: ", end="", flush=True)
-        await get_streaming_response(rag_server, thread, item, context=gs)
+        await get_streaming_response(rag_server, thread, item, context=conv_state)
         print(flush=True)
 
 
