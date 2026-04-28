@@ -2,11 +2,14 @@ from agents import Agent, OpenAIProvider, RunConfig, Runner, RunResultStreaming
 from openai import OpenAI
 
 from .config import Settings
-from .create_search_index import create_search_index
 from .finish_dialog import finish_dialog
-from .search_in_search_index import search_in_vector_index
+from .search_index_tools import (
+    create_search_index,
+    delete_vector_store_file,
+    search_in_vector_index,
+    upload_vector_store_file,
+)
 from .upload_files import upload_file
-
 
 SUPPORT_AGENT_INSTRUCTIONS = """
 You are a helpful support assistant.
@@ -15,7 +18,9 @@ You can help users search through their files and create search indexes.
 ## Tools Available
 - `upload_file(filename)` — uploads a file to storage, returns file_id
 - `create_vector_index(file_ids, name)` — creates a vector search index with name, returns index_id
-- `search_in_vector_index(vector_store_id, query)` - find relevant information from vector store 
+- `search_in_vector_index(vector_store_id, query)` - find relevant information from vector store
+- `upload_vector_store_file(vector_store_id, file_id)` - attach file to vector store
+- `delete_vector_store_file(vector_store_id, file_id)` - delete file from vector store
 - `finish_dialog` - finishes dialog after task completed
 
 ## Behavior
@@ -37,7 +42,8 @@ If the user wants to:
 - Never call `create_vector_index` before all files are uploaded
 - If something fails, inform the user briefly and ask how to proceed
 - Use the search_vector_store tool to find relevant information before answering
-- After creating index ask user if he want to do anything else and if not call finish_dialog tool and return goodbuy message
+- After achieving user goals ask if user wants to finish dialog
+- If user wants to finish dialog call finish_dialog tool and return goodbuy message
 """.strip()
 
 
@@ -47,7 +53,14 @@ class RAGAgent:
             model=settings.model_uri,
             name="Rag Agent",
             instructions=SUPPORT_AGENT_INSTRUCTIONS,
-            tools=[upload_file, create_search_index, finish_dialog, search_in_vector_index],
+            tools=[
+                upload_file,
+                create_search_index,
+                finish_dialog,
+                search_in_vector_index,
+                delete_vector_store_file,
+                upload_vector_store_file,
+            ],
         )
 
         self.run_config = RunConfig(
