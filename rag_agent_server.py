@@ -31,7 +31,7 @@ class RagChatkitServer(ChatKitServer[dict[str, Any]]):
             self,
             thread: ThreadMetadata,
             input_user_message: UserMessageItem | None,
-            context: dict[str, Any],
+            context,
     ) -> AsyncIterator[ThreadStreamEvent]:
         if input_user_message is None:
             return
@@ -42,6 +42,7 @@ class RagChatkitServer(ChatKitServer[dict[str, Any]]):
             thread=thread,
             store=self.store,
             request_context={
+                'conv_context': context,
                 'client': self.client,
             },
         )

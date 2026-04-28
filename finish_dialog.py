@@ -11,4 +11,5 @@ def finish_dialog(ctx: RunContextWrapper[AgentContext]) -> str:
     user interaction is needed.
     """
     logging.info("Finish dialog tool")
+    ctx.context.request_context['conv_context'].set_done()
     return "DIALOG_FINISHED"

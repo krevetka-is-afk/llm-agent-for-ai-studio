@@ -20,16 +20,22 @@ logging.basicConfig(level=logging.INFO, filename='app.log',
                     format='%(asctime)s – %(name)s – %(levelname)s – %(message)s')
 
 
-async def get_streaming_response(server, thread, item, context={}) -> bool:
-    is_done = False
+async def get_streaming_response(server, thread, item, context={}):
     async for event in server.respond(thread=thread, input_user_message=item, context=context):
-        if isinstance(item, ToolCallItem):
-            if item.raw_item.name == "finish_dialog":
-                is_done = True
         text = _extract_text(event)
         if text:
             print(text, end="", flush=True)
-    return is_done
+
+
+class GlobalState:
+    def __init__(self):
+        self.is_done = False
+
+    def set_done(self):
+        self.is_done = True
+
+    def is_done(self):
+        return self.is_done
 
 
 async def chat_loop() -> None:
@@ -37,9 +43,8 @@ async def chat_loop() -> None:
 
     settings = Settings.load_settings()
 
-    exit_chat = False
-
     store = MemoryStore()
+    gs = GlobalState()
 
     rag_server = RagChatkitServer(store, settings)
     thread = ThreadMetadata(
@@ -48,11 +53,12 @@ async def chat_loop() -> None:
         metadata={}
     )
 
-    while not exit_chat:
+
+    while not gs.is_done:
         user_prompt = input("> ")
         if user_prompt == "/exit":
             print("Goodbye!")
-            exit_chat = True
+            gs.set_done()
             break
 
         item = UserMessageItem(
@@ -63,7 +69,7 @@ async def chat_loop() -> None:
             inference_options=InferenceOptions()
         )
         print("> Assistant: ", end="", flush=True)
-        exit_chat = await get_streaming_response(rag_server, thread, item)
+        await get_streaming_response(rag_server, thread, item, context=gs)
         print(flush=True)
 
 
