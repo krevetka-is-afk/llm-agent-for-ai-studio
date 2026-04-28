@@ -1,8 +1,7 @@
 import os
 from dataclasses import dataclass
-from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 
 DEFAULT_BASE_URL = "https://ai.api.cloud.yandex.net/v1"
 DEFAULT_INSTRUCTIONS_FOR_AI = "Ты — текстовый агент, который ведёт диалог\
@@ -22,7 +21,7 @@ class Settings:
 
     @classmethod
     def load_settings(cls) -> Settings:
-        load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=True)
+        load_dotenv(find_dotenv())
 
         folder_id = _required_env("YANDEX_FOLDER_ID")
         model_uri = os.getenv("YANDEX_MODEL_URI")

@@ -10,8 +10,8 @@ from chatkit.types import (
     UserMessageItem,
 )
 
-from config import Settings
-from rag_agent import RAGAgent, get_client
+from .config import Settings
+from .rag_agent import RAGAgent, get_client
 
 DEFAULT_THREAD_ID = "demo_default_thread"
 

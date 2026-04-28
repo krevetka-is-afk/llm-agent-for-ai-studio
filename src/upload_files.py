@@ -1,13 +1,10 @@
 import logging
 from pathlib import Path
+from openai import OpenAI
 
 from agents import RunContextWrapper, function_tool
 
 from chatkit.agents import AgentContext
-
-
-def local_path(path: str) -> Path:
-    return Path(__file__).parent / path
 
 
 @function_tool
@@ -18,10 +15,12 @@ def upload_file(ctx: RunContextWrapper[AgentContext], filename: str) -> str:
     """
     logging.info(f"Загружаем файл {filename}...")
 
-    client = ctx.context.request_context['client']
+    client: OpenAI = ctx.context.request_context['client']
+    base_dir: Path = ctx.context.request_context['conv_context'].get_base_dir()
 
+    path = base_dir / filename
     f = client.files.create(
-        file=open(local_path(filename), "rb"),
+        file=open(path, "rb"),
         purpose="assistants",
     )
     logging.info(f"Файл {filename} загружен: {f.id}")

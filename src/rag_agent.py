@@ -2,10 +2,10 @@
 from agents import Agent, OpenAIProvider, RunConfig, Runner, RunResultStreaming
 from openai import OpenAI
 
-from config import Settings
-from upload_files import upload_file
-from create_search_index import create_search_index
-from finish_dialog import finish_dialog
+from .config import Settings
+from .upload_files import upload_file
+from .create_search_index import create_search_index
+from .finish_dialog import finish_dialog
 
 
 def get_client(settings: Settings) -> OpenAI:

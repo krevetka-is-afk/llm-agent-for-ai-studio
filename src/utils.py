@@ -1,3 +1,5 @@
+import logging
+
 def _extract_text(event) -> str | None:
     """Extract text from ThreadStreamEvent"""
     try:
@@ -10,5 +12,5 @@ def _extract_text(event) -> str | None:
             if hasattr(data, "text"):
                 return data.text
     except Exception as e:
-        print(e)
+        logging.error(e)
     return None
