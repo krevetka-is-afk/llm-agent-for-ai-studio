@@ -1,76 +1,39 @@
 import logging
 from typing import Any, AsyncIterator
 
-from chatkit.agents import AgentContext, stream_agent_response
-from chatkit.server import ChatKitServer
-from chatkit.store import Store
-from chatkit.types import (
-    ThreadMetadata,
-    ThreadStreamEvent,
-    UserMessageItem,
-)
+from openai import OpenAI
 
 from .config import Settings
+from .context import AppContext
 from .rag_agent import RAGAgent
-from .utils import get_client, wait_for_response_completed
+from .session import get_session
 
 DEFAULT_THREAD_ID = "demo_default_thread"
 
 
-class RagChatkitServer(ChatKitServer[dict[str, Any]]):
-
-    def __init__(
-            self,
-            store: Store,
-            settings: Settings
-    ) -> None:
-        super().__init__(store)
-        self.client = get_client(settings)
+class RagServer:
+    def __init__(self, settings: Settings, client: OpenAI):
+        self.client = client
         self.agent = RAGAgent(settings)
 
     async def respond(
-            self,
-            thread: ThreadMetadata,
-            input_user_message: UserMessageItem | None,
-            context,
-    ) -> AsyncIterator[ThreadStreamEvent]:
+        self,
+        input_user_message: str | None,
+        context: AppContext,
+    ) -> AsyncIterator[Any]:
         if input_user_message is None:
             return
 
-        user_message = _user_message_text(input_user_message)
-
-        agent_context = AgentContext(
-            thread=thread,
-            store=self.store,
-            request_context={
-                'conv_context': context,
-                'client': self.client,
-            },
-        )
-
-        previous_response_id = thread.metadata.get("last_response_id")
-
-        if previous_response_id is not None:
-            wait_for_response_completed(self.client, previous_response_id)
+        user_message = input_user_message
+        logging.info(f"{user_message=}")
+        session = get_session(context.user_id)
+        agent_context = context
 
         result = self.agent.invoke(
             user_message,
             agent_context,
-            previous_response_id,
+            session,
         )
 
-        async for event in stream_agent_response(agent_context, result):
+        async for event in result.stream_events():
             yield event
-
-        logging.info(f"last response_id = {result.raw_responses[-1].response_id}")
-        thread.metadata["last_response_id"] = result.raw_responses[-1].response_id
-        await self.store.save_thread(thread, context)
-
-
-def _user_message_text(item: UserMessageItem) -> str:
-    parts: list[str] = []
-    for part in item.content:
-        text = getattr(part, "text", None)
-        if text:
-            parts.append(text)
-    return " ".join(parts).strip()

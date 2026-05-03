@@ -1,5 +1,6 @@
+import logging
+
 from agents import Agent, OpenAIProvider, RunConfig, Runner, RunResultStreaming
-from openai import OpenAI
 
 from .config import Settings
 from .finish_dialog import finish_dialog
@@ -33,6 +34,7 @@ If the user wants to:
 ### Create a search index:
 - Ask which files they want to index (if not specified)
 - Ask all nessasary information from user
+- To get file_id upload file into storage using upload_file
 - Upload each file using `upload_file`, collect all file_ids
 - Call `create_vector_index` with all file_ids
 - Tell the user the index is ready and provide index_id
@@ -69,14 +71,15 @@ class RAGAgent:
                 project=settings.folder_id,
                 base_url=settings.base_url,
                 use_responses=True,
-            )
+            ),
         )
 
-    def invoke(self, message, context, previous_response_id) -> RunResultStreaming:
+    def invoke(self, message, context, session) -> RunResultStreaming:
+        logging.info(f"Invoke model with {message=} {session=}")
         return Runner.run_streamed(
             self.agent,
             message,
             context=context,
             run_config=self.run_config,
-            previous_response_id=previous_response_id,
+            session=session,
         )

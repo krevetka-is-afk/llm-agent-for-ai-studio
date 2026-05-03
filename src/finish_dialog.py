@@ -9,7 +9,8 @@ def finish_dialog(ctx: RunContextWrapper[AgentContext]) -> str:
     """
     Call this tool when the conversation is complete and no further
     user interaction is needed.
+    Returns message that session is finished.
     """
     logging.info("Finish dialog tool")
-    ctx.context.request_context['conv_context'].set_done()
+    ctx.context.is_done = True
     return "DIALOG_FINISHED"

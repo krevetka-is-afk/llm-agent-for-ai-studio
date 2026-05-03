@@ -1,7 +1,7 @@
 import os
 from dataclasses import dataclass
 
-from dotenv import load_dotenv, find_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 DEFAULT_BASE_URL = "https://ai.api.cloud.yandex.net/v1"
 DEFAULT_INSTRUCTIONS_FOR_AI = "Ты — текстовый агент, который ведёт диалог\

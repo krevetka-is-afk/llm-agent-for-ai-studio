@@ -15,10 +15,9 @@ def upload_file(ctx: RunContextWrapper[AgentContext], filename: str) -> str:
     """
     logging.info(f"Загружаем файл {filename}...")
 
-    client: OpenAI = ctx.context.request_context['client']
-    base_dir: Path = ctx.context.request_context['conv_context'].get_base_dir()
+    client: OpenAI = ctx.context.client
+    path: Path = ctx.context.base_dir / filename
 
-    path = base_dir / filename
     f = client.files.create(
         file=open(path, "rb"),
         purpose="assistants",
