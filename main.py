@@ -24,13 +24,13 @@ logging.basicConfig(level=logging.INFO, filename='app.log',
 class ConversationState:
     def __init__(self, base_dir: str):
         self.base_dir = Path(base_dir).resolve()
-        self.is_done = False
+        self._is_done = False
 
     def set_done(self):
-        self.is_done = True
+        self._is_done = True
 
     def is_done(self):
-        return self.is_done
+        return self._is_done
 
     def get_base_dir(self):
         return self.base_dir
@@ -59,7 +59,7 @@ async def chat_loop() -> None:
         metadata={}
     )
 
-    while not conv_state.is_done:
+    while not conv_state.is_done():
         user_prompt = input("> ")
         if user_prompt == "/exit":
             print("Goodbye!")
