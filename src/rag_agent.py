@@ -1,5 +1,4 @@
 from agents import Agent, OpenAIProvider, RunConfig, Runner, RunResultStreaming
-from openai import OpenAI
 
 from .config import Settings
 from .finish_dialog import finish_dialog
