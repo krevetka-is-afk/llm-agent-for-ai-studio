@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union, Optional
 
 from chatkit.store import NotFoundError, Store
 from chatkit.types import Attachment, Page, Thread, ThreadItem, ThreadMetadata
@@ -20,7 +20,7 @@ class MemoryStore(Store[dict[str, Any]]):
         # Attachments intentionally unsupported; use a real store that enforces auth.
 
     @staticmethod
-    def _coerce_thread_metadata(thread: ThreadMetadata | Thread) -> ThreadMetadata:
+    def _coerce_thread_metadata(thread: Union[ThreadMetadata, Thread]) -> ThreadMetadata:
         """Return thread metadata without any embedded items (openai-chatkit>=1.0)."""
         has_items = isinstance(thread, Thread) or "items" in getattr(
             thread, "model_fields_set", set()
@@ -53,7 +53,7 @@ class MemoryStore(Store[dict[str, Any]]):
     async def load_threads(
             self,
             limit: int,
-            after: str | None,
+            after: Optional[str],
             order: str,
             context: dict[str, Any],
     ) -> Page[ThreadMetadata]:
@@ -96,7 +96,7 @@ class MemoryStore(Store[dict[str, Any]]):
     async def load_thread_items(
             self,
             thread_id: str,
-            after: str | None,
+            after: Optional[str],
             limit: int,
             order: str,
             context: dict[str, Any],

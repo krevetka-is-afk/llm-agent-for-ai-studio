@@ -1,5 +1,5 @@
 import logging
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Optional
 
 from chatkit.agents import AgentContext, stream_agent_response
 from chatkit.server import ChatKitServer
@@ -31,7 +31,7 @@ class RagChatkitServer(ChatKitServer[dict[str, Any]]):
     async def respond(
             self,
             thread: ThreadMetadata,
-            input_user_message: UserMessageItem | None,
+            input_user_message: Optional[UserMessageItem],
             context,
     ) -> AsyncIterator[ThreadStreamEvent]:
         if input_user_message is None:
