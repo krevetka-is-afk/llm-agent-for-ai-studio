@@ -24,3 +24,7 @@ dev = [
 
 [tool.ty.src]
 exclude = ["uv.lock"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
