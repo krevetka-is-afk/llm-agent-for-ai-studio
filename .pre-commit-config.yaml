@@ -28,3 +28,13 @@ repos:
         language: system
         types_or: [python, pyi]
         pass_filenames: true
+
+  - repo: local
+    hooks:
+      - id: pytest-check
+        name: pytest-check
+        entry: uv run pytest
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
