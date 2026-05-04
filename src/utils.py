@@ -1,10 +1,13 @@
-import asyncio
 import logging
 import time
+from typing import Any, Union, Optional
 
 from openai import OpenAI
 
 from .config import Settings
+from .logging_config import bind_logger
+
+logger = logging.getLogger(__name__)
 
 
 def get_client(settings: Settings) -> OpenAI:
@@ -17,8 +20,14 @@ def get_client(settings: Settings) -> OpenAI:
 
 
 def wait_for_response_completed(
-    client: OpenAI, response_id: str, timeout: float = 30.0, interval: float = 0.5
+        client: OpenAI,
+        response_id: str,
+        timeout: float = 30.0,
+        interval: float = 0.5,
+        logger: Union[logging.Logger, logging.LoggerAdapter[Any], None] = None,
 ):
+    base_logger = logger or globals()["logger"]
+    wait_logger = bind_logger(base_logger, response_id=response_id)
     start = time.time()
 
     while True:
@@ -28,17 +37,17 @@ def wait_for_response_completed(
         response = client.responses.retrieve(response_id)
 
         if response.status == "completed":
-            logging.info(f"✓ Response {response_id} is completed")
+            wait_logger.info("Previous response completed")
             return response
 
         elif response.status in ("failed", "cancelled", "incomplete"):
             raise RuntimeError(f"Response ended with unexpected status: {response.status}")
 
-        logging.debug(f"Response {response_id} is {response.status}, waiting...")
+        wait_logger.debug("Previous response status is %s; waiting", response.status)
         time.sleep(interval)
 
 
-def extract_text(event) -> str | None:
+def extract_text(event) -> Optional[str]:
     """Extract text from ThreadStreamEvent"""
     try:
         if event.type == "thread.item.updated":
@@ -50,18 +59,25 @@ def extract_text(event) -> str | None:
             if hasattr(data, "text"):
                 return data.text
     except Exception as e:
-        logging.error(e)
+        logger.exception("Failed to extract text from stream event: %s", e)
     return None
 
 
-async def get_streaming_response(server, thread, item, context={}):
-    async for event in server.respond(thread=thread, input_user_message=item, context=context):
+async def get_streaming_response(server, thread, item, context=None, logger=None):
+    response_context = {} if context is None else context
+    base_logger = logger or globals()["logger"]
+    response_logger = bind_logger(
+        base_logger,
+        thread_id=getattr(thread, "id", None),
+        message_id=getattr(item, "id", None),
+    )
+    async for event in server.respond(thread=thread, input_user_message=item, context=response_context):
         if hasattr(event, "type"):
             if event.type == "response.completed":
-                logging.info("Response completed successfully")
+                response_logger.info("Response completed successfully")
                 break
             elif event.type in ("response.failed", "response.cancelled"):
-                logging.warning(f"Response ended with: {event.type}")
+                response_logger.warning("Response ended with %s", event.type)
                 break
         text = extract_text(event)
         if text:

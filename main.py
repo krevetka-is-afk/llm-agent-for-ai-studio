@@ -13,12 +13,16 @@ from chatkit.types import (
 )
 
 from src.config import Settings
+from src.logging_config import bind_logger, configure_logging
 from src.memory_store import MemoryStore
 from src.rag_agent_server import DEFAULT_THREAD_ID, RagChatkitServer
 from src.utils import get_streaming_response
 
-logging.basicConfig(level=logging.INFO, filename='app.log',
-                    format='%(asctime)s – %(name)s – %(levelname)s – %(message)s')
+logger = logging.getLogger(__name__)
+
+
+def setup_logging(level: int = logging.INFO) -> Path:
+    return configure_logging(level)
 
 
 class ConversationState:
@@ -77,12 +81,22 @@ async def chat_loop() -> None:
             content=[UserMessageTextContent(text=user_prompt)],
             inference_options=InferenceOptions()
         )
+        turn_logger = bind_logger(logger, thread_id=thread.id, message_id=item.id)
+        turn_logger.info("Handling user message with %s chars", len(user_prompt))
         print("> Assistant: ", end="", flush=True)
-        await get_streaming_response(rag_server, thread, item, context=conv_state)
+        await get_streaming_response(
+            rag_server,
+            thread,
+            item,
+            context=conv_state,
+            logger=turn_logger,
+        )
         print(flush=True)
 
 
 def main():
+    log_file = setup_logging()
+    logger.info("Logging to %s", log_file)
     asyncio.run(chat_loop())
 
 

@@ -11,10 +11,13 @@ from chatkit.types import (
 )
 
 from .config import Settings
+from .logging_config import bind_logger
 from .rag_agent import RAGAgent
 from .utils import get_client, wait_for_response_completed
 
 DEFAULT_THREAD_ID = "demo_default_thread"
+
+logger = logging.getLogger(__name__)
 
 
 class RagChatkitServer(ChatKitServer[dict[str, Any]]):
@@ -38,6 +41,12 @@ class RagChatkitServer(ChatKitServer[dict[str, Any]]):
             return
 
         user_message = _user_message_text(input_user_message)
+        request_logger = bind_logger(
+            logger,
+            thread_id=thread.id,
+            message_id=input_user_message.id,
+        )
+        request_logger.info("Invoking agent with %s chars of user input", len(user_message))
 
         agent_context = AgentContext(
             thread=thread,
@@ -51,7 +60,11 @@ class RagChatkitServer(ChatKitServer[dict[str, Any]]):
         previous_response_id = thread.metadata.get("last_response_id")
 
         if previous_response_id is not None:
-            wait_for_response_completed(self.client, previous_response_id)
+            wait_for_response_completed(
+                self.client,
+                previous_response_id,
+                logger=bind_logger(request_logger, response_id=previous_response_id),
+            )
 
         result = self.agent.invoke(
             user_message,
@@ -62,8 +75,9 @@ class RagChatkitServer(ChatKitServer[dict[str, Any]]):
         async for event in stream_agent_response(agent_context, result):
             yield event
 
-        logging.info(f"last response_id = {result.raw_responses[-1].response_id}")
-        thread.metadata["last_response_id"] = result.raw_responses[-1].response_id
+        response_id = result.raw_responses[-1].response_id
+        bind_logger(request_logger, response_id=response_id).info("Persisting last response id")
+        thread.metadata["last_response_id"] = response_id
         await self.store.save_thread(thread, context)
 
 
