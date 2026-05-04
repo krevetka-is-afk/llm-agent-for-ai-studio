@@ -29,8 +29,7 @@ from src.rag_agent_server import RagServer
 from src.session import get_session
 from src.utils import get_streaming_response, get_user_client
 
-logging.basicConfig(level=logging.INFO, filename='app.log',
-                    format='%(asctime)s – %(name)s – %(levelname)s – %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s – %(name)s – %(levelname)s – %(message)s')
 
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
