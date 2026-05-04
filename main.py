@@ -61,6 +61,10 @@ async def chat_loop() -> None:
 
     while not conv_state.is_done():
         user_prompt = input("> ")
+        while len(user_prompt.strip()) == 0:
+            print("Please enter not empty prompt")
+            user_prompt = input("> ")
+
         if user_prompt == "/exit":
             print("Goodbye!")
             conv_state.set_done()
