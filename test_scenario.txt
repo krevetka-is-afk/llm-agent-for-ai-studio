@@ -1,0 +1,5 @@
+/upload_file files_to_upload/sample_file.md
+
+/create_search_index some_search_index
+
+/search_in_search_index some

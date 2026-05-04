@@ -1,0 +1,79 @@
+import os
+from dataclasses import dataclass
+
+from dotenv import load_dotenv, find_dotenv
+
+DEFAULT_BASE_URL = "https://ai.api.cloud.yandex.net/v1"
+DEFAULT_INSTRUCTIONS_FOR_AI = "Ты — текстовый агент, который ведёт диалог\
+ и даёт информативные ответы на вопросы пользователя."
+
+
+@dataclass(frozen=True)
+class Settings:
+    api_key: str
+    folder_id: str
+    model_uri: str
+    base_url: str
+    temperature: float
+    max_output_tokens: int
+    timeout: float
+    instructions: str
+
+    @classmethod
+    def load_settings(cls) -> Settings:
+        load_dotenv(find_dotenv())
+
+        folder_id = _required_env("YANDEX_FOLDER_ID")
+        model_uri = os.getenv("YANDEX_MODEL_URI")
+        if not model_uri:
+            model = _required_env("YANDEX_MODEL")
+            model_uri = (
+                model if model.startswith("gpt://") else f"gpt://{folder_id}/{model}"
+            )
+
+        instructions = os.getenv("INSTRUCTIONS_FOR_AI", DEFAULT_INSTRUCTIONS_FOR_AI)
+
+        return Settings(
+            api_key=_required_env("YANDEX_API_KEY"),
+            folder_id=folder_id,
+            model_uri=model_uri,
+            base_url=os.getenv("YANDEX_BASE_URL", DEFAULT_BASE_URL),
+            temperature=_env_float("YANDEX_TEMPERATURE", default=0.5),
+            max_output_tokens=_env_int("YANDEX_MAX_OUTPUT_TOKENS", default=1000),
+            timeout=_env_float("YANDEX_TIMEOUT", default=36.6),
+            instructions=instructions,
+        )
+
+
+def _required_env(name: str) -> str:
+    value = os.getenv(name)
+
+    if value is None:
+        raise RuntimeError(f"Missing required environment variable: {name}")
+    return value
+
+
+def _env_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+
+    if value is None:
+        return default
+
+    try:
+        return int(value)
+    except ValueError as e:
+        raise RuntimeError(
+            f"Invalid environment variable: {name} must be int got {value} instead"
+        ) from e
+
+
+def _env_float(name: str, default: float) -> float:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except ValueError as e:
+        raise RuntimeError(
+            f"Invalid environment variable: {name} must be float got {value} instead"
+        ) from e
