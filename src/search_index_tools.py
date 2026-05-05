@@ -3,7 +3,8 @@ import logging
 import time
 
 from agents import RunContextWrapper, function_tool
-from chatkit.agents import AgentContext
+# from chatkit.agents import AgentContext # почему мы отошли от AgentContext в пользу своего AppContext?
+from .context import AppContext
 from openai import OpenAI
 from openai.types import vector_store_create_params, StaticFileChunkingStrategyObjectParam, \
     StaticFileChunkingStrategyParam
@@ -19,12 +20,14 @@ DEFAULT_CHUNKING_STRATEGY = StaticFileChunkingStrategyObjectParam(
 )
 
 
-def _tool_logger(ctx: RunContextWrapper[AgentContext]) -> logging.LoggerAdapter:
+def _tool_logger(ctx: RunContextWrapper[AppContext]) -> logging.LoggerAdapter:
     return bind_logger(logger, thread_id=ctx.context.thread.id)
 
 
 @function_tool
-def create_search_index(ctx: RunContextWrapper[AgentContext], file_ids: list[str], vector_store_name: str) -> str:
+def create_search_index(
+        ctx: RunContextWrapper[AppContext], file_ids: list[str], vector_store_name: str
+) -> str:
     """
     Build a vector store from the provided files.
 
@@ -34,6 +37,9 @@ def create_search_index(ctx: RunContextWrapper[AgentContext], file_ids: list[str
 
     Returns:
         The ID of the created vector store.
+        :param vector_store_name:
+        :param file_ids:
+        :param ctx:
     """
     tool_logger = _tool_logger(ctx)
     tool_logger.info("Создаем поисковый индекс с %s файлами", len(file_ids))
@@ -57,12 +63,13 @@ def create_search_index(ctx: RunContextWrapper[AgentContext], file_ids: list[str
         time.sleep(3)
 
     tool_logger.info("Vector Store %s готов к работе", vector_store_id)
-
     return vector_store_id
 
 
 @function_tool
-def upload_vector_store_file(ctx: RunContextWrapper[AgentContext], vector_store_id: str, file_id: str):
+def upload_vector_store_file(
+        ctx: RunContextWrapper[AppContext], vector_store_id: str, file_id: str
+):
     """
     Attaching a File to a vector store.
 
@@ -88,7 +95,9 @@ def upload_vector_store_file(ctx: RunContextWrapper[AgentContext], vector_store_
 
 
 @function_tool
-def delete_vector_store_file(ctx: RunContextWrapper[AgentContext], vector_store_id: str, file_id: str):
+def delete_vector_store_file(
+        ctx: RunContextWrapper[AppContext], vector_store_id: str, file_id: str
+):
     """
     Delete a vector store file. This will remove the file from the vector store but the file itself will not be deleted.
 
@@ -109,7 +118,9 @@ def delete_vector_store_file(ctx: RunContextWrapper[AgentContext], vector_store_
 
 
 @function_tool
-def search_in_vector_index(ctx: RunContextWrapper[AgentContext], vector_store_id: str, query: str):
+def search_in_vector_index(
+        ctx: RunContextWrapper[AppContext], vector_store_id: str, query: str
+):
     """
     Search the vector store for relevant information based on a text query.
 

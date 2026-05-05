@@ -34,7 +34,7 @@ def build_formatter() -> logging.Formatter:
 def configure_logging(
         level: int = logging.INFO,
         *,
-        log_dir: Path | None = None,
+        log_dir: Optional[Path] = None,
         console_level: int = logging.CRITICAL,
 ) -> Path:
     target_log_dir = log_dir or Path(__file__).resolve().parent.parent / "logs"

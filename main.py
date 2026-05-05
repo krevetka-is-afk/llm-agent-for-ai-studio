@@ -1,104 +1,187 @@
+# -*- coding: utf-8 -*-
+"""
+LLM‑orchestrated Telegram bot.
+
+Features (as of this skeleton):
+* upload a file → storage (S3, local folder, etc.)
+* build a vector/keyword index from stored files
+* search that index
+* fallback: simple Yandex video search (kept as an example “tool”)
+* history / stats (re‑used from your original db helpers)
+
+All “abilities” are expressed as **LLM‑callable functions** (OpenAI function calling).
+"""
+
 import asyncio
 import logging
-import uuid
+import os
+from collections import defaultdict
+from dataclasses import dataclass
 from datetime import datetime, timezone
-import argparse
 from pathlib import Path
+from typing import Optional
 
-from chatkit.types import (
-    InferenceOptions,
-    ThreadMetadata,
-    UserMessageItem,
-    UserMessageTextContent,
-)
+from aiogram import Bot, Dispatcher, Router, types
+from aiogram.filters import Command
+from chatkit.types import ThreadMetadata
 
+from src.bot_utils import classify_message, download_media
 from src.config import Settings
-from src.logging_config import bind_logger, configure_logging
-from src.memory_store import MemoryStore
-from src.rag_agent_server import DEFAULT_THREAD_ID, RagChatkitServer
-from src.utils import get_streaming_response
+from src.context import AppContext, ConversationState, RequestContext
+from src.rag_agent_server import RagServer
+from src.session import get_session
+from src.utils import get_streaming_response, get_user_client
 
-logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s – %(name)s – %(levelname)s – %(message)s')
 
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-def setup_logging(level: int = logging.INFO) -> Path:
-    return configure_logging(level)
-
-
-class ConversationState:
-    def __init__(self, base_dir: str):
-        self.base_dir = Path(base_dir).resolve()
-        self._is_done = False
-
-    def set_done(self):
-        self._is_done = True
-
-    def is_done(self):
-        return self._is_done
-
-    def get_base_dir(self):
-        return self.base_dir
+router = Router()
+dp = Dispatcher()
+dp.include_router(router)
+bot = Bot(token=str(BOT_TOKEN))
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description='My application')
-    parser.add_argument('--files-dir', default='files_to_upload', help='Files directory for uploading')
-    args = parser.parse_args()
-    return args
+@dataclass
+class UserSecrets:
+    api_token: Optional[str] = None
+    folder_id: Optional[str] = None
 
 
-async def chat_loop() -> None:
-    print("Welcome to Yandex Cloud Chat!")
+users_db = defaultdict(UserSecrets)
 
-    args = parse_args()
-    settings = Settings.load_settings()
 
-    store = MemoryStore()
-    conv_state = ConversationState(args.files_dir)
+def _require_from_user(message: types.Message) -> types.User:
+    if message.from_user is None:
+        raise ValueError("Telegram message does not have a sender")
+    return message.from_user
 
-    rag_server = RagChatkitServer(store, settings)
-    thread = ThreadMetadata(
-        id=DEFAULT_THREAD_ID,
-        created_at=datetime.now(timezone.utc),
-        metadata={}
+
+def _require_message_text(message: types.Message) -> str:
+    if message.text is None:
+        raise ValueError("Telegram command message does not have text")
+    return message.text
+
+
+def _last_command_argument(message: types.Message) -> str:
+    text = _require_message_text(message).strip()
+    parts = text.split(maxsplit=1)
+    if len(parts) != 2 or not parts[1].strip():
+        raise ValueError(f"Command {parts[0] if parts else '<unknown>'} requires an argument")
+    return parts[1].strip()
+
+
+@router.message(Command(commands=["start"]))
+async def cmd_start(message: types.Message):
+    await message.reply(
+        "Привет! Я — бот‑помощник с функциями LLM‑управления.\n"
+        "Отправьте любой запрос, а я решу, какая из моих возможностей вам нужна.\n"
+        "Перед началом работы отправь свой api-token и folder-id"
+        "Доступные команды:\n"
+        "/help    — это сообщение подсказка\n"
+        "/reset   - сбор всего предыдущего взаимодействия\n"
+        "/set_api_token - сохранение своего токена\n"
+        "/set_folder_id - сохранение своего folder_id"
     )
 
-    while not conv_state.is_done():
-        user_prompt = input("> ")
-        while len(user_prompt.strip()) == 0:
-            print("Please enter not empty prompt")
-            user_prompt = input("> ")
 
-        if user_prompt == "/exit":
-            print("Goodbye!")
-            conv_state.set_done()
-            break
-
-        item = UserMessageItem(
-            id=str(uuid.uuid4()),
-            thread_id=thread.id,
-            created_at=datetime.now(timezone.utc),
-            content=[UserMessageTextContent(text=user_prompt)],
-            inference_options=InferenceOptions()
-        )
-        turn_logger = bind_logger(logger, thread_id=thread.id, message_id=item.id)
-        turn_logger.info("Handling user message with %s chars", len(user_prompt))
-        print("> Assistant: ", end="", flush=True)
-        await get_streaming_response(
-            rag_server,
-            thread,
-            item,
-            context=conv_state,
-            logger=turn_logger,
-        )
-        print(flush=True)
+@router.message(Command(commands=["help"]))
+async def cmd_help(message: types.Message):
+    await message.reply(
+        "/help    — это сообщение подсказка\n"
+        "/reset   - сбор всего предыдущего взаимодействия\n"
+        "/set_api_token - сохранение своего токена\n"
+        "/set_folder_id - сохранение своего folder_id\n"
+        "Любой свободный текст будет обработан LLM‑моделью, которая может вызвать "
+        "одну из её функций (загрузка, индексация, поиск, кино‑поиск)."
+    )
 
 
-def main():
-    log_file = setup_logging()
-    logger.info("Logging to %s", log_file)
-    asyncio.run(chat_loop())
+@router.message(Command(commands=["reset"]))
+async def cmd_session_restart(message: types.Message):
+    user_id = str(_require_from_user(message).id)
+    session = get_session(user_id)
+    await session.clear_session()
+    await message.reply(f"Session {user_id} cleared")
+
+
+@router.message(Command(commands=["set_api_token"]))
+async def cmd_set_token(message: types.Message):
+    user_id = str(_require_from_user(message).id)
+    api_token = _last_command_argument(message)
+    users_db[user_id].api_token = api_token
+    logging.info(f"Saved api token = '{api_token}'")
+    await message.reply("Api token saved")
+
+
+@router.message(Command(commands=["set_folder_id"]))
+async def cmd_set_folder_id(message: types.Message):
+    user_id = str(_require_from_user(message).id)
+    folder_id = _last_command_argument(message)
+    users_db[user_id].folder_id = folder_id
+    logging.info(f"Saved folder id = '{folder_id}'")
+    await message.reply("Folder id saved")
+
+
+@router.message()
+async def universal_handler(message: types.Message):
+    user_id = str(_require_from_user(message).id)
+
+    user_secrets = users_db[user_id]
+    if user_secrets.api_token is None:
+        await message.reply("Before asking model set api token key by /set_api_token command")
+        return
+    if user_secrets.folder_id is None:
+        await message.reply("Before asking model set folder id key by /set_folder_id command")
+        return
+
+    settings = Settings.load_settings()
+
+    base_dir = 'files_to_upload'
+    base_dir = Path(base_dir).resolve() / user_id
+
+    kind = classify_message(message)
+    if kind == "only_file":
+        filename = await download_media(bot, message, base_dir)
+        combined_prompt = f"Uploaded file by user: {filename}\n"
+    elif kind == "text_file":
+        filename = await download_media(bot, message, base_dir)
+        user_text = message.caption or ""
+        combined_prompt = f"Uploaded file by user: {filename} with request request: {user_text}\n"
+    else:
+        user_text = message.text or ""
+        combined_prompt = f"User request: {user_text}\n"
+
+    client = get_user_client(user_secrets.api_token, user_secrets.folder_id, settings)
+    rag_server = RagServer(settings, client)
+    conversation_state = ConversationState(base_dir)
+    thread = ThreadMetadata(
+        id=user_id,
+        created_at=datetime.now(timezone.utc),
+        metadata={},
+    )
+    request_context: RequestContext = {
+        "conv_context": conversation_state,
+        "client": client,
+    }
+    context = AppContext(
+        user_id=user_id,
+        thread=thread,
+        request_context=request_context,
+    )
+
+    logging.info(f"Call llm with prompt {combined_prompt}")
+    output = await get_streaming_response(rag_server, thread, combined_prompt, context=context)
+    logging.info(f"{output=}")
+    if output.strip() == "":
+        await message.answer("Empty output")
+    else:
+        await message.answer(output)
+
+
+async def main() -> None:
+    await dp.start_polling(bot)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
