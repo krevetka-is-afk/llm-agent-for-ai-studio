@@ -1,11 +1,14 @@
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 from dotenv import load_dotenv, find_dotenv
 
 DEFAULT_BASE_URL = "https://ai.api.cloud.yandex.net/v1"
 DEFAULT_INSTRUCTIONS_FOR_AI = "Ты — текстовый агент, который ведёт диалог\
  и даёт информативные ответы на вопросы пользователя."
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_ENV_FILE = PROJECT_ROOT / ".env"
 
 
 @dataclass(frozen=True)
@@ -21,7 +24,7 @@ class Settings:
 
     @classmethod
     def load_settings(cls) -> Settings:
-        load_dotenv(find_dotenv())
+        load_environment()
 
         folder_id = _required_env("YANDEX_FOLDER_ID")
         model_uri = os.getenv("YANDEX_MODEL_URI")
@@ -77,3 +80,11 @@ def _env_float(name: str, default: float) -> float:
         raise RuntimeError(
             f"Invalid environment variable: {name} must be float got {value} instead"
         ) from e
+
+
+def load_environment() -> None:
+    env_path = find_dotenv(usecwd=True)
+    if env_path:
+        load_dotenv(env_path)
+        return
+    load_dotenv(DEFAULT_ENV_FILE)
