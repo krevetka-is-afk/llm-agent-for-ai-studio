@@ -13,6 +13,7 @@ DEFAULT_ENV_FILE = PROJECT_ROOT / ".env"
 
 @dataclass(frozen=True)
 class Settings:
+    bot_token: str
     api_key: str
     folder_id: str
     model_uri: str
@@ -21,6 +22,7 @@ class Settings:
     max_output_tokens: int
     timeout: float
     instructions: str
+    upload_base_dir: str
 
     @classmethod
     def load_settings(cls) -> Settings:
@@ -37,6 +39,7 @@ class Settings:
         instructions = os.getenv("INSTRUCTIONS_FOR_AI", DEFAULT_INSTRUCTIONS_FOR_AI)
 
         return Settings(
+            bot_token=_required_env("BOT_TOKEN"),
             api_key=_required_env("YANDEX_API_KEY"),
             folder_id=folder_id,
             model_uri=model_uri,
@@ -45,6 +48,7 @@ class Settings:
             max_output_tokens=_env_int("YANDEX_MAX_OUTPUT_TOKENS", default=1000),
             timeout=_env_float("YANDEX_TIMEOUT", default=36.6),
             instructions=instructions,
+            upload_base_dir=os.getenv("YANDEX_UPLOAD_BASE_DIR", 'files_to_upload'),
         )
 
 

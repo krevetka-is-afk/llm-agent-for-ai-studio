@@ -66,7 +66,8 @@ def bind_logger(
         **context: Optional[str],
 ) -> logging.LoggerAdapter[Any]:
     if isinstance(logger, logging.LoggerAdapter):
-        base_logger = cast(logging.Logger, cast(object, logger.logger))
+        # noinspection PyInvalidCast
+        base_logger = cast(logging.Logger, logger.logger)
         combined_context: dict[str, Any] = dict(cast(Mapping[str, Any], logger.extra))
     else:
         base_logger = logger

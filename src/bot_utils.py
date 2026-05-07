@@ -1,7 +1,7 @@
 import logging
 import os
 from pathlib import Path
-from typing import TypeVar
+from typing import TypeVar, Optional
 
 import aiofiles
 from aiogram import Bot, types
@@ -10,7 +10,7 @@ from aiogram.types import ContentType, Message
 T = TypeVar("T")
 
 
-def _require(value: T | None, description: str) -> T:
+def _require(value: Optional[T], description: str) -> T:
     if value is None:
         raise ValueError(f"Message is missing {description}")
     return value
