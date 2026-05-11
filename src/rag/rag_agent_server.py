@@ -1,7 +1,6 @@
 import logging
 from typing import Any, AsyncIterator
 
-from openai import OpenAI
 
 from ..config import Settings
 from ..context import RequestContext
