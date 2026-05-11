@@ -1,7 +1,7 @@
 import asyncio
 
-from src.app import create_app
-from src.config import Settings
+from app import create_app
+from config import Settings
 
 import logging
 import sys

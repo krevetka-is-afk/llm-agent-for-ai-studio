@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from openai import OpenAI
 
-from .config import Settings
+from config import Settings
 
 logger = logging.getLogger(__name__)
 
