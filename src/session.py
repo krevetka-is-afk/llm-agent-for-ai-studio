@@ -1,6 +1,8 @@
+from pathlib import Path
+
 from agents.memory import SQLiteSession
 
-def get_session(session_id: str) -> SQLiteSession:
+def get_session(session_id: str, db_path: Path) -> SQLiteSession:
     """
     Return (or create) a persistent SQLite-backed thread
     for the given session_id.
@@ -10,5 +12,5 @@ def get_session(session_id: str) -> SQLiteSession:
     """
     return SQLiteSession(
         session_id=session_id,
-        db_path="conversations.db",
+        db_path=db_path,
     )

@@ -4,12 +4,12 @@ import time
 
 from agents import RunContextWrapper, function_tool
 # from chatkit.agents import AgentContext # почему мы отошли от AgentContext в пользу своего AppContext?
-from .context import AppContext
+from ..context import AppContext
 from openai import OpenAI
 from openai.types import vector_store_create_params, StaticFileChunkingStrategyObjectParam, \
     StaticFileChunkingStrategyParam
 
-from .logging_config import bind_logger
+from ..logging_config import bind_logger
 
 logger = logging.getLogger(__name__)
 

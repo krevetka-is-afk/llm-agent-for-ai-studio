@@ -36,7 +36,7 @@ def create_router(
     @router.message(Command(commands=["reset"]))
     async def cmd_session_restart(message: types.Message):
         user_id = str(_require_from_user(message).id)
-        session = get_session(user_id)
+        session = get_session(user_id, settings.db_path)
         await session.clear_session()
         await message.reply(f"Session {user_id} cleared")
 

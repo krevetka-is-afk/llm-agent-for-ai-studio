@@ -23,6 +23,7 @@ class Settings:
     timeout: float
     instructions: str
     upload_base_dir: str
+    db_path: Path
 
     @classmethod
     def load_settings(cls) -> Settings:
@@ -49,6 +50,7 @@ class Settings:
             timeout=_env_float("YANDEX_TIMEOUT", default=36.6),
             instructions=instructions,
             upload_base_dir=os.getenv("YANDEX_UPLOAD_BASE_DIR", 'files_to_upload'),
+            db_path=os.getenv("LLM_AGENT_DB_PATH", PROJECT_ROOT / 'conversation_db' / 'conversations.db')
         )
 
 

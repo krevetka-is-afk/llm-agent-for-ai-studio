@@ -18,6 +18,7 @@ class RagServer:
     def __init__(self, settings: Settings, client: OpenAI):
         self.client = client
         self.agent = RAGAgent(settings)
+        self.db_path = settings.db_path
 
     async def respond(
             self,
@@ -32,7 +33,7 @@ class RagServer:
             thread_id=context.thread.id,
         )
         request_logger.info("Invoking agent with %s chars of user input", len(input_user_message))
-        session = get_session(context.user_id)
+        session = get_session(context.user_id, self.db_path)
 
         result = self.agent.invoke(
             input_user_message,

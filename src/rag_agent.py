@@ -3,14 +3,14 @@ import logging
 from agents import Agent, OpenAIProvider, RunConfig, Runner, RunResultStreaming
 
 from .config import Settings
-from .finish_dialog import finish_dialog
-from .search_index_tools import (
+from .tools.finish_dialog import finish_dialog
+from .tools.vector_index import (
     create_search_index,
     delete_vector_store_file,
     search_in_vector_index,
     upload_vector_store_file,
 )
-from .upload_files import upload_file
+from .tools.upload_files import upload_file
 
 SUPPORT_AGENT_INSTRUCTIONS = """
 You are a helpful support assistant.

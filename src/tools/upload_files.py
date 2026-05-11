@@ -6,7 +6,7 @@ from agents import RunContextWrapper, function_tool
 
 from chatkit.agents import AgentContext
 
-from .logging_config import bind_logger
+from ..logging_config import bind_logger
 
 logger = logging.getLogger(__name__)
 
