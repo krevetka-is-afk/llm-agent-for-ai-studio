@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Mapping, cast, Union, Optional
 
 DEFAULT_CONTEXT_FIELDS = {
-    "thread_id": "-",
+    "user_id": "-",
     "message_id": "-",
     "response_id": "-",
 }
@@ -23,7 +23,7 @@ def build_formatter() -> logging.Formatter:
     formatter = ContextFormatter(
         fmt=(
             "%(asctime)s - [%(name)s] - %(levelname)s - "
-            "[thread=%(thread_id)s msg=%(message_id)s resp=%(response_id)s] - %(message)s"
+            "[user=%(user_id)s msg=%(message_id)s resp=%(response_id)s] - %(message)s"
         ),
         datefmt="%Y-%m-%d %H:%M:%S",
     )

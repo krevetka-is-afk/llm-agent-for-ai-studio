@@ -2,7 +2,7 @@ import logging
 
 from agents import Agent, OpenAIProvider, RunConfig, Runner, RunResultStreaming
 
-from .config import Settings
+from ..config import Settings
 from .tools.finish_dialog import finish_dialog
 from .tools.vector_index import (
     create_search_index,
@@ -10,6 +10,8 @@ from .tools.vector_index import (
     search_in_vector_index,
     upload_vector_store_file,
 )
+from ..context import RequestContext
+from agents.memory import SQLiteSession
 from .tools.upload_files import upload_file
 
 SUPPORT_AGENT_INSTRUCTIONS = """
@@ -74,7 +76,7 @@ class RAGAgent:
             ),
         )
 
-    def invoke(self, message, context, session) -> RunResultStreaming:
+    def invoke(self, message, context: RequestContext, session: SQLiteSession) -> RunResultStreaming:
         logging.info(f"Invoke model with {message=} {session=}")
         return Runner.run_streamed(
             self.agent,

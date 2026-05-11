@@ -1,37 +1,33 @@
-from aiogram import Bot
-
-from src.bot_utils import classify_message, download_media
-from src.config import Settings
 import logging
 from pathlib import Path
-
+from aiogram import Bot
 from aiogram import Router, types
 from aiogram.filters import Command
 
 from src.message_service import MessageService
 from src.session import get_session
-from src.user_secrets_store import UserSecretsStore
+from src.context import UserSecretsStore
+from src.bot_utils import classify_message, download_media
+from src.config import Settings
 
 
 def create_router(
-        settings: Settings,
-        bot: Bot,
-        secrets_store: UserSecretsStore,
-        message_service: MessageService
+    settings: Settings,
+    bot: Bot,
+    secrets_store: UserSecretsStore,
+    message_service: MessageService,
 ) -> Router:
     router = Router()
 
     @router.message(Command(commands=["start"]))
     async def cmd_start(message: types.Message):
         await message.reply(
-            message_service.welcome_message + '\n' + message_service.render_help_msg()
+            message_service.welcome_message + "\n" + message_service.render_help_msg()
         )
 
     @router.message(Command(commands=["help"]))
     async def cmd_help(message: types.Message):
-        await message.reply(
-            message_service.render_help_msg()
-        )
+        await message.reply(message_service.render_help_msg())
 
     @router.message(Command(commands=["reset"]))
     async def cmd_session_restart(message: types.Message):
@@ -102,9 +98,7 @@ def create_router(
             filename = await download_media(bot, message, base_dir)
 
         combined_prompt = message_service.build_prompt(
-            text=message.text,
-            caption=message.caption,
-            file_name=filename
+            text=message.text, caption=message.caption, file_name=filename
         )
 
         output = await message_service.generate_response(

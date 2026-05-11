@@ -5,7 +5,7 @@ from aiogram.enums import ParseMode
 from src.message_service import MessageService
 from src.config import Settings
 from src.bot_handlers import create_router
-from src.user_secrets_store import UserSecretsStore
+from src.context import UserSecretsStore
 
 
 def create_app(settings: Settings) -> tuple[Bot, Dispatcher]:

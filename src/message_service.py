@@ -1,15 +1,17 @@
 import logging
+import io
 from html import escape
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
-from chatkit.types import ThreadMetadata
+
+from openai.types.responses import ResponseTextDeltaEvent
 
 from src.config import Settings
-from src.context import AppContext, ConversationState, RequestContext
-from src.rag_agent_server import RagServer
-from src.utils import get_streaming_response, get_user_client
+from src.context import RequestContext, get_user_client
+from src.rag.rag_agent_server import RagServer
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -39,20 +41,21 @@ COMMANDS = [
         command="/set_folder_id",
         args_hint="<folder_id>",
         description="сохранить folder id",
-    )
+    ),
 ]
 
 
 class MessageService:
     def __init__(self, settings: Settings):
         self._settings = settings
+        self._rag_server = RagServer(settings)
 
     @staticmethod
     def build_prompt(
-            *,
-            text: Optional[str],
-            caption: Optional[str],
-            file_name: Optional[str],
+        *,
+        text: Optional[str],
+        caption: Optional[str],
+        file_name: Optional[str],
     ) -> str:
         if file_name and caption:
             return f"Uploaded file by user: {file_name} with request: {caption}\n"
@@ -61,36 +64,36 @@ class MessageService:
         return f"User request: {text or ''}\n"
 
     async def generate_response(
-            self,
-            *,
-            user_id: str,
-            api_token: str,
-            folder_id: str,
-            base_dir: Path,
-            combined_prompt: str,
+        self,
+        *,
+        user_id: str,
+        api_token: str,
+        folder_id: str,
+        base_dir: Path,
+        combined_prompt: str,
     ) -> str:
-        client = get_user_client(api_token, folder_id, self._settings)
-        rag_server = RagServer(self._settings, client)
-        conversation_state = ConversationState(base_dir)
-        thread = ThreadMetadata(
-            id=user_id,
-            created_at=datetime.now(timezone.utc),
-            metadata={},
-        )
-        request_context: RequestContext = {
-            "conv_context": conversation_state,
-            "client": client,
-        }
-        context = AppContext(
+        user_client = get_user_client(api_token, folder_id, self._settings)
+        context = RequestContext(
             user_id=user_id,
-            thread=thread,
-            request_context=request_context,
+            user_files_dir=base_dir,
+            client=user_client,
         )
 
         logging.info(f"Call llm with prompt {combined_prompt}")
-        output = await get_streaming_response(rag_server, thread, combined_prompt, context=context)
+        output = await self._get_streaming_response(combined_prompt, context=context)
         logging.info(f"{output=}")
         return output
+
+    async def _get_streaming_response(self, input_user_message, context: RequestContext):
+        output = io.StringIO()
+        async for event in self._rag_server.respond(
+            input_user_message=input_user_message, context=context
+        ):
+            if event.type == "raw_response_event" and isinstance(
+                event.data, ResponseTextDeltaEvent
+            ):
+                output.write(event.data.delta)
+        return output.getvalue()
 
     @staticmethod
     def render_help_msg() -> str:
@@ -119,10 +122,7 @@ class MessageService:
             return intro
 
         usage = f"{cmd.command} {cmd.args_hint}"
-        return (
-            f"{intro}\n"
-            f"Попробуйте так: <code>{escape(usage)}</code>"
-        )
+        return f"{intro}\nПопробуйте так: <code>{escape(usage)}</code>"
 
     welcome_message = (
         "Привет! Я — бот‑помощник с функциями LLM‑управления.\n"
