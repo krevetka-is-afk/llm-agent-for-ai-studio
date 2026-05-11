@@ -1,14 +1,18 @@
+import logging
+
 from agents import Agent, OpenAIProvider, RunConfig, Runner, RunResultStreaming
 
-from .config import Settings
-from .finish_dialog import finish_dialog
-from .search_index_tools import (
+from ..config import Settings
+from .tools.finish_dialog import finish_dialog
+from .tools.vector_index import (
     create_search_index,
     delete_vector_store_file,
     search_in_vector_index,
     upload_vector_store_file,
 )
-from .upload_files import upload_file
+from ..context import RequestContext
+from agents.memory import SQLiteSession
+from .tools.upload_files import upload_file
 
 SUPPORT_AGENT_INSTRUCTIONS = """
 You are a helpful support assistant.
@@ -32,6 +36,7 @@ If the user wants to:
 ### Create a search index:
 - Ask which files they want to index (if not specified)
 - Ask all nessasary information from user
+- To get file_id upload file into storage using upload_file
 - Upload each file using `upload_file`, collect all file_ids
 - Call `create_vector_index` with all file_ids
 - Tell the user the index is ready and provide index_id
@@ -68,14 +73,15 @@ class RAGAgent:
                 project=settings.folder_id,
                 base_url=settings.base_url,
                 use_responses=True,
-            )
+            ),
         )
 
-    def invoke(self, message, context, previous_response_id) -> RunResultStreaming:
+    def invoke(self, message, context: RequestContext, session: SQLiteSession) -> RunResultStreaming:
+        logging.info(f"Invoke model with {message=} {session=}")
         return Runner.run_streamed(
             self.agent,
             message,
             context=context,
             run_config=self.run_config,
-            previous_response_id=previous_response_id,
+            session=session,
         )

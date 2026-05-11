@@ -3,28 +3,35 @@ import logging
 import time
 
 from agents import RunContextWrapper, function_tool
-from chatkit.agents import AgentContext
-from openai import OpenAI
-from openai.types import vector_store_create_params, StaticFileChunkingStrategyObjectParam, \
-    StaticFileChunkingStrategyParam
 
-from .logging_config import bind_logger
+from ...context import RequestContext
+from openai import OpenAI
+from openai.types import (
+    vector_store_create_params,
+    StaticFileChunkingStrategyObjectParam,
+    StaticFileChunkingStrategyParam,
+)
+
+from ...logging_config import bind_logger
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_CHUNKING_STRATEGY = StaticFileChunkingStrategyObjectParam(
     type="static",
     static=StaticFileChunkingStrategyParam(
-        max_chunk_size_tokens=1408, chunk_overlap_tokens=148)
+        max_chunk_size_tokens=1408, chunk_overlap_tokens=148
+    ),
 )
 
 
-def _tool_logger(ctx: RunContextWrapper[AgentContext]) -> logging.LoggerAdapter:
-    return bind_logger(logger, thread_id=ctx.context.thread.id)
+def _tool_logger(ctx: RunContextWrapper[RequestContext]) -> logging.LoggerAdapter:
+    return bind_logger(logger, user_id=ctx.context.user_id)
 
 
 @function_tool
-def create_search_index(ctx: RunContextWrapper[AgentContext], file_ids: list[str], vector_store_name: str) -> str:
+def create_search_index(
+    ctx: RunContextWrapper[RequestContext], file_ids: list[str], vector_store_name: str
+) -> str:
     """
     Build a vector store from the provided files.
 
@@ -34,15 +41,20 @@ def create_search_index(ctx: RunContextWrapper[AgentContext], file_ids: list[str
 
     Returns:
         The ID of the created vector store.
+        :param vector_store_name:
+        :param file_ids:
+        :param ctx:
     """
     tool_logger = _tool_logger(ctx)
     tool_logger.info("Создаем поисковый индекс с %s файлами", len(file_ids))
 
-    client: OpenAI = ctx.context.request_context['client']
+    client: OpenAI = ctx.context.client
     vector_store = client.vector_stores.create(
         name=vector_store_name,
         metadata={"key": "value"},
-        expires_after=vector_store_create_params.ExpiresAfter(anchor="last_active_at", days=1),
+        expires_after=vector_store_create_params.ExpiresAfter(
+            anchor="last_active_at", days=1
+        ),
         chunking_strategy=DEFAULT_CHUNKING_STRATEGY,
         file_ids=file_ids,
     )
@@ -53,16 +65,19 @@ def create_search_index(ctx: RunContextWrapper[AgentContext], file_ids: list[str
         vector_store = client.vector_stores.retrieve(vector_store_id)
         if vector_store.status == "completed":
             break
-        tool_logger.debug("Vector Store %s status=%s; waiting", vector_store_id, vector_store.status)
+        tool_logger.debug(
+            "Vector Store %s status=%s; waiting", vector_store_id, vector_store.status
+        )
         time.sleep(3)
 
     tool_logger.info("Vector Store %s готов к работе", vector_store_id)
-
     return vector_store_id
 
 
 @function_tool
-def upload_vector_store_file(ctx: RunContextWrapper[AgentContext], vector_store_id: str, file_id: str):
+def upload_vector_store_file(
+    ctx: RunContextWrapper[RequestContext], vector_store_id: str, file_id: str
+):
     """
     Attaching a File to a vector store.
 
@@ -73,7 +88,7 @@ def upload_vector_store_file(ctx: RunContextWrapper[AgentContext], vector_store_
     tool_logger = _tool_logger(ctx)
     tool_logger.info("Добавляем файл %s в индекс %s", file_id, vector_store_id)
 
-    client: OpenAI = ctx.context.request_context['client']
+    client: OpenAI = ctx.context.client
     response = client.vector_stores.files.create(
         vector_store_id=vector_store_id,
         file_id=file_id,
@@ -88,7 +103,9 @@ def upload_vector_store_file(ctx: RunContextWrapper[AgentContext], vector_store_
 
 
 @function_tool
-def delete_vector_store_file(ctx: RunContextWrapper[AgentContext], vector_store_id: str, file_id: str):
+def delete_vector_store_file(
+    ctx: RunContextWrapper[RequestContext], vector_store_id: str, file_id: str
+):
     """
     Delete a vector store file. This will remove the file from the vector store but the file itself will not be deleted.
 
@@ -99,8 +116,10 @@ def delete_vector_store_file(ctx: RunContextWrapper[AgentContext], vector_store_
     tool_logger = _tool_logger(ctx)
     tool_logger.info("Удаляем файл %s из индекса %s", file_id, vector_store_id)
 
-    client: OpenAI = ctx.context.request_context['client']
-    response = client.vector_stores.files.delete(vector_store_id=vector_store_id, file_id=file_id)
+    client: OpenAI = ctx.context.client
+    response = client.vector_stores.files.delete(
+        vector_store_id=vector_store_id, file_id=file_id
+    )
 
     tool_logger.info("Удаление файла из индекса завершено")
     if response.deleted:
@@ -109,7 +128,9 @@ def delete_vector_store_file(ctx: RunContextWrapper[AgentContext], vector_store_
 
 
 @function_tool
-def search_in_vector_index(ctx: RunContextWrapper[AgentContext], vector_store_id: str, query: str):
+def search_in_vector_index(
+    ctx: RunContextWrapper[RequestContext], vector_store_id: str, query: str
+):
     """
     Search the vector store for relevant information based on a text query.
 
@@ -118,9 +139,11 @@ def search_in_vector_index(ctx: RunContextWrapper[AgentContext], vector_store_id
         query: The text query to search for in the vector store
     """
     tool_logger = _tool_logger(ctx)
-    tool_logger.info("Ищем по запросу длиной %s в индексе %s", len(query), vector_store_id)
+    tool_logger.info(
+        "Ищем по запросу длиной %s в индексе %s", len(query), vector_store_id
+    )
 
-    client: OpenAI = ctx.context.request_context['client']
+    client: OpenAI = ctx.context.client
     response = client.vector_stores.search(vector_store_id, query=query)
 
     results = [content.content[0].text for content in response.data]

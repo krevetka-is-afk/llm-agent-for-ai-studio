@@ -1,104 +1,24 @@
 import asyncio
-import logging
-import uuid
-from datetime import datetime, timezone
-import argparse
-from pathlib import Path
 
-from chatkit.types import (
-    InferenceOptions,
-    ThreadMetadata,
-    UserMessageItem,
-    UserMessageTextContent,
+from src.app import create_app
+from src.config import Settings
+
+import logging
+import sys
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+    stream=sys.stderr,
 )
 
-from src.config import Settings
-from src.logging_config import bind_logger, configure_logging
-from src.memory_store import MemoryStore
-from src.rag_agent_server import DEFAULT_THREAD_ID, RagChatkitServer
-from src.utils import get_streaming_response
-
-logger = logging.getLogger(__name__)
-
-
-def setup_logging(level: int = logging.INFO) -> Path:
-    return configure_logging(level)
-
-
-class ConversationState:
-    def __init__(self, base_dir: str):
-        self.base_dir = Path(base_dir).resolve()
-        self._is_done = False
-
-    def set_done(self):
-        self._is_done = True
-
-    def is_done(self):
-        return self._is_done
-
-    def get_base_dir(self):
-        return self.base_dir
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(description='My application')
-    parser.add_argument('--files-dir', default='files_to_upload', help='Files directory for uploading')
-    args = parser.parse_args()
-    return args
-
-
-async def chat_loop() -> None:
-    print("Welcome to Yandex Cloud Chat!")
-
-    args = parse_args()
+async def main() -> None:
+    logging.getLogger(__name__).info("Main started")
     settings = Settings.load_settings()
-
-    store = MemoryStore()
-    conv_state = ConversationState(args.files_dir)
-
-    rag_server = RagChatkitServer(store, settings)
-    thread = ThreadMetadata(
-        id=DEFAULT_THREAD_ID,
-        created_at=datetime.now(timezone.utc),
-        metadata={}
-    )
-
-    while not conv_state.is_done():
-        user_prompt = input("> ")
-        while len(user_prompt.strip()) == 0:
-            print("Please enter not empty prompt")
-            user_prompt = input("> ")
-
-        if user_prompt == "/exit":
-            print("Goodbye!")
-            conv_state.set_done()
-            break
-
-        item = UserMessageItem(
-            id=str(uuid.uuid4()),
-            thread_id=thread.id,
-            created_at=datetime.now(timezone.utc),
-            content=[UserMessageTextContent(text=user_prompt)],
-            inference_options=InferenceOptions()
-        )
-        turn_logger = bind_logger(logger, thread_id=thread.id, message_id=item.id)
-        turn_logger.info("Handling user message with %s chars", len(user_prompt))
-        print("> Assistant: ", end="", flush=True)
-        await get_streaming_response(
-            rag_server,
-            thread,
-            item,
-            context=conv_state,
-            logger=turn_logger,
-        )
-        print(flush=True)
-
-
-def main():
-    log_file = setup_logging()
-    logger.info("Logging to %s", log_file)
-    asyncio.run(chat_loop())
+    bot, dp = create_app(settings)
+    await dp.start_polling(bot)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

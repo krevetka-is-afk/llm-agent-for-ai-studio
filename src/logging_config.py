@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Mapping, cast, Union, Optional
 
 DEFAULT_CONTEXT_FIELDS = {
-    "thread_id": "-",
+    "user_id": "-",
     "message_id": "-",
     "response_id": "-",
 }
@@ -23,7 +23,7 @@ def build_formatter() -> logging.Formatter:
     formatter = ContextFormatter(
         fmt=(
             "%(asctime)s - [%(name)s] - %(levelname)s - "
-            "[thread=%(thread_id)s msg=%(message_id)s resp=%(response_id)s] - %(message)s"
+            "[user=%(user_id)s msg=%(message_id)s resp=%(response_id)s] - %(message)s"
         ),
         datefmt="%Y-%m-%d %H:%M:%S",
     )
@@ -34,7 +34,7 @@ def build_formatter() -> logging.Formatter:
 def configure_logging(
         level: int = logging.INFO,
         *,
-        log_dir: Path | None = None,
+        log_dir: Optional[Path] = None,
         console_level: int = logging.CRITICAL,
 ) -> Path:
     target_log_dir = log_dir or Path(__file__).resolve().parent.parent / "logs"
@@ -66,7 +66,8 @@ def bind_logger(
         **context: Optional[str],
 ) -> logging.LoggerAdapter[Any]:
     if isinstance(logger, logging.LoggerAdapter):
-        base_logger = cast(logging.Logger, cast(object, logger.logger))
+        # noinspection PyInvalidCast
+        base_logger = cast(logging.Logger, logger.logger)
         combined_context: dict[str, Any] = dict(cast(Mapping[str, Any], logger.extra))
     else:
         base_logger = logger

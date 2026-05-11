@@ -1,15 +1,19 @@
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 from dotenv import load_dotenv, find_dotenv
 
 DEFAULT_BASE_URL = "https://ai.api.cloud.yandex.net/v1"
 DEFAULT_INSTRUCTIONS_FOR_AI = "Ты — текстовый агент, который ведёт диалог\
  и даёт информативные ответы на вопросы пользователя."
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_ENV_FILE = PROJECT_ROOT / ".env"
 
 
 @dataclass(frozen=True)
 class Settings:
+    bot_token: str
     api_key: str
     folder_id: str
     model_uri: str
@@ -18,10 +22,12 @@ class Settings:
     max_output_tokens: int
     timeout: float
     instructions: str
+    upload_base_dir: str
+    db_path: Path
 
     @classmethod
     def load_settings(cls) -> Settings:
-        load_dotenv(find_dotenv())
+        load_environment()
 
         folder_id = _required_env("YANDEX_FOLDER_ID")
         model_uri = os.getenv("YANDEX_MODEL_URI")
@@ -34,6 +40,7 @@ class Settings:
         instructions = os.getenv("INSTRUCTIONS_FOR_AI", DEFAULT_INSTRUCTIONS_FOR_AI)
 
         return Settings(
+            bot_token=_required_env("BOT_TOKEN"),
             api_key=_required_env("YANDEX_API_KEY"),
             folder_id=folder_id,
             model_uri=model_uri,
@@ -42,6 +49,8 @@ class Settings:
             max_output_tokens=_env_int("YANDEX_MAX_OUTPUT_TOKENS", default=1000),
             timeout=_env_float("YANDEX_TIMEOUT", default=36.6),
             instructions=instructions,
+            upload_base_dir=os.getenv("YANDEX_UPLOAD_BASE_DIR", 'files_to_upload'),
+            db_path=Path(os.getenv("LLM_AGENT_DB_PATH", PROJECT_ROOT / 'conversation_db' / 'conversations.db'))
         )
 
 
@@ -77,3 +86,11 @@ def _env_float(name: str, default: float) -> float:
         raise RuntimeError(
             f"Invalid environment variable: {name} must be float got {value} instead"
         ) from e
+
+
+def load_environment() -> None:
+    env_path = find_dotenv(usecwd=True)
+    if env_path:
+        load_dotenv(env_path)
+        return
+    load_dotenv(DEFAULT_ENV_FILE)
