@@ -7,9 +7,9 @@ from typing import Optional
 
 from openai.types.responses import ResponseTextDeltaEvent
 
-from src.config import Settings
-from src.context import RequestContext, get_user_client
-from src.rag.rag_agent_server import RagServer
+from config import Settings
+from context import RequestContext, get_user_client
+from rag.rag_agent_server import RagServer
 
 logger = logging.getLogger(__name__)
 

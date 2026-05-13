@@ -1,18 +1,18 @@
 import logging
 
 from agents import Agent, OpenAIProvider, RunConfig, Runner, RunResultStreaming
+from agents.memory import SQLiteSession
 
-from ..config import Settings
-from .tools.finish_dialog import finish_dialog
-from .tools.vector_index import (
+from context import RequestContext
+from config import Settings
+from rag.tools.finish_dialog import finish_dialog
+from rag.tools.upload_files import upload_file
+from rag.tools.vector_index import (
     create_search_index,
     delete_vector_store_file,
     search_in_vector_index,
     upload_vector_store_file,
 )
-from ..context import RequestContext
-from agents.memory import SQLiteSession
-from .tools.upload_files import upload_file
 
 SUPPORT_AGENT_INSTRUCTIONS = """
 You are a helpful support assistant.

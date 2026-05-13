@@ -38,5 +38,16 @@ uv run pre-commit run --all-files
 >Перед запуском добавьте переменные окружения (минимально необходимые обозначены в [.env.example](.env.example))
 
 ```bash
-uv run --env-file .env.example main.py [--file-dir]
+cd src/
+uv run --env-file ../.env.example main.py [--file-dir]
+```
+
+## Запуск в docker
+
+>[!warning]
+>Перед запуском добавьте переменные окружения (минимально необходимые обозначены в [.env.example](.env.example))
+
+```bash
+docker build -t my-rag-agent .
+docker run -d --name my-rag-agent --restart unless-stopped my-rag-agent
 ```
