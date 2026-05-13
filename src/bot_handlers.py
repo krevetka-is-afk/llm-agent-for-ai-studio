@@ -4,11 +4,11 @@ from aiogram import Bot
 from aiogram import Router, types
 from aiogram.filters import Command
 
-from src.message_service import MessageService
-from src.session import get_session
-from src.context import UserSecretsStore
-from src.bot_utils import classify_message, download_media
-from src.config import Settings
+from message_service import MessageService
+from session import get_session
+from context import UserSecretsStore
+from bot_utils import classify_message, download_media
+from config import Settings
 
 
 def create_router(
