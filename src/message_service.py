@@ -3,13 +3,15 @@ import io
 from html import escape
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Iterable, Optional
 
 from openai.types.responses import ResponseTextDeltaEvent
 
-from config import Settings
-from context import RequestContext, get_user_client
-from rag.rag_agent_server import RagServer
+from src.config import Settings
+from src.context import RequestContext, get_user_client
+from src.engine_skill import EngineCard, EngineSkill, EngineSkillRegistry
+from src.primary_consultant import PrimaryConsultant
+from src.rag.rag_skill import RagEngineSkill
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +28,11 @@ COMMANDS = [
         command="/help",
         args_hint=None,
         description="Показать доступные команды",
+    ),
+    CommandHelp(
+        command="/skills",
+        args_hint=None,
+        description="Показать подключенные engine cards",
     ),
     CommandHelp(
         command="/reset",
@@ -46,9 +53,23 @@ COMMANDS = [
 
 
 class MessageService:
-    def __init__(self, settings: Settings):
+    def __init__(
+        self,
+        settings: Settings,
+        skills: Optional[Iterable[EngineSkill]] = None,
+        default_skill_id: str = "rag",
+        primary_consultant: Optional[PrimaryConsultant] = None,
+    ):
         self._settings = settings
-        self._rag_server = RagServer(settings)
+        self._skill_registry = EngineSkillRegistry(skills or (RagEngineSkill(settings),))
+        self._primary_consultant = primary_consultant or PrimaryConsultant(
+            self._skill_registry,
+            fallback_skill_id=default_skill_id,
+        )
+
+    @property
+    def engine_cards(self) -> tuple[EngineCard, ...]:
+        return self._skill_registry.cards
 
     @staticmethod
     def build_prompt(
@@ -84,9 +105,19 @@ class MessageService:
         logging.info(f"{output=}")
         return output
 
-    async def _get_streaming_response(self, input_user_message, context: RequestContext):
+    async def _get_streaming_response(
+        self, input_user_message, context: RequestContext
+    ):
         output = io.StringIO()
-        async for event in self._rag_server.respond(
+        route_decision = self._primary_consultant.route(input_user_message)
+        selected_skill = self._skill_registry.require(route_decision.skill_id)
+        logger.info(
+            "Primary consultant routed request to %s: %s",
+            route_decision.skill_id,
+            route_decision.reason,
+        )
+
+        async for event in selected_skill.respond(
             input_user_message=input_user_message, context=context
         ):
             if event.type == "raw_response_event" and isinstance(
@@ -105,6 +136,24 @@ class MessageService:
                 head = cmd.command
 
             lines.append(f"{head} — {cmd.description}")
+
+        return "\n".join(lines)
+
+    def render_engine_cards_msg(self) -> str:
+        lines = ["<b>Доступные skills</b>"]
+        for card in self.engine_cards:
+            lines.append(
+                f"<b>{escape(card.name)}</b> — <code>{escape(card.skill_id)}</code>"
+            )
+            lines.append(escape(card.description))
+            if card.tags:
+                rendered_tags = ", ".join(escape(tag) for tag in card.tags)
+                lines.append(f"Tags: {rendered_tags}")
+            if card.tools:
+                rendered_tools = ", ".join(
+                    f"<code>{escape(tool_name)}</code>" for tool_name in card.tools
+                )
+                lines.append(f"Tools: {rendered_tools}")
 
         return "\n".join(lines)
 
@@ -129,5 +178,5 @@ class MessageService:
         "Отправьте любой запрос, а я решу, какая из моих возможностей вам нужна.\n"
         "Перед началом работы отправь свой api-token и folder-id\n"
         "Текст переданный без команды будет обработан LLM‑моделью, которая может вызвать "
-        "одну из её функций (загрузка, индексация, поиск, кино‑поиск)."
+        "один из подключенных skills."
     )
