@@ -1,10 +1,12 @@
 import asyncio
 
 from app import create_app
-from config import Settings
+from config import load_config, AppConfig
 
 import logging
 import sys
+import argparse
+from pathlib import Path
 
 logging.basicConfig(
     level=logging.INFO,
@@ -13,10 +15,30 @@ logging.basicConfig(
     stream=sys.stderr,
 )
 
-async def main() -> None:
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="demo_cli",
+        description="Load a YAML configuration file supplied on the command line",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+
+    parser.add_argument(
+        "-c",
+        "--config",
+        type=Path,
+        default=Path("config.yaml"),
+        help="Path to the YAML configuration file.",
+    )
+
+    return parser
+
+
+async def main(argv: list[str] | None = None) -> None:
     logging.getLogger(__name__).info("Main started")
-    settings = Settings.load_settings()
-    bot, dp = create_app(settings)
+    args = build_parser().parse_args(argv)
+    config: AppConfig = load_config(args.config)
+    bot, dp = create_app(config)
     await dp.start_polling(bot)
 
 

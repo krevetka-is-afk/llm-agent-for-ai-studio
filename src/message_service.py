@@ -7,7 +7,7 @@ from typing import Optional
 
 from openai.types.responses import ResponseTextDeltaEvent
 
-from config import Settings
+from config import AppConfig, ConnectionConfig, ModelConfig, AgentConfig
 from context import RequestContext, get_user_client
 from rag.rag_agent_server import RagServer
 
@@ -46,9 +46,12 @@ COMMANDS = [
 
 
 class MessageService:
-    def __init__(self, settings: Settings):
-        self._settings = settings
-        self._rag_server = RagServer(settings)
+    def __init__(self, config: AppConfig):
+        self.connection_config: ConnectionConfig = config.connection
+        self._rag_server: AgentConfig = RagServer(config.rag_model)
+        # TODO:
+        # self._one_prompt_server: AgentConfig = OnePromptServer(config.one_prompt)
+        # self._consultant_server: AgentConfig = ConsultantServer(config.consultant)
 
     @staticmethod
     def build_prompt(
@@ -72,7 +75,7 @@ class MessageService:
         base_dir: Path,
         combined_prompt: str,
     ) -> str:
-        user_client = get_user_client(api_token, folder_id, self._settings)
+        user_client = get_user_client(api_token, folder_id, self.connection_config)
         context = RequestContext(
             user_id=user_id,
             user_files_dir=base_dir,

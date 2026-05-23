@@ -6,19 +6,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from openai import OpenAI
 
-from config import Settings
+from config import AIStudioAuth, ConnectionConfig
 
 logger = logging.getLogger(__name__)
 
 
 def get_user_client(
-    user_api_key: str, user_folder_id: str, settings: Settings
+    auth_config: AIStudioAuth, connection_config: ConnectionConfig
 ) -> OpenAI:
     return OpenAI(
-        api_key=user_api_key,
-        project=user_folder_id,
-        base_url=settings.base_url,
-        timeout=settings.timeout,
+        api_key=auth_config.api_token,
+        project=auth_config.folder_id,
+        base_url=connection_config.base_url,
+        timeout=connection_config.timeout,
     )
 
 

@@ -1,10 +1,18 @@
 import logging
 
-from agents import Agent, OpenAIProvider, RunConfig, Runner, RunResultStreaming
+from agents import (
+    Agent,
+    OpenAIProvider,
+    RunConfig,
+    Runner,
+    RunResultStreaming,
+    ModelSettings,
+    ModelRetrySettings,
+)
 from agents.memory import SQLiteSession
 
 from context import RequestContext
-from config import Settings
+from config import AIStudioAuth, ModelConfig, ConnectionConfig
 from rag.tools.finish_dialog import finish_dialog
 from rag.tools.upload_files import upload_file
 from rag.tools.vector_index import (
@@ -52,9 +60,14 @@ If the user wants to:
 
 
 class RAGAgent:
-    def __init__(self, settings: Settings):
+    def __init__(
+        self,
+        auth_config: AIStudioAuth,
+        model_config: ModelConfig,
+        connection_config: ConnectionConfig,
+    ):
         self.agent = Agent(
-            model=settings.model_uri,
+            model=f"gpt://{auth_config.folder_id}/{model_config.model_name}",
             name="Rag Agent",
             instructions=SUPPORT_AGENT_INSTRUCTIONS,
             tools=[
@@ -65,18 +78,26 @@ class RAGAgent:
                 delete_vector_store_file,
                 upload_vector_store_file,
             ],
+            model_settings=ModelSettings(
+                temperature=model_config.temperature,
+                max_tokens=model_config.max_output_tokens,
+                verbosity=model_config.verbosity,
+                retry=ModelRetrySettings(max_retries=model_config.max_retries),
+            ),
         )
 
         self.run_config = RunConfig(
             model_provider=OpenAIProvider(
-                api_key=settings.api_key,
-                project=settings.folder_id,
-                base_url=settings.base_url,
+                api_key=auth_config.api_key,
+                project=auth_config.folder_id,
+                base_url=connection_config.base_url,
                 use_responses=True,
             ),
         )
 
-    def invoke(self, message, context: RequestContext, session: SQLiteSession) -> RunResultStreaming:
+    def invoke(
+        self, message, context: RequestContext, session: SQLiteSession
+    ) -> RunResultStreaming:
         logging.info(f"Invoke model with {message=} {session=}")
         return Runner.run_streamed(
             self.agent,
