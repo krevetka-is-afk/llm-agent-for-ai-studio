@@ -5,6 +5,7 @@ from typing import Optional
 from aiogram import Bot
 from aiogram import Router, types
 from aiogram.filters import Command
+from openai import AuthenticationError, APIStatusError
 
 from message_service import MessageService
 from session import get_session
@@ -107,13 +108,39 @@ def create_router(
             text=message.text, caption=message.caption, file_name=filename
         )
 
-        output = await message_service.generate_response(
-            user_id=user_id,
-            api_token=user_secrets.api_token,
-            folder_id=user_secrets.folder_id,
-            combined_prompt=combined_prompt,
-            base_dir=base_dir,
-        )
+        try:
+            output = await message_service.generate_response(
+                user_id=user_id,
+                api_token=user_secrets.api_token,
+                folder_id=user_secrets.folder_id,
+                combined_prompt=combined_prompt,
+                base_dir=base_dir,
+            )
+        except AuthenticationError as exc:
+            if exc.status_code == 401:
+                await message.answer(
+                    "API-ключ недействителен или истек. "
+                    "Обновите ключ командой:\n"
+                    "<code>/set_api_token &lt;новый_API_key&gt;</code>"
+                )
+                return
+
+            logging.exception("Authentication failed with unexpected status")
+            await message.answer("Ошибка авторизации в API модели.")
+            return
+        except APIStatusError as exc:
+            if exc.status_code == 403:
+                await message.answer(
+                    "Нет доступа к модели или каталогу. Проверьте folder id и права ключа."
+                )
+                return
+            if exc.status_code == 429:
+                await message.answer("Слишком много запросов к API. Попробуйте позже.")
+                return
+
+            logging.exception("API status error: %s", exc.status_code)
+            await message.answer("API модели вернуло ошибку. Попробуйте позже.")
+            return
 
         if output.strip() == "":
             await message.answer("Empty output")
