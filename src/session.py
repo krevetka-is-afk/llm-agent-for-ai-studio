@@ -10,6 +10,7 @@ def get_session(session_id: str, db_path: Path) -> SQLiteSession:
     The SDK stores the full conversation history in
     openai_sessions / openai_session_items tables automatically.
     """
+    db_path.parent.mkdir(parents=True, exist_ok=True)
     return SQLiteSession(
         session_id=session_id,
         db_path=db_path,
