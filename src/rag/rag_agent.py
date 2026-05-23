@@ -1,7 +1,9 @@
 import logging
 
+import httpx
 from agents import Agent, OpenAIProvider, RunConfig, Runner, RunResultStreaming
 from agents.memory import SQLiteSession
+from openai import AsyncOpenAI
 
 from context import RequestContext
 from config import Settings
@@ -53,6 +55,22 @@ If the user wants to:
 
 class RAGAgent:
     def __init__(self, settings: Settings):
+
+        timeout = httpx.Timeout(
+            connect=15.0,
+            read=180.0,
+            write=60.0,
+            pool=60.0,
+        )
+
+        openai_client = AsyncOpenAI(
+            api_key=settings.api_key,
+            project=settings.folder_id,
+            base_url=settings.base_url,
+            timeout=timeout,
+            max_retries=1,
+        )
+
         self.agent = Agent(
             model=settings.model_uri,
             name="Rag Agent",
@@ -69,14 +87,14 @@ class RAGAgent:
 
         self.run_config = RunConfig(
             model_provider=OpenAIProvider(
-                api_key=settings.api_key,
-                project=settings.folder_id,
-                base_url=settings.base_url,
+                openai_client=openai_client,
                 use_responses=True,
             ),
         )
 
-    def invoke(self, message, context: RequestContext, session: SQLiteSession) -> RunResultStreaming:
+    def invoke(
+        self, message, context: RequestContext, session: SQLiteSession
+    ) -> RunResultStreaming:
         logging.info(f"Invoke model with {message=} {session=}")
         return Runner.run_streamed(
             self.agent,
