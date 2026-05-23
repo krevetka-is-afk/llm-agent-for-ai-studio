@@ -1,5 +1,7 @@
 import logging
 from pathlib import Path
+from typing import Optional
+
 from aiogram import Bot
 from aiogram import Router, types
 from aiogram.filters import Command
@@ -28,6 +30,10 @@ def create_router(
     @router.message(Command(commands=["help"]))
     async def cmd_help(message: types.Message):
         await message.reply(message_service.render_help_msg())
+
+    @router.message(Command(commands=["skills"]))
+    async def cmd_skills(message: types.Message):
+        await message.reply(message_service.render_engine_cards_msg())
 
     @router.message(Command(commands=["reset"]))
     async def cmd_session_restart(message: types.Message):
@@ -129,7 +135,7 @@ def _require_message_text(message: types.Message) -> str:
     return message.text
 
 
-def _last_command_argument(message: types.Message) -> str | None:
+def _last_command_argument(message: types.Message) -> Optional[str]:
     text = _require_message_text(message).strip()
     parts = text.split(maxsplit=1)
     if len(parts) != 2 or not parts[1].strip():
