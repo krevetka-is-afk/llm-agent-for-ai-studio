@@ -14,9 +14,9 @@ from context import (
     ConversationState,
     ConversationOptions,
 )
-from rag.rag_agent_server import RagServer
-from one_prompt.one_prompt_server import OnePromptServer
-from coordinator.coordinator_server import CoordinatorServer
+from rag.rag_agent import RAGAgent
+from one_prompt.one_prompt_agent import OnePromptAgent
+from coordinator.coordinator_agent import CoordinatorAgent
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +55,9 @@ COMMANDS = [
 class MessageService:
     def __init__(self, settings: Settings):
         self._settings = settings
-        self._rag_server = RagServer(settings)
-        self._one_prompt_server = OnePromptServer(settings)
-        self._coordinator_server = CoordinatorServer(settings)
+        self._rag_server = RAGAgent(settings)
+        self._one_prompt_server = OnePromptAgent(settings)
+        self._coordinator_server = CoordinatorAgent(settings)
 
     @staticmethod
     def build_prompt(
@@ -118,7 +118,7 @@ class MessageService:
     ):
         output = io.StringIO()
         async for event in model_server.respond(
-            input_user_message=input_user_message, context=context
+            message=input_user_message, context=context
         ):
             if event.type == "raw_response_event" and isinstance(
                 event.data, ResponseTextDeltaEvent

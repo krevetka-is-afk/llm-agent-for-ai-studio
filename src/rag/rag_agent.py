@@ -1,9 +1,11 @@
 import logging
 
-from agents import Agent, OpenAIProvider, RunConfig, Runner, RunResultStreaming
-from agents.memory import SQLiteSession
+from agents import Agent, OpenAIProvider, RunConfig, Runner
+from typing import Any, AsyncIterator
 
+from logging_config import bind_logger
 from context import RequestContext
+from session import get_session
 from config import Settings
 from common_tools.finish_dialog import finish_dialog
 from rag.tools.upload_files import upload_file
@@ -13,6 +15,8 @@ from rag.tools.vector_index import (
     search_in_vector_index,
     upload_vector_store_file,
 )
+
+logger = logging.getLogger(__name__)
 
 SUPPORT_AGENT_INSTRUCTIONS = """
 Ты — полезный RAG‑ассистент.  
@@ -77,6 +81,7 @@ SUPPORT_AGENT_INSTRUCTIONS = """
 
 class RAGAgent:
     def __init__(self, settings: Settings):
+        self.session_db_path = settings.db_path
         self.agent = Agent(
             model=settings.model_uri,
             name="Rag Agent",
@@ -100,12 +105,27 @@ class RAGAgent:
             ),
         )
 
-    def invoke(self, message, context: RequestContext, session: SQLiteSession) -> RunResultStreaming:
-        logging.info(f"Invoke model with {message=} {session=}")
-        return Runner.run_streamed(
+    async def respond(self, message, context: RequestContext) -> AsyncIterator[Any]:
+        if not message.strip():
+            return
+
+        request_logger = bind_logger(
+            logger,
+            user_id=context.user_id,
+        )
+        request_logger.info(
+            "Invoking agent with %s chars of user input", len(message)
+        )
+        session = get_session(context.user_id, self.session_db_path)
+
+        logging.info(f"Invoke RAG model with {message=} {session=}")
+        result = Runner.run_streamed(
             self.agent,
             message,
             context=context,
             run_config=self.run_config,
             session=session,
         )
+
+        async for event in result.stream_events():
+            yield event
