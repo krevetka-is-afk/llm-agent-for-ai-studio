@@ -2,6 +2,7 @@ from pathlib import Path
 
 from agents.memory import SQLiteSession
 
+
 def get_session(session_id: str, db_path: Path) -> SQLiteSession:
     """
     Return (or create) a persistent SQLite-backed thread

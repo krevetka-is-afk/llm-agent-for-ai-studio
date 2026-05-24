@@ -8,8 +8,15 @@ from typing import Optional
 from openai.types.responses import ResponseTextDeltaEvent
 
 from config import Settings
-from context import RequestContext, get_user_client
+from context import (
+    get_user_client,
+    RequestContext,
+    ConversationState,
+    ConversationOptions,
+)
 from rag.rag_agent_server import RagServer
+from one_prompt.one_prompt_server import OnePromptServer
+from coordinator.coordinator_server import CoordinatorServer
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +56,8 @@ class MessageService:
     def __init__(self, settings: Settings):
         self._settings = settings
         self._rag_server = RagServer(settings)
+        self._one_prompt_server = OnePromptServer(settings)
+        self._coordinator_server = CoordinatorServer(settings)
 
     @staticmethod
     def build_prompt(
@@ -69,6 +78,7 @@ class MessageService:
         user_id: str,
         api_token: str,
         folder_id: str,
+        conversation_state: ConversationState,
         base_dir: Path,
         combined_prompt: str,
     ) -> str:
@@ -77,16 +87,37 @@ class MessageService:
             user_id=user_id,
             user_files_dir=base_dir,
             client=user_client,
+            state=conversation_state,
         )
 
-        logging.info(f"Call llm with prompt {combined_prompt}")
-        output = await self._get_streaming_response(combined_prompt, context=context)
-        logging.info(f"{output=}")
+        if conversation_state.state == ConversationOptions.COORDINATOR:
+            logging.info(f"Call coordinator llm with prompt {combined_prompt}")
+            output = await self._get_streaming_response(
+                self._coordinator_server, combined_prompt, context=context
+            )
+            logging.info(f"{output=} {conversation_state.state=}")
+
+        if conversation_state.state == ConversationOptions.RAG:
+            logging.info(f"Call coordinator llm with prompt {combined_prompt}")
+            output = await self._get_streaming_response(
+                self._rag_server, combined_prompt, context=context
+            )
+            logging.info(f"{output=} {conversation_state.state=}")
+        elif conversation_state.state == ConversationOptions.ONE_PROMPT:
+            logging.info(f"Call one_prompt llm with prompt {combined_prompt}")
+            output = await self._get_streaming_response(
+                self._one_prompt_server, combined_prompt, context=context
+            )
+            logging.info(f"{output=} {conversation_state=}")
+
         return output
 
-    async def _get_streaming_response(self, input_user_message, context: RequestContext):
+    @staticmethod
+    async def _get_streaming_response(
+        model_server, input_user_message, context: RequestContext
+    ):
         output = io.StringIO()
-        async for event in self._rag_server.respond(
+        async for event in model_server.respond(
             input_user_message=input_user_message, context=context
         ):
             if event.type == "raw_response_event" and isinstance(
