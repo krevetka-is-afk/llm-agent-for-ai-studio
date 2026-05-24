@@ -14,9 +14,9 @@ from context import (
     ConversationState,
     ConversationOptions,
 )
-from rag.rag_agent import RAGAgent
-from one_prompt.one_prompt_agent import OnePromptAgent
-from coordinator.coordinator_agent import CoordinatorAgent
+from custom_agents.rag_agent import build_rag_agent
+from custom_agents.one_prompt_agent import build_one_prompt_agent
+from custom_agents.coordinator_agent import build_coordinator_agent
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +55,9 @@ COMMANDS = [
 class MessageService:
     def __init__(self, settings: Settings):
         self._settings = settings
-        self._rag_server = RAGAgent(settings)
-        self._one_prompt_server = OnePromptAgent(settings)
-        self._coordinator_server = CoordinatorAgent(settings)
+        self._rag_server = build_rag_agent(settings)
+        self._one_prompt_server = build_one_prompt_agent(settings)
+        self._coordinator_server = build_coordinator_agent(settings)
 
     @staticmethod
     def build_prompt(

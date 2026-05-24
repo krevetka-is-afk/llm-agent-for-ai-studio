@@ -1,15 +1,12 @@
 import logging
 
-from agents import Agent, OpenAIProvider, RunConfig, Runner
-from typing import Any, AsyncIterator
+from agents.tool import FunctionTool
 
-from logging_config import bind_logger
-from context import RequestContext
-from session import get_session
 from config import Settings
-from common_tools.finish_dialog import finish_dialog
-from rag.tools.upload_files import upload_file
-from rag.tools.vector_index import (
+from custom_agents.base_agent import CustomAgent
+from custom_agents.tools.finish_dialog import finish_dialog
+from custom_agents.tools.upload_files import upload_file
+from custom_agents.tools.vector_index import (
     create_search_index,
     delete_vector_store_file,
     search_in_vector_index,
@@ -18,7 +15,7 @@ from rag.tools.vector_index import (
 
 logger = logging.getLogger(__name__)
 
-SUPPORT_AGENT_INSTRUCTIONS = """
+RAG_AGENT_INSTRUCTIONS = """
 Ты — полезный RAG‑ассистент.  
 Твоя задача — вести естественный диалог с пользователем, создать векторный поисковый индекс из предоставленных файлов и сгенерировать **system‑prompt** для будущего LLM‑приложения пользователя, в котором будет указано, как использовать созданный индекс как внешний источник знаний.
 
@@ -78,54 +75,20 @@ SUPPORT_AGENT_INSTRUCTIONS = """
 - При подтверждении завершения вызывай `finish_dialog` **без аргументов** и возвращай лишь вывод инструмента.
 """.strip()
 
+RAG_TOOLS_SETUP: list[FunctionTool] = [
+    upload_file,
+    create_search_index,
+    finish_dialog,
+    search_in_vector_index,
+    delete_vector_store_file,
+    upload_vector_store_file,
+]
 
-class RAGAgent:
-    def __init__(self, settings: Settings):
-        self.session_db_path = settings.db_path
-        self.agent = Agent(
-            model=settings.model_uri,
-            name="Rag Agent",
-            instructions=SUPPORT_AGENT_INSTRUCTIONS,
-            tools=[
-                upload_file,
-                create_search_index,
-                finish_dialog,
-                search_in_vector_index,
-                delete_vector_store_file,
-                upload_vector_store_file,
-            ],
-        )
 
-        self.run_config = RunConfig(
-            model_provider=OpenAIProvider(
-                api_key=settings.api_key,
-                project=settings.folder_id,
-                base_url=settings.base_url,
-                use_responses=True,
-            ),
-        )
-
-    async def respond(self, message, context: RequestContext) -> AsyncIterator[Any]:
-        if not message.strip():
-            return
-
-        request_logger = bind_logger(
-            logger,
-            user_id=context.user_id,
-        )
-        request_logger.info(
-            "Invoking agent with %s chars of user input", len(message)
-        )
-        session = get_session(context.user_id, self.session_db_path)
-
-        logging.info(f"Invoke RAG model with {message=} {session=}")
-        result = Runner.run_streamed(
-            self.agent,
-            message,
-            context=context,
-            run_config=self.run_config,
-            session=session,
-        )
-
-        async for event in result.stream_events():
-            yield event
+def build_rag_agent(settings: Settings) -> CustomAgent:
+    return CustomAgent(
+        settings=settings,
+        name="RAG Agent",
+        instruction=RAG_AGENT_INSTRUCTIONS,
+        tools=RAG_TOOLS_SETUP,
+    )
