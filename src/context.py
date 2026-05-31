@@ -7,19 +7,19 @@ from pathlib import Path
 from enum import Enum, auto
 from openai import OpenAI
 
-from config import Settings
+from config import ConnectionConfig
 
 logger = logging.getLogger(__name__)
 
 
 def get_user_client(
-    user_api_key: str, user_folder_id: str, settings: Settings
+    user_api_key: str, user_folder_id: str, connection_config: ConnectionConfig
 ) -> OpenAI:
     return OpenAI(
         api_key=user_api_key,
         project=user_folder_id,
-        base_url=settings.base_url,
-        timeout=settings.timeout,
+        base_url=connection_config.base_url,
+        timeout=connection_config.timeout,
     )
 
 

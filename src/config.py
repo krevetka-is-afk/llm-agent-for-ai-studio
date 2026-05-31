@@ -1,57 +1,132 @@
 import os
+import yaml
+
 from dataclasses import dataclass
 from pathlib import Path
-
-from dotenv import load_dotenv, find_dotenv
-
-DEFAULT_BASE_URL = "https://ai.api.cloud.yandex.net/v1"
-DEFAULT_INSTRUCTIONS_FOR_AI = "Ты — текстовый агент, который ведёт диалог\
- и даёт информативные ответы на вопросы пользователя."
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_ENV_FILE = PROJECT_ROOT / ".env"
+from typing import Dict, Any, Literal
 
 
 @dataclass(frozen=True)
-class Settings:
+class BotConfig:
     bot_token: str
+
+
+@dataclass
+class AIStudioAuth:
     api_key: str
     folder_id: str
-    model_uri: str
-    base_url: str
+
+
+@dataclass(frozen=True)
+class ModelConfig:
+    model_name: str
     temperature: float
     max_output_tokens: int
+    base_url: str
+    sessions_db_path: Path
+    verbosity: Literal['low', 'medium', 'high'] | None = None
+    max_retries: int | None = None
+
+
+@dataclass(frozen=True)
+class PathConfig:
+    uploaded_files_dir: Path
+
+
+@dataclass(frozen=True)
+class SessionDBConfig:
+    path: Path
+
+
+@dataclass(frozen=True)
+class ConnectionConfig:
+    base_url: str
     timeout: float
-    instructions: str
-    upload_base_dir: str
-    db_path: Path
 
-    @classmethod
-    def load_settings(cls) -> Settings:
-        load_environment()
 
-        folder_id = _required_env("YANDEX_FOLDER_ID")
-        model_uri = os.getenv("YANDEX_MODEL_URI")
-        if not model_uri:
-            model = _required_env("YANDEX_MODEL")
-            model_uri = (
-                model if model.startswith("gpt://") else f"gpt://{folder_id}/{model}"
-            )
 
-        instructions = os.getenv("INSTRUCTIONS_FOR_AI", DEFAULT_INSTRUCTIONS_FOR_AI)
+@dataclass(frozen=True)
+class AppConfig:
+    auth: AIStudioAuth
+    bot: BotConfig
+    paths: PathConfig
+    connection: ConnectionConfig
+    session_db_config: SessionDBConfig
+    rag_model: ModelConfig
+    one_prompt: ModelConfig
+    consultant: ModelConfig
 
-        return Settings(
-            bot_token=_required_env("BOT_TOKEN"),
-            api_key=_required_env("YANDEX_API_KEY"),
-            folder_id=folder_id,
-            model_uri=model_uri,
-            base_url=os.getenv("YANDEX_BASE_URL", DEFAULT_BASE_URL),
-            temperature=_env_float("YANDEX_TEMPERATURE", default=0.5),
-            max_output_tokens=_env_int("YANDEX_MAX_OUTPUT_TOKENS", default=1000),
-            timeout=_env_float("YANDEX_TIMEOUT", default=36.6),
-            instructions=instructions,
-            upload_base_dir=os.getenv("YANDEX_UPLOAD_BASE_DIR", 'files_to_upload'),
-            db_path=Path(os.getenv("LLM_AGENT_DB_PATH", PROJECT_ROOT / 'conversation_db' / 'conversations.db'))
+
+def load_config(path: str | Path = "config.yaml") -> AppConfig:
+    with open(path, "r", encoding="utf-8") as f:
+        raw = yaml.safe_load(f)
+
+    bot = BotConfig(_required_env("BOT_TOKEN"))
+    auth = AIStudioAuth(
+        api_key=_required_env("YANDEX_API_KEY"),
+        folder_id=_required_env("YANDEX_FOLDER_ID"),
+    )
+
+    paths = PathConfig(
+        uploaded_files_dir=Path(_safe_get(raw, "paths", "uploaded_files_dir")).resolve(),
+    )
+
+    session_db_path = _safe_get(raw, "session_db", "path")
+    session_db = SessionDBConfig(
+        path=Path(session_db_path).resolve(),
+    )
+
+    connection = ConnectionConfig(
+        base_url=_safe_get(raw, "client", "base_url"),
+        timeout=_safe_get(raw, "client", "timeout"),
+    )
+
+    models = _parse_models(_safe_get(raw, "models"), session_db_path)
+
+    return AppConfig(
+        auth=auth,
+        bot=bot,
+        paths=paths,
+        connection=connection,
+        session_db_config=session_db,
+        rag_model=_safe_get(models, "rag_model"),
+        one_prompt=_safe_get(models, "one_prompt"),
+        consultant=_safe_get(models, "consultant"),
+    )
+
+
+def _safe_get(src: Dict[str, Any], *keys: str, default_value=None) -> Any:
+    value = src
+    for key in keys:
+        if not isinstance(value, dict):
+            raise TypeError(f"Failed to get {key} from {value}, {value} is not dict")
+        value = value.get(key)
+        if value is None:
+            if default_value is None:
+                raise ValueError(f"Config file doesn't have key '{key}'")
+            return default_value
+    return value
+
+
+def _parse_models(models_list: list, default_session_db_path: str | None = None) -> dict[str, ModelConfig]:
+    parsed = {}
+
+    for item in models_list:
+        model_key = next((k for k, v in item.items() if v is None), None)
+        if model_key is None:
+            raise ValueError(f"Cannot find model key in: {item}")
+
+        parsed[model_key] = ModelConfig(
+            model_name=_safe_get(item, "model_name"),
+            temperature=_safe_get(item, "temperature"),
+            max_output_tokens=_safe_get(item, "max_output_tokens"),
+            base_url=_safe_get(item, "base_url"),
+            sessions_db_path=Path(
+                _safe_get(item, "session_db_path", default_value=default_session_db_path)
+            ).resolve(),
         )
+
+    return parsed
 
 
 def _required_env(name: str) -> str:
@@ -60,37 +135,3 @@ def _required_env(name: str) -> str:
     if value is None:
         raise RuntimeError(f"Missing required environment variable: {name}")
     return value
-
-
-def _env_int(name: str, default: int) -> int:
-    value = os.getenv(name)
-
-    if value is None:
-        return default
-
-    try:
-        return int(value)
-    except ValueError as e:
-        raise RuntimeError(
-            f"Invalid environment variable: {name} must be int got {value} instead"
-        ) from e
-
-
-def _env_float(name: str, default: float) -> float:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    try:
-        return float(value)
-    except ValueError as e:
-        raise RuntimeError(
-            f"Invalid environment variable: {name} must be float got {value} instead"
-        ) from e
-
-
-def load_environment() -> None:
-    env_path = find_dotenv(usecwd=True)
-    if env_path:
-        load_dotenv(env_path)
-        return
-    load_dotenv(DEFAULT_ENV_FILE)

@@ -6,7 +6,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 from message_service import MessageService
-from config import Settings
+from config import load_config, AppConfig
 from bot_handlers import create_router
 from context import UserStore
 
@@ -18,21 +18,22 @@ logging.basicConfig(
 )
 
 
-def create_app(settings: Settings) -> tuple[Bot, Dispatcher]:
+def create_app(config: AppConfig) -> tuple[Bot, Dispatcher]:
     bot = Bot(
-        token=settings.bot_token,
+        token=config.bot.bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML)
     )
     dp = Dispatcher()
 
     users_store = UserStore()
-    message_service = MessageService(settings)
+    message_service = MessageService(config)
 
     router = create_router(
-        settings=settings,
         bot=bot,
-        user_store=users_store,
         message_service=message_service,
+        session_db=config.session_db_config,
+        paths=config.paths,
+        user_store=users_store,
     )
 
     dp.include_router(router)
@@ -41,8 +42,8 @@ def create_app(settings: Settings) -> tuple[Bot, Dispatcher]:
 
 async def main() -> None:
     logging.getLogger(__name__).info("Main started")
-    settings = Settings.load_settings()
-    bot, dp = create_app(settings)
+    config: AppConfig = load_config()
+    bot, dp = create_app(config)
     await dp.start_polling(bot)
 
 

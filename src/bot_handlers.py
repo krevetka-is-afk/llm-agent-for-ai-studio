@@ -8,14 +8,15 @@ from message_service import MessageService
 from session import get_session
 from context import UserStore
 from bot_utils import classify_message, download_media
-from config import Settings
+from config import SessionDBConfig, PathConfig
 
 
 def create_router(
-    settings: Settings,
     bot: Bot,
-    user_store: UserStore,
     message_service: MessageService,
+    session_db: SessionDBConfig,
+    paths: PathConfig,
+    user_store: UserStore,
 ) -> Router:
     router = Router()
 
@@ -32,7 +33,7 @@ def create_router(
     @router.message(Command(commands=["reset"]))
     async def cmd_session_restart(message: types.Message):
         user_id = str(_require_from_user(message).id)
-        session = get_session(user_id, settings.db_path)
+        session = get_session(user_id, session_db.path)
         await session.clear_session()
         await message.reply(f"Session {user_id} cleared")
 
@@ -91,7 +92,7 @@ def create_router(
             )
             return
 
-        base_dir = Path(settings.upload_base_dir).resolve() / user_id
+        base_dir = Path(paths.uploaded_files_dir).resolve() / user_id
 
         filename = None
         kind = classify_message(message)
