@@ -17,6 +17,7 @@ models:
 
 paths:
   uploaded_files_dir: 'uploaded_files'
+  authorized_keys_path: 'authorized_key.json'
 
 session_db:
   path: 'conversation.db'

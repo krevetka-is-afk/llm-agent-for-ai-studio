@@ -9,6 +9,7 @@ from message_service import MessageService
 from config import load_config, AppConfig
 from bot_handlers import create_router
 from context import UserStore
+from utils.iam_token import IAMTokenProvider
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,7 +26,7 @@ def create_app(config: AppConfig) -> tuple[Bot, Dispatcher]:
     )
     dp = Dispatcher()
 
-    users_store = UserStore()
+    users_store = UserStore(config.auth)
     message_service = MessageService(config)
 
     router = create_router(
