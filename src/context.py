@@ -1,7 +1,7 @@
 import logging
 
 from collections import defaultdict
-from typing import Optional
+from typing import Optional, Any
 from dataclasses import dataclass
 from pathlib import Path
 from enum import Enum, auto
@@ -56,7 +56,7 @@ class UserStore:
         self.folder_id = config.folder_id
         self.base_url = "https://lockbox.api.cloud.yandex.net/lockbox/v1/secrets"
 
-    def get(self, user_id: str) -> UserSecrets | None:
+    def get(self, user_id: str) -> UserSecrets:
         _, labels = self._get_user_secret(user_id)
         return UserSecrets(
             api_token=self._decode_key(labels.get('api_token')),
@@ -82,7 +82,7 @@ class UserStore:
         else:
             self._update_user_secret(id, labels)
 
-    def _get_user_secret(self, user_id: str) -> dict:
+    def _get_user_secret(self, user_id: str) -> tuple[Any, Any]:
         header = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.iam_provider.create_iam_token()}",
@@ -133,7 +133,7 @@ class UserStore:
 
         response.raise_for_status()
 
-    def _encode_key(self, key: str) -> tuple[str, int]:
+    def _encode_key(self, key: str) -> str | None:
         mask = 0
 
         for i, ch in enumerate(key):
