@@ -13,6 +13,8 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 WORKDIR app/
 COPY .env .env
+COPY config.yaml config.yaml
+COPY authorized_key.json authorized_key.json
 COPY src/ .
 
-CMD ["uv", "run", "--env-file", ".env", "main.py"]
+CMD ["uv", "run", "--env-file", ".env", "app.py"]

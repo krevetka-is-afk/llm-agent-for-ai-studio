@@ -1,25 +1,46 @@
 import logging
+
+from collections import defaultdict
+from typing import Optional, Any
+from dataclasses import dataclass
+from pathlib import Path
+from enum import Enum, auto
+from openai import OpenAI
+import requests
 import json
 
-from typing import Optional
-from dataclasses import dataclass, field
-from pathlib import Path
-from openai import OpenAI
-
-from config import Settings
+from config import ConnectionConfig, AIStudioAuth
+from utils.iam_token import IAMTokenProvider
 
 logger = logging.getLogger(__name__)
 
 
 def get_user_client(
-    user_api_key: str, user_folder_id: str, settings: Settings
+    user_api_key: str, user_folder_id: str, connection_config: ConnectionConfig
 ) -> OpenAI:
     return OpenAI(
         api_key=user_api_key,
         project=user_folder_id,
-        base_url=settings.base_url,
-        timeout=settings.timeout,
+        base_url=connection_config.base_url,
+        timeout=connection_config.timeout,
     )
+
+
+class ConversationOptions(Enum):
+    COORDINATOR = auto()
+    RAG = auto()
+    ONE_PROMPT = auto()
+
+
+class ConversationState:
+    def __init__(self):
+        self.state = ConversationOptions.COORDINATOR
+
+    def update_state(self, new_state: ConversationOptions):
+        self.state = new_state
+
+    def reset_state(self):
+        self.state = ConversationOptions.COORDINATOR
 
 
 @dataclass
@@ -29,68 +50,108 @@ class UserSecrets:
 
 
 class UserSecretsStore:
-    def __init__(self, storage_path: Optional[Path] = None):
-        self._storage_path = storage_path
-        self._data: dict[str, UserSecrets] = {}
-        self._load()
+    def __init__(self, config: AIStudioAuth):
+        self.conv = defaultdict(ConversationState)
+        self.iam_provider = IAMTokenProvider(config.authorized_keys_path)
+        self.folder_id = config.folder_id
+        self.base_url = "https://lockbox.api.cloud.yandex.net/lockbox/v1/secrets"
 
     def get(self, user_id: str) -> UserSecrets:
-        return self._data.setdefault(user_id, UserSecrets())
+        _, labels = self._get_user_secret(user_id)
+        return UserSecrets(
+            api_token=self._decode_key(labels.get("api_token")),
+            folder_id=labels.get("folder_id"),
+        )
+
+    def get_state(self, user_id: str) -> ConversationState:
+        return self.conv[user_id]
 
     def set_api_token(self, user_id: str, api_token: str) -> None:
-        self.get(user_id).api_token = api_token
-        self._save()
+        id, labels = self._get_user_secret(user_id)
+        labels["api_token"] = self._encode_key(api_token)
+        if id is None:
+            self._create_user_secret(user_id, labels)
+        else:
+            self._update_user_secret(id, labels)
 
     def set_folder_id(self, user_id: str, folder_id: str) -> None:
-        self.get(user_id).folder_id = folder_id
-        self._save()
+        id, labels = self._get_user_secret(user_id)
+        labels["folder_id"] = folder_id
+        if id is None:
+            self._create_user_secret(user_id, labels)
+        else:
+            self._update_user_secret(id, labels)
 
-    def _load(self) -> None:
-        if self._storage_path is None or not self._storage_path.exists():
-            return
+    def _get_user_secret(self, user_id: str) -> tuple[Any, Any]:
+        header = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.iam_provider.create_iam_token()}",
+        }
+        response = requests.get(
+            url=self.base_url,
+            headers=header,
+            params={"folder_id": self.folder_id},
+            timeout=1,
+        )
+        secrets = json.loads(response.text)["secrets"]
+        for secret in secrets:
+            if secret.get("name") == user_id:
+                return secret.get("id"), secret.get("labels", {})
+        return None, {}
 
-        try:
-            raw_data = json.loads(self._storage_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            logger.exception("Failed to load user secrets from %s", self._storage_path)
-            return
-
-        if not isinstance(raw_data, dict):
-            logger.warning("User secrets file has unexpected format: %s", self._storage_path)
-            return
-
-        for user_id, raw_secrets in raw_data.items():
-            if not isinstance(user_id, str) or not isinstance(raw_secrets, dict):
-                continue
-
-            api_token = raw_secrets.get("api_token")
-            folder_id = raw_secrets.get("folder_id")
-            self._data[user_id] = UserSecrets(
-                api_token=api_token if isinstance(api_token, str) else None,
-                folder_id=folder_id if isinstance(folder_id, str) else None,
-            )
-
-    def _save(self) -> None:
-        if self._storage_path is None:
-            return
-
-        self._storage_path.parent.mkdir(parents=True, exist_ok=True)
-        temp_path = self._storage_path.with_name(f"{self._storage_path.name}.tmp")
-        payload = {
-            user_id: {
-                "api_token": secrets.api_token,
-                "folder_id": secrets.folder_id,
-            }
-            for user_id, secrets in self._data.items()
+    def _create_user_secret(self, user_id: str, labels: dict) -> None:
+        header = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.iam_provider.create_iam_token()}",
+        }
+        payloads = {
+            "folder_id": self.folder_id,
+            "name": user_id,
+            "labels": labels,
         }
 
-        temp_path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
-            encoding="utf-8",
+        response = requests.post(
+            url=self.base_url,
+            headers=header,
+            json=payloads,
+            timeout=1,
         )
-        temp_path.chmod(0o600)
-        temp_path.replace(self._storage_path)
-        self._storage_path.chmod(0o600)
+
+        response.raise_for_status()
+
+    def _update_user_secret(self, secret_id: str, labels: dict) -> None:
+        header = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.iam_provider.create_iam_token()}",
+        }
+        response = requests.patch(
+            url=f"{self.base_url}/{secret_id}",
+            headers=header,
+            data=json.dumps({"update_mask": "labels", "labels": labels}),
+            timeout=1,
+        )
+
+        response.raise_for_status()
+
+    def _encode_key(self, key: str) -> Optional[str]:
+        mask = 0
+
+        for i, ch in enumerate(key):
+            if ch.isupper():
+                mask |= 1 << i
+
+        return key.lower() + "_" + str(mask)
+
+    def _decode_key(self, key: Optional[str]) -> Optional[str]:
+        if key is None:
+            return None
+        lower_key, mask = key.split("_")
+        mask = int(mask)
+        chars = list(lower_key)
+        for i in range(len(chars)):
+            if mask & (1 << i):
+                chars[i] = chars[i].upper()
+        return "".join(chars)
 
 
 @dataclass
@@ -98,4 +159,4 @@ class RequestContext:
     user_id: str
     user_files_dir: Path
     client: OpenAI
-    session_is_done: bool = field(default=False, init=False)
+    state: ConversationState
