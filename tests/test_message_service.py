@@ -6,7 +6,7 @@ from typing import Any, AsyncIterator, cast
 from openai import OpenAI
 from openai.types.responses import ResponseTextDeltaEvent
 
-from src.context import RequestContext
+from src.context import RequestContext, UserSecretsStore
 from src.engine_skill import EngineCard, EngineSkillRegistry
 from src.message_service import MessageService
 from src.primary_consultant import PrimaryConsultant, RouteDecision
@@ -46,6 +46,20 @@ def test_rag_skill_has_engine_card() -> None:
     assert RAG_ENGINE_CARD.output_modes == ("text/plain",)
     assert "vector-store" in RAG_ENGINE_CARD.tags
     assert "search_in_vector_index" in RAG_ENGINE_CARD.tools
+
+
+def test_user_secrets_store_persists_credentials(tmp_path: Path) -> None:
+    storage_path = tmp_path / "user_secrets.json"
+    store = UserSecretsStore(storage_path)
+
+    store.set_api_token("123", "api-token")
+    store.set_folder_id("123", "folder-id")
+
+    restored_store = UserSecretsStore(storage_path)
+    restored = restored_store.get("123")
+
+    assert restored.api_token == "api-token"
+    assert restored.folder_id == "folder-id"
 
 
 def test_engine_card_can_be_rendered_as_a2a_skill() -> None:

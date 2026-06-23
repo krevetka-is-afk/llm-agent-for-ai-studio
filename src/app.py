@@ -15,7 +15,7 @@ def create_app(settings: Settings) -> tuple[Bot, Dispatcher]:
     )
     dp = Dispatcher()
 
-    secrets_store = UserSecretsStore()
+    secrets_store = UserSecretsStore(settings.user_secrets_path)
     message_service = MessageService(settings)
 
     router = create_router(
