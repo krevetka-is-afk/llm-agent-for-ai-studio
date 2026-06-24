@@ -40,9 +40,19 @@ COMMANDS = [
         description="сбросить текущую сессию",
     ),
     CommandHelp(
+        command="/connect_yc",
+        args_hint=None,
+        description="подключить Yandex Cloud через защищённую форму",
+    ),
+    CommandHelp(
+        command="/yc_status",
+        args_hint=None,
+        description="показать статус подключения Yandex Cloud",
+    ),
+    CommandHelp(
         command="/set_api_token",
         args_hint="<token>",
-        description="сохранить API токен",
+        description="сохранить API токен (временный fallback)",
     ),
     CommandHelp(
         command="/set_folder_id",

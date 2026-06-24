@@ -1,17 +1,20 @@
 import logging
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
 from aiogram import Bot
 from aiogram import Router, types
 from aiogram.filters import Command
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from openai import AuthenticationError, APIStatusError
 
 from message_service import MessageService
 from session import get_session
-from context import UserSecretsStore
+from context import UserSecretsStore, UserSecrets
 from bot_utils import classify_message, download_media
-from config import SessionDBConfig, PathConfig
+from config import SessionDBConfig, PathConfig, MiniAppConfig
+from yc_connect import ConnectionStateStore, mask_api_key, mask_folder_id
 
 
 def create_router(
@@ -20,6 +23,8 @@ def create_router(
     session_db: SessionDBConfig,
     paths: PathConfig,
     user_store: UserSecretsStore,
+    mini_app: MiniAppConfig | None = None,
+    connection_states: ConnectionStateStore | None = None,
 ) -> Router:
     router = Router()
 
@@ -39,6 +44,37 @@ def create_router(
         session = get_session(user_id, session_db.path)
         await session.clear_session()
         await message.reply(f"Session {user_id} cleared")
+
+    @router.message(Command(commands=["connect_yc"]))
+    async def cmd_connect_yc(message: types.Message):
+        if mini_app is None or connection_states is None:
+            await message.reply("Mini App подключение пока не настроено.")
+            return
+
+        user_id = str(_require_from_user(message).id)
+        state = connection_states.create(user_id).state
+        url = f"{mini_app.public_url}/yc/connect?state={quote(state)}"
+        markup = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="Подключить Yandex Cloud",
+                        web_app=WebAppInfo(url=url),
+                    )
+                ]
+            ]
+        )
+        await message.reply(
+            "Откройте защищённую форму подключения Yandex Cloud.\n"
+            "API key не нужно отправлять в чат.",
+            reply_markup=markup,
+        )
+
+    @router.message(Command(commands=["yc_status"]))
+    async def cmd_yc_status(message: types.Message):
+        user_id = str(_require_from_user(message).id)
+        user_secrets = user_store.get(user_id)
+        await message.reply(_render_yc_status(user_secrets))
 
     @router.message(Command(commands=["set_api_token"]))
     async def cmd_set_token(message: types.Message):
@@ -167,3 +203,17 @@ def _last_command_argument(message: types.Message) -> Optional[str]:
     if len(parts) != 2 or not parts[1].strip():
         return None
     return parts[1].strip()
+
+
+def _render_yc_status(user_secrets: UserSecrets) -> str:
+    if user_secrets.api_token is None or user_secrets.folder_id is None:
+        return (
+            "Yandex Cloud не подключён.\n"
+            "Используйте команду /connect_yc."
+        )
+
+    return (
+        "Yandex Cloud подключён.\n"
+        f"Folder ID: {mask_folder_id(user_secrets.folder_id)}\n"
+        f"API key: {mask_api_key(user_secrets.api_token)}"
+    )

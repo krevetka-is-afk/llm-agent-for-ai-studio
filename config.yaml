@@ -25,3 +25,10 @@ session_db:
 client:
   base_url: 'https://ai.api.cloud.yandex.net/v1'
   timeout: 36.6
+
+mini_app:
+  public_url: 'http://localhost:8080'
+  host: '0.0.0.0'
+  port: 8080
+  connect_state_ttl_seconds: 900
+  verify_timeout: 15.0

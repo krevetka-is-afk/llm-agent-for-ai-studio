@@ -4,6 +4,7 @@ import yaml
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Any, Literal
+from dotenv import load_dotenv
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,14 @@ class ConnectionConfig:
     timeout: float
 
 
+@dataclass(frozen=True)
+class MiniAppConfig:
+    public_url: str
+    host: str
+    port: int
+    connect_state_ttl_seconds: int
+    verify_timeout: float
+
 
 @dataclass(frozen=True)
 class AppConfig:
@@ -52,6 +61,7 @@ class AppConfig:
     bot: BotConfig
     paths: PathConfig
     connection: ConnectionConfig
+    mini_app: MiniAppConfig
     session_db_config: SessionDBConfig
     rag_model: ModelConfig
     one_prompt: ModelConfig
@@ -59,6 +69,8 @@ class AppConfig:
 
 
 def load_config(path: str | Path = "config.yaml") -> AppConfig:
+    load_dotenv()
+
     with open(path, "r", encoding="utf-8") as f:
         raw = yaml.safe_load(f)
 
@@ -83,6 +95,21 @@ def load_config(path: str | Path = "config.yaml") -> AppConfig:
         timeout=_safe_get(raw, "client", "timeout"),
     )
 
+    mini_app = MiniAppConfig(
+        public_url=os.getenv(
+            "APP_PUBLIC_URL",
+            _safe_get(raw, "mini_app", "public_url", default_value="http://localhost:8080"),
+        ).rstrip("/"),
+        host=_safe_get(raw, "mini_app", "host", default_value="0.0.0.0"),
+        port=int(_safe_get(raw, "mini_app", "port", default_value=8080)),
+        connect_state_ttl_seconds=int(
+            _safe_get(raw, "mini_app", "connect_state_ttl_seconds", default_value=900)
+        ),
+        verify_timeout=float(
+            _safe_get(raw, "mini_app", "verify_timeout", default_value=15.0)
+        ),
+    )
+
     models = _parse_models(_safe_get(raw, "models"), session_db_path)
 
     return AppConfig(
@@ -90,6 +117,7 @@ def load_config(path: str | Path = "config.yaml") -> AppConfig:
         bot=bot,
         paths=paths,
         connection=connection,
+        mini_app=mini_app,
         session_db_config=session_db,
         rag_model=_safe_get(models, "rag_model"),
         one_prompt=_safe_get(models, "one_prompt"),
