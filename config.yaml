@@ -1,0 +1,26 @@
+models:
+  - rag_model:
+    model_name: "gpt-oss-120b"
+    temperature: 0.5
+    max_output_tokens: 1000
+    base_url: 'https://ai.api.cloud.yandex.net/v1'
+  - one_prompt:
+    model_name: "gpt-oss-120b"
+    temperature: 0.5
+    max_output_tokens: 1000
+    base_url: 'https://ai.api.cloud.yandex.net/v1'
+  - consultant:
+    model_name: "gpt-oss-120b"
+    temperature: 0.5
+    max_output_tokens: 1000
+    base_url: 'https://ai.api.cloud.yandex.net/v1'
+
+paths:
+  uploaded_files_dir: 'uploaded_files'
+
+session_db:
+  path: 'conversation.db'
+
+client:
+  base_url: 'https://ai.api.cloud.yandex.net/v1'
+  timeout: 36.6
