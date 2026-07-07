@@ -15,6 +15,7 @@ class BotConfig:
 class AIStudioAuth:
     api_key: str
     folder_id: str
+    authorized_keys_path: str
 
 
 @dataclass(frozen=True)
@@ -65,6 +66,7 @@ def load_config(path: str | Path = "config.yaml") -> AppConfig:
     auth = AIStudioAuth(
         api_key=_required_env("YANDEX_API_KEY"),
         folder_id=_required_env("YANDEX_FOLDER_ID"),
+        authorized_keys_path=_safe_get(raw, "paths", "authorized_keys_path"),
     )
 
     paths = PathConfig(

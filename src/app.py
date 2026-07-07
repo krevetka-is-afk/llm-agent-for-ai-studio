@@ -25,7 +25,7 @@ def create_app(config: AppConfig) -> tuple[Bot, Dispatcher]:
     )
     dp = Dispatcher()
 
-    users_store = UserStore()
+    users_store = UserStore(config.auth)
     message_service = MessageService(config)
 
     router = create_router(
