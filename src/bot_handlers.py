@@ -92,6 +92,7 @@ def create_router(
             )
             return
 
+
         base_dir = Path(paths.uploaded_files_dir).resolve() / user_id
 
         filename = None

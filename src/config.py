@@ -56,6 +56,7 @@ class AppConfig:
     rag_model: ModelConfig
     one_prompt: ModelConfig
     consultant: ModelConfig
+    default_tools_agent: ModelConfig
 
 
 def load_config(path: str | Path = "config.yaml") -> AppConfig:
@@ -94,6 +95,7 @@ def load_config(path: str | Path = "config.yaml") -> AppConfig:
         rag_model=_safe_get(models, "rag_model"),
         one_prompt=_safe_get(models, "one_prompt"),
         consultant=_safe_get(models, "consultant"),
+        default_tools_agent=_safe_get(models, "default_tools_agent"),
     )
 
 

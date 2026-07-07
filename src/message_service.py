@@ -13,10 +13,12 @@ from context import (
     RequestContext,
     ConversationState,
     ConversationOptions,
+    DEFAULT_TOOLS,
 )
 from custom_agents.rag_agent import build_rag_agent
 from custom_agents.one_prompt_agent import build_one_prompt_agent
 from custom_agents.coordinator_agent import build_coordinator_agent
+from custom_agents.default_tools_agent import build_default_tools_agent
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +60,7 @@ class MessageService:
         self._rag_server = build_rag_agent(config.auth, config.rag_model)
         self._one_prompt_server = build_one_prompt_agent(config.auth, config.one_prompt)
         self._coordinator_server = build_coordinator_agent(config.auth, config.consultant)
+        self._default_tools_agent_server = build_default_tools_agent(config.auth, config.default_tools_agent)
 
     @staticmethod
     def build_prompt(
@@ -108,6 +111,12 @@ class MessageService:
             logging.info(f"Call one_prompt llm with prompt {combined_prompt}")
             output = await self._get_streaming_response(
                 self._one_prompt_server, combined_prompt, context=context
+            )
+            logging.info(f"{output=} {conversation_state=}")
+        elif conversation_state.state == ConversationOptions.DEFAULT_TOOLS_AGENT:
+            logging.info(f"Call default_tools_agent llm with prompt {combined_prompt}")
+            output = await self._get_streaming_response(
+                self._default_tools_agent_server, combined_prompt, context=context
             )
             logging.info(f"{output=} {conversation_state=}")
 

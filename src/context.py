@@ -30,17 +30,30 @@ class ConversationOptions(Enum):
     COORDINATOR = auto()
     RAG = auto()
     ONE_PROMPT = auto()
+    DEFAULT_TOOLS_AGENT = auto()
+
+
+class DEFAULT_TOOLS(Enum):
+    WEB_SEARCH = auto()
+    IMAGE_GENERATION = auto()
 
 
 class ConversationState:
     def __init__(self):
         self.state = ConversationOptions.COORDINATOR
+        self.recorded_tools_buffer: set[DEFAULT_TOOLS] = set()
 
     def update_state(self, new_state: ConversationOptions):
         self.state = new_state
 
     def reset_state(self):
         self.state = ConversationOptions.COORDINATOR
+
+    def add_tool_to_buffer(self, tool_to_add: DEFAULT_TOOLS):
+        self.recorded_tools_buffer.add(tool_to_add)
+
+    def remove_tool_from_buffer(self, tool_to_remove: DEFAULT_TOOLS):
+        self.remove_tool_from_buffer.remove(tool_to_remove)
 
 
 @dataclass

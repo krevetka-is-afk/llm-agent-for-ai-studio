@@ -44,11 +44,10 @@ class CustomAgent:
             user_id=context.user_id,
         )
         request_logger.info(
-            "Invoking ONE-PROMPT agent with %s chars of user input", len(message)
+            f"Invoking {self.name} agent with %s chars of user input {len(message)}"
         )
         session: SQLiteSession = get_session(context.user_id, self.session_db_path)
 
-        logging.info(f"Invoke {self.name} model with {message=} {session=}")
         result = Runner.run_streamed(
             starting_agent=self.agent,
             input=message,

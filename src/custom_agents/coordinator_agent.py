@@ -6,6 +6,7 @@ from config import ModelConfig, AIStudioAuth
 from custom_agents.tools.delegate_tools import (
     delegate_rag,
     delegate_one_prompt,
+    delegate_default_tools_agent,
 )
 from custom_agents.base_agent import CustomAgent
 
@@ -17,7 +18,8 @@ COORDINATOR_AGENT_INSTRUCTIONS = """
 В окружении доступны два инструмента, вызываются **без аргументов**:
 
 * `delegate_rag` – строит приложение типа Retrieval‑Augmented Generation (RAG).
-* `delegate_one_prompt` – строит приложение, работающего одной подсказкой (one‑prompt).
+* `delegate_one_prompt` – строит приложение, работающеe только на одном промпте (one‑prompt).
+* `delegate_default_tools_agent` – строит приложение, использущее стандартные тулы, например веб-поиск или генерацию изображений.
 
 --------------------------------------------------------------------
 ## Правила поведения
@@ -45,8 +47,9 @@ COORDINATOR_AGENT_INSTRUCTIONS = """
 
 3. **Выбор делегата при отсутствии явного требования**
    - Если пользователь не дал однозначного указания, собирай информацию (шаг 1), после чего:
-     - При упоминании внешних источников, поиска, актуальных данных → `delegate_rag`.
-     - При описании простого одноподсказывающего решения → `delegate_one_prompt`.
+     - При упоминании внешних источников, поиска, актуальных данных → `delegate_default_tools_agent`.
+     - При упоминании пользовательских файлов и источников информации → `delegate_rag`.
+     - При описании простого одноподсказывающего решения не требующего дополнительных инструментов → `delegate_one_prompt`.
 
 4. **Вызов делегата**
    - Вызывай нужный инструмент **без аргументов**, используя точный JSON‑формат, как показано выше.
@@ -69,6 +72,7 @@ COORDINATOR_AGENT_INSTRUCTIONS = """
 COORDINATOR_TOOLS_SETUP: list[Tool] = [
     delegate_rag,
     delegate_one_prompt,
+    delegate_default_tools_agent,
 ]
 
 
