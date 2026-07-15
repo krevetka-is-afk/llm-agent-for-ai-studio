@@ -2,7 +2,7 @@ import logging
 
 from agents.tool import Tool
 
-from config import AIStudioAuth, ModelConfig
+from config import ModelConfig
 from custom_agents.tools.finish_dialog import finish_dialog
 from custom_agents.base_agent import CustomAgent
 
@@ -41,9 +41,8 @@ ONE_PROMPT_TOOLS_SETUP: list[Tool] = [
 ]
 
 
-def build_one_prompt_agent(auth_cfg: AIStudioAuth, model_cfg: ModelConfig) -> CustomAgent:
+def build_one_prompt_agent(model_cfg: ModelConfig) -> CustomAgent:
     return CustomAgent(
-        auth_cfg,
         model_cfg,
         name="One Prompt Agent",
         instruction=ONE_PROMPT_AGENT_INSTRUCTIONS,

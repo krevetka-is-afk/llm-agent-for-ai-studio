@@ -40,14 +40,34 @@ COMMANDS = [
         description="сбросить текущую сессию",
     ),
     CommandHelp(
+        command="/connect_yc",
+        args_hint=None,
+        description="подключить Yandex Cloud",
+    ),
+    CommandHelp(
+        command="/yc_status",
+        args_hint=None,
+        description="показать статус подключения Yandex Cloud",
+    ),
+    CommandHelp(
+        command="/yc_folders",
+        args_hint=None,
+        description="выбрать папку Yandex Cloud",
+    ),
+    CommandHelp(
+        command="/disconnect_yc",
+        args_hint=None,
+        description="отключить Yandex Cloud",
+    ),
+    CommandHelp(
         command="/set_api_token",
         args_hint="<token>",
-        description="сохранить API токен",
+        description="сохранить API токен (расширенный режим)",
     ),
     CommandHelp(
         command="/set_folder_id",
         args_hint="<folder_id>",
-        description="сохранить folder id",
+        description="сохранить folder id (расширенный режим)",
     ),
 ]
 
@@ -55,9 +75,9 @@ COMMANDS = [
 class MessageService:
     def __init__(self, config: AppConfig):
         self._connection_settings = config.connection
-        self._rag_server = build_rag_agent(config.auth, config.rag_model)
-        self._one_prompt_server = build_one_prompt_agent(config.auth, config.one_prompt)
-        self._coordinator_server = build_coordinator_agent(config.auth, config.consultant)
+        self._rag_server = build_rag_agent(config.rag_model)
+        self._one_prompt_server = build_one_prompt_agent(config.one_prompt)
+        self._coordinator_server = build_coordinator_agent(config.consultant)
 
     @staticmethod
     def build_prompt(
@@ -76,19 +96,21 @@ class MessageService:
         self,
         *,
         user_id: str,
-        api_token: str,
+        access_token: str,
         folder_id: str,
         conversation_state: ConversationState,
         base_dir: Path,
         combined_prompt: str,
     ) -> str:
-        user_client = get_user_client(api_token, folder_id, self._connection_settings)
+        user_client = get_user_client(access_token, folder_id, self._connection_settings)
 
         context = RequestContext(
             user_id=user_id,
             user_files_dir=base_dir,
             client=user_client,
             state=conversation_state,
+            access_token=access_token,
+            folder_id=folder_id,
         )
 
         if conversation_state.state == ConversationOptions.COORDINATOR:
@@ -159,7 +181,7 @@ class MessageService:
     welcome_message = (
         "Привет! Я — бот‑помощник с функциями LLM‑управления.\n"
         "Отправьте любой запрос, а я решу, какая из моих возможностей вам нужна.\n"
-        "Перед началом работы отправь свой api-token и folder-id\n"
+        "Подключите свой Yandex Cloud командой /connect_yc.\n"
         "Текст переданный без команды будет обработан LLM‑моделью, которая может вызвать "
         "одну из её функций (загрузка, индексация, поиск, кино‑поиск)."
     )

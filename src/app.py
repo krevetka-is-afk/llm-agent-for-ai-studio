@@ -9,6 +9,9 @@ from message_service import MessageService
 from config import load_config, AppConfig
 from bot_handlers import create_router
 from context import UserStore
+from experimental.oauth.client import OAuthGatewayClient
+from experimental.oauth.config import load_oauth_gateway_client_config
+from telegram_session import HttpProxyTelegramSession
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,14 +22,26 @@ logging.basicConfig(
 
 
 def create_app(config: AppConfig) -> tuple[Bot, Dispatcher]:
+    session = (
+        HttpProxyTelegramSession(config.bot.telegram_proxy_url)
+        if config.bot.telegram_proxy_url is not None
+        else None
+    )
     bot = Bot(
         token=config.bot.bot_token,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        session=session,
     )
     dp = Dispatcher()
 
     users_store = UserStore()
     message_service = MessageService(config)
+    oauth_gateway_config = load_oauth_gateway_client_config()
+    oauth_gateway = (
+        OAuthGatewayClient(oauth_gateway_config)
+        if oauth_gateway_config is not None
+        else None
+    )
 
     router = create_router(
         bot=bot,
@@ -34,6 +49,7 @@ def create_app(config: AppConfig) -> tuple[Bot, Dispatcher]:
         session_db=config.session_db_config,
         paths=config.paths,
         user_store=users_store,
+        oauth_gateway=oauth_gateway,
     )
 
     dp.include_router(router)

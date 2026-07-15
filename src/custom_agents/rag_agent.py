@@ -2,7 +2,7 @@ import logging
 
 from agents.tool import Tool
 
-from config import AIStudioAuth, ModelConfig
+from config import ModelConfig
 from custom_agents.base_agent import CustomAgent
 from custom_agents.tools.finish_dialog import finish_dialog
 from custom_agents.tools.upload_files import upload_file
@@ -85,9 +85,8 @@ RAG_TOOLS_SETUP: list[Tool] = [
 ]
 
 
-def build_rag_agent(auth_cfg: AIStudioAuth, model_cfg: ModelConfig) -> CustomAgent:
+def build_rag_agent(model_cfg: ModelConfig) -> CustomAgent:
     return CustomAgent(
-        auth_cfg,
         model_cfg,
         name="RAG Agent",
         instruction=RAG_AGENT_INSTRUCTIONS,

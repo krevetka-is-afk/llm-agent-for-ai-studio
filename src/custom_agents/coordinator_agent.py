@@ -2,7 +2,7 @@ import logging
 
 from agents.tool import Tool
 
-from config import ModelConfig, AIStudioAuth
+from config import ModelConfig
 from custom_agents.tools.delegate_tools import (
     delegate_rag,
     delegate_one_prompt,
@@ -72,9 +72,8 @@ COORDINATOR_TOOLS_SETUP: list[Tool] = [
 ]
 
 
-def build_coordinator_agent(auth_cfg: AIStudioAuth, model_cfg: ModelConfig) -> CustomAgent:
+def build_coordinator_agent(model_cfg: ModelConfig) -> CustomAgent:
     return CustomAgent(
-        auth_cfg,
         model_cfg,
         name="Coordinator Agent",
         instruction=COORDINATOR_AGENT_INSTRUCTIONS,
