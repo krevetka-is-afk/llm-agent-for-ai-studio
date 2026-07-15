@@ -23,6 +23,18 @@ def get_user_client(
     )
 
 
+def get_api_key_client(
+    api_key: str, folder_id: str, connection_config: ConnectionConfig
+) -> OpenAI:
+    return OpenAI(
+        api_key=api_key,
+        project=folder_id,
+        base_url=connection_config.base_url,
+        timeout=connection_config.timeout,
+        default_headers={"Authorization": f"Api-Key {api_key}"},
+    )
+
+
 class ConversationOptions(Enum):
     COORDINATOR = auto()
     RAG = auto()
@@ -46,6 +58,12 @@ class UserSecrets:
     folder_id: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class UserCredentials:
+    access_token: str
+    folder_id: str
+
+
 class UserStore:
     def __init__(self):
         self._data: defaultdict[str, UserSecrets] = defaultdict(UserSecrets)
@@ -63,6 +81,9 @@ class UserStore:
     def set_folder_id(self, user_id: str, folder_id: str) -> None:
         self._data[user_id].folder_id = folder_id
 
+    def clear_folder_id(self, user_id: str) -> None:
+        self._data[user_id].folder_id = None
+
 
 @dataclass
 class RequestContext:
@@ -70,3 +91,5 @@ class RequestContext:
     user_files_dir: Path
     client: OpenAI
     state: ConversationState
+    access_token: str
+    folder_id: str

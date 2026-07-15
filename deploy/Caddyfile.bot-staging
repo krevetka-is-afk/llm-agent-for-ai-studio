@@ -1,0 +1,11 @@
+bot.agent-builder.s3rg.ru {
+    handle /yc/oauth/callback {
+        reverse_proxy 127.0.0.1:8080
+    }
+
+    respond "Not Found" 404
+}
+
+agent-builder.s3rg.ru {
+    reverse_proxy 127.0.0.1:8501
+}

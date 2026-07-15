@@ -4,17 +4,13 @@ import yaml
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Any, Literal
+from urllib.parse import urlparse
 
 
 @dataclass(frozen=True)
 class BotConfig:
     bot_token: str
-
-
-@dataclass
-class AIStudioAuth:
-    api_key: str
-    folder_id: str
+    telegram_proxy_url: str | None
 
 
 @dataclass(frozen=True)
@@ -44,10 +40,21 @@ class ConnectionConfig:
     timeout: float
 
 
+@dataclass(frozen=True)
+class ApiKeyStoreConfig:
+    encryption_key: str
+    storage_path: Path
+
+
+@dataclass(frozen=True)
+class WebUIConfig:
+    connection: ConnectionConfig
+    model: ModelConfig
+    api_key_store: ApiKeyStoreConfig
+
 
 @dataclass(frozen=True)
 class AppConfig:
-    auth: AIStudioAuth
     bot: BotConfig
     paths: PathConfig
     connection: ConnectionConfig
@@ -61,12 +68,10 @@ def load_config(path: str | Path = "config.yaml") -> AppConfig:
     with open(path, "r", encoding="utf-8") as f:
         raw = yaml.safe_load(f)
 
-    bot = BotConfig(_required_env("BOT_TOKEN"))
-    auth = AIStudioAuth(
-        api_key=_required_env("YANDEX_API_KEY"),
-        folder_id=_required_env("YANDEX_FOLDER_ID"),
+    bot = BotConfig(
+        bot_token=_required_env("BOT_TOKEN"),
+        telegram_proxy_url=_optional_http_proxy_url("TELEGRAM_PROXY_URL"),
     )
-
     paths = PathConfig(
         uploaded_files_dir=Path(_safe_get(raw, "paths", "uploaded_files_dir")).resolve(),
     )
@@ -84,7 +89,6 @@ def load_config(path: str | Path = "config.yaml") -> AppConfig:
     models = _parse_models(_safe_get(raw, "models"), session_db_path)
 
     return AppConfig(
-        auth=auth,
         bot=bot,
         paths=paths,
         connection=connection,
@@ -92,6 +96,22 @@ def load_config(path: str | Path = "config.yaml") -> AppConfig:
         rag_model=_safe_get(models, "rag_model"),
         one_prompt=_safe_get(models, "one_prompt"),
         consultant=_safe_get(models, "consultant"),
+    )
+
+
+def load_web_ui_config(path: str | Path = "config.yaml") -> WebUIConfig:
+    with open(path, "r", encoding="utf-8") as f:
+        raw = yaml.safe_load(f)
+
+    session_db_path = _safe_get(raw, "session_db", "path")
+    models = _parse_models(_safe_get(raw, "models"), session_db_path)
+    return WebUIConfig(
+        connection=ConnectionConfig(
+            base_url=_safe_get(raw, "client", "base_url"),
+            timeout=_safe_get(raw, "client", "timeout"),
+        ),
+        model=_safe_get(models, "one_prompt"),
+        api_key_store=_load_api_key_store_config(),
     )
 
 
@@ -133,5 +153,36 @@ def _required_env(name: str) -> str:
     value = os.getenv(name)
 
     if value is None:
+        raise RuntimeError(f"Missing required environment variable: {name}")
+    return value
+
+
+def _optional_http_proxy_url(name: str) -> str | None:
+    value = os.getenv(name)
+    if not value:
+        return None
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise RuntimeError(f"{name} must be an HTTP or HTTPS proxy URL")
+    return value
+
+
+def _load_api_key_store_config() -> ApiKeyStoreConfig:
+    required_names = ("YC_API_KEY_ENCRYPTION_KEY",)
+    values = {name: os.getenv(name) for name in required_names}
+    missing = [name for name, value in values.items() if not value]
+    if missing:
+        raise RuntimeError(
+            "Incomplete API key storage configuration; missing: " + ", ".join(missing)
+        )
+    return ApiKeyStoreConfig(
+        encryption_key=_required_value(values, "YC_API_KEY_ENCRYPTION_KEY"),
+        storage_path=Path(os.getenv("YC_API_KEY_DB_PATH", "yc_api_keys.db")).resolve(),
+    )
+
+
+def _required_value(values: dict[str, str | None], name: str) -> str:
+    value = values[name]
+    if not value:
         raise RuntimeError(f"Missing required environment variable: {name}")
     return value
