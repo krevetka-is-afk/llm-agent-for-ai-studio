@@ -103,8 +103,8 @@ OAuth работает как отдельный сервис `oauth-gateway`: T
 refresh-токены и не содержит OAuth client secret. Для авторизации через
 `auth.yandex.cloud` нужны два объекта: IAM OAuth client с redirect URI
 `https://<домен>/yc/oauth/callback` и связанное с ним OIDC-приложение Identity Hub
-с назначенными пользователями. Полная процедура приведена в
-[YANDEX_CLOUD_USER_OAUTH.md](YANDEX_CLOUD_USER_OAUTH.md).
+с назначенными пользователями. Процедура настройки пока не входит в документацию
+Web MVP.
 
 Переменные Gateway в `.env.gateway`:
 
@@ -127,9 +127,7 @@ uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_
 ```
 
 В production callback Gateway должен быть доступен по HTTPS через reverse proxy.
-Подробности и требования к OAuth client приведены в
-[YANDEX_CLOUD_USER_OAUTH.md](YANDEX_CLOUD_USER_OAUTH.md). Этот прототип пока не
-подключён к Telegram-боту и Streamlit.
+Этот прототип пока не подключён к Telegram-боту и Streamlit.
 
 Для отдельного запуска Gateway используйте:
 
