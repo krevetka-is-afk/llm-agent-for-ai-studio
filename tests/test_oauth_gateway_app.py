@@ -34,7 +34,9 @@ class StubGateway:
         return None
 
 
-def test_gateway_api_requires_internal_secret_and_exposes_only_gateway_contract() -> None:
+def test_gateway_api_requires_internal_secret_and_exposes_only_gateway_contract() -> (
+    None
+):
     async def scenario() -> None:
         app = create_gateway_app(cast(OAuthGateway, StubGateway()), "internal-secret")
         client = TestClient(TestServer(app))
@@ -45,7 +47,9 @@ def test_gateway_api_requires_internal_secret_and_exposes_only_gateway_contract(
 
             headers = {"X-OAuth-Gateway-Key": "internal-secret"}
             authorize = await client.post("/v1/users/42/authorization", headers=headers)
-            assert await authorize.json() == {"authorizationUrl": "https://auth.example/?subject=42"}
+            assert await authorize.json() == {
+                "authorizationUrl": "https://auth.example/?subject=42"
+            }
 
             folders = await client.get("/v1/users/42/folders", headers=headers)
             assert (await folders.json())["folders"][0]["id"] == "folder-a"

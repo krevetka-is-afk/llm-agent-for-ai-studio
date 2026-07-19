@@ -20,7 +20,7 @@ class ModelConfig:
     max_output_tokens: int
     base_url: str
     sessions_db_path: Path
-    verbosity: Literal['low', 'medium', 'high'] | None = None
+    verbosity: Literal["low", "medium", "high"] | None = None
     max_retries: int | None = None
 
 
@@ -77,12 +77,16 @@ def load_config(path: str | Path = "config.yaml") -> AppConfig:
         telegram_proxy_url=_optional_http_proxy_url("TELEGRAM_PROXY_URL"),
     )
     paths = PathConfig(
-        uploaded_files_dir=Path(_safe_get(raw, "paths", "uploaded_files_dir")).resolve(),
+        uploaded_files_dir=_path_from_env_or_config(
+            "UPLOADED_FILES_DIR", raw, "paths", "uploaded_files_dir"
+        ),
     )
 
-    session_db_path = _safe_get(raw, "session_db", "path")
+    session_db_path = _path_from_env_or_config(
+        "CONVERSATION_DB_PATH", raw, "session_db", "path"
+    )
     session_db = SessionDBConfig(
-        path=Path(session_db_path).resolve(),
+        path=session_db_path,
     )
 
     connection = ConnectionConfig(
@@ -109,20 +113,22 @@ def load_web_ui_config(path: str | Path = "config.yaml") -> WebUIConfig:
     with open(path, "r", encoding="utf-8") as f:
         raw = yaml.safe_load(f)
 
-    session_db_path = _safe_get(raw, "session_db", "path")
+    session_db_path = _path_from_env_or_config(
+        "CONVERSATION_DB_PATH", raw, "session_db", "path"
+    )
     models = _parse_models(_safe_get(raw, "models"), session_db_path)
     return WebUIConfig(
         ai_service=AIServiceConfig(
             paths=PathConfig(
-                uploaded_files_dir=Path(
-                    _safe_get(raw, "paths", "uploaded_files_dir")
-                ).resolve()
+                uploaded_files_dir=_path_from_env_or_config(
+                    "UPLOADED_FILES_DIR", raw, "paths", "uploaded_files_dir"
+                )
             ),
             connection=ConnectionConfig(
                 base_url=_safe_get(raw, "client", "base_url"),
                 timeout=_safe_get(raw, "client", "timeout"),
             ),
-            session_db_config=SessionDBConfig(path=Path(session_db_path).resolve()),
+            session_db_config=SessionDBConfig(path=session_db_path),
             rag_model=_safe_get(models, "rag_model"),
             one_prompt=_safe_get(models, "one_prompt"),
             consultant=_safe_get(models, "consultant"),
@@ -144,7 +150,15 @@ def _safe_get(src: Dict[str, Any], *keys: str, default_value=None) -> Any:
     return value
 
 
-def _parse_models(models_list: list, default_session_db_path: str | None = None) -> dict[str, ModelConfig]:
+def _path_from_env_or_config(
+    env_name: str, raw: Dict[str, Any], *config_keys: str
+) -> Path:
+    return Path(os.getenv(env_name) or _safe_get(raw, *config_keys)).resolve()
+
+
+def _parse_models(
+    models_list: list, default_session_db_path: str | Path | None = None
+) -> dict[str, ModelConfig]:
     parsed = {}
 
     for item in models_list:
@@ -158,7 +172,9 @@ def _parse_models(models_list: list, default_session_db_path: str | None = None)
             max_output_tokens=_safe_get(item, "max_output_tokens"),
             base_url=_safe_get(item, "base_url"),
             sessions_db_path=Path(
-                _safe_get(item, "session_db_path", default_value=default_session_db_path)
+                _safe_get(
+                    item, "session_db_path", default_value=default_session_db_path
+                )
             ).resolve(),
         )
 

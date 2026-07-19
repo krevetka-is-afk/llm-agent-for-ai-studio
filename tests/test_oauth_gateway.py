@@ -64,7 +64,9 @@ def _gateway(tmp_path, *, expires_in: int = 3600):
     return OAuthGateway(config, store, remote), remote, config
 
 
-def test_gateway_uses_pkce_and_credential_store_holds_only_refresh_token(tmp_path) -> None:
+def test_gateway_uses_pkce_and_credential_store_holds_only_refresh_token(
+    tmp_path,
+) -> None:
     gateway, remote, config = _gateway(tmp_path)
 
     authorization_url = gateway.begin_authorization("telegram-user")
@@ -72,9 +74,11 @@ def test_gateway_uses_pkce_and_credential_store_holds_only_refresh_token(tmp_pat
     gateway.complete_authorization("authorization-code", query["state"][0])
 
     _, code_verifier = remote.exchange_calls[0]
-    expected_challenge = base64.urlsafe_b64encode(
-        hashlib.sha256(code_verifier.encode("ascii")).digest()
-    ).rstrip(b"=").decode("ascii")
+    expected_challenge = (
+        base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode("ascii")).digest())
+        .rstrip(b"=")
+        .decode("ascii")
+    )
     assert query["code_challenge"] == [expected_challenge]
     assert query["scope"] == ["openid profile email"]
     assert gateway.is_connected("telegram-user") is True
@@ -98,7 +102,9 @@ def test_gateway_uses_pkce_and_credential_store_holds_only_refresh_token(tmp_pat
 
 def test_gateway_refreshes_iam_token_and_rotates_refresh_token(tmp_path) -> None:
     gateway, remote, _ = _gateway(tmp_path, expires_in=1)
-    state = parse_qs(urlparse(gateway.begin_authorization("telegram-user")).query)["state"][0]
+    state = parse_qs(urlparse(gateway.begin_authorization("telegram-user")).query)[
+        "state"
+    ][0]
     gateway.complete_authorization("authorization-code", state)
 
     assert gateway.get_iam_token("telegram-user") == "iam-refreshed"
@@ -107,7 +113,9 @@ def test_gateway_refreshes_iam_token_and_rotates_refresh_token(tmp_path) -> None
 
 def test_gateway_validates_folders_and_revokes_on_disconnect(tmp_path) -> None:
     gateway, remote, _ = _gateway(tmp_path)
-    state = parse_qs(urlparse(gateway.begin_authorization("telegram-user")).query)["state"][0]
+    state = parse_qs(urlparse(gateway.begin_authorization("telegram-user")).query)[
+        "state"
+    ][0]
     gateway.complete_authorization("authorization-code", state)
 
     gateway.validate_folder("telegram-user", "folder-a")

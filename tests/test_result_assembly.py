@@ -26,8 +26,7 @@ def test_collector_pairs_tool_call_with_its_authoritative_output() -> None:
                     "call_id": "call-1",
                     "name": "create_search_index",
                     "arguments": (
-                        '{"file_ids":["file-1"],'
-                        '"vector_store_name":"knowledge"}'
+                        '{"file_ids":["file-1"],"vector_store_name":"knowledge"}'
                     ),
                 }
             ),
@@ -103,9 +102,7 @@ def test_rag_result_contains_typed_index_and_model_markdown() -> None:
 def test_merged_run_keeps_tool_facts_and_uses_last_agent_text() -> None:
     coordinator = AgentRunResult(
         text="TASK DELEGATED",
-        tool_executions=(
-            ToolExecution("route", "delegate_rag", {}, "TASK DELEGATED"),
-        ),
+        tool_executions=(ToolExecution("route", "delegate_rag", {}, "TASK DELEGATED"),),
     )
     rag = AgentRunResult(text="Готово")
 

@@ -179,7 +179,9 @@ class ResultAssembler:
         return parts
 
 
-def merge_agent_runs(*runs: AgentRunResult, text_from_last: bool = True) -> AgentRunResult:
+def merge_agent_runs(
+    *runs: AgentRunResult, text_from_last: bool = True
+) -> AgentRunResult:
     if not runs:
         return AgentRunResult(text="")
     text = runs[-1].text if text_from_last else "".join(run.text for run in runs)
@@ -200,8 +202,7 @@ def result_part_to_record(part: ResultPart) -> dict[str, Any]:
         "index_id": part.index_id,
         "expires_after_days": part.expires_after_days,
         "files": [
-            {"filename": file.filename, "file_id": file.file_id}
-            for file in part.files
+            {"filename": file.filename, "file_id": file.file_id} for file in part.files
         ],
     }
 

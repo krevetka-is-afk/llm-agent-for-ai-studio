@@ -1,4 +1,6 @@
 import asyncio
+import re
+import shutil
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -17,7 +19,11 @@ from context import (
 from custom_agents.coordinator_agent import build_coordinator_agent
 from custom_agents.one_prompt_agent import build_one_prompt_agent
 from custom_agents.rag_agent import build_rag_agent
-from custom_agents.tools.upload_files import upload_local_file
+from custom_agents.tools.upload_files import (
+    MAX_UPLOAD_BYTES,
+    resolve_upload_path,
+    upload_local_file,
+)
 from result_assembly import (
     AgentRunResult,
     AgentRunCollector,
@@ -61,6 +67,19 @@ class UnsupportedConversationStateError(RuntimeError):
     pass
 
 
+class UploadValidationError(ValueError):
+    pass
+
+
+MAX_ATTACHMENTS_PER_REQUEST = 5
+MAX_TOTAL_UPLOAD_BYTES = 25 * 1024 * 1024
+UPLOAD_RETENTION_POLICY = (
+    "User upload directories are request-scoped for model access and are removed "
+    "when the user resets the conversation."
+)
+_UNSAFE_FILENAME_CHARS = re.compile(r"[^A-Za-z0-9._ -]+")
+
+
 class AIInteractionService:
     def __init__(
         self,
@@ -90,9 +109,11 @@ class AIInteractionService:
         content: bytes,
         caption: str | None = None,
     ) -> Attachment:
-        safe_filename = Path(original_filename.replace("\\", "/")).name
-        if safe_filename in {"", ".", ".."}:
-            safe_filename = "upload.bin"
+        if len(content) > MAX_UPLOAD_BYTES:
+            raise UploadValidationError(
+                f"Upload is {len(content)} bytes; limit is {MAX_UPLOAD_BYTES} bytes"
+            )
+        safe_filename = self._sanitize_display_filename(original_filename)
         filename = f"{uuid4().hex}_{safe_filename}"
         target_dir = self.user_files_dir(user_id)
         target_dir.mkdir(parents=True, exist_ok=True)
@@ -108,8 +129,7 @@ class AIInteractionService:
         await asyncio.to_thread(
             client.responses.create,
             model=(
-                f"gpt://{credentials.folder_id}/"
-                f"{self._config.one_prompt.model_name}"
+                f"gpt://{credentials.folder_id}/{self._config.one_prompt.model_name}"
             ),
             input="Ответьте ровно: OK",
             max_output_tokens=2,
@@ -132,13 +152,16 @@ class AIInteractionService:
                     request.credentials, self._config.connection
                 ),
                 use_responses=True,
-            )
+            ),
+            tracing_disabled=True,
+            trace_include_sensitive_data=False,
         )
         attachments = self._attachments(request)
         if selected_agent is ConversationOptions.RAG:
             attachments = await self._ensure_uploaded_files(
                 attachments, context.client, request.user_files_dir
             )
+            self._authorize_attachment_ids(context, attachments)
         first_run = await self._collect_run(
             agent,
             self._build_input(request, attachments),
@@ -155,6 +178,7 @@ class AIInteractionService:
             attachments = await self._ensure_uploaded_files(
                 attachments, context.client, request.user_files_dir
             )
+            self._authorize_attachment_ids(context, attachments)
             runs.append(
                 await self._collect_run(
                     self._agent_for(responded_by),
@@ -189,6 +213,7 @@ class AIInteractionService:
         }
         for db_path in db_paths:
             await get_session(user_id, db_path).clear_session()
+        await asyncio.to_thread(shutil.rmtree, self.user_files_dir(user_id), True)
 
     def _agent_for(self, state: ConversationOptions):
         if state is ConversationOptions.COORDINATOR:
@@ -197,7 +222,9 @@ class AIInteractionService:
             return self._rag_agent
         if state is ConversationOptions.ONE_PROMPT:
             return self._one_prompt_agent
-        raise UnsupportedConversationStateError(f"Unsupported conversation state: {state}")
+        raise UnsupportedConversationStateError(
+            f"Unsupported conversation state: {state}"
+        )
 
     @staticmethod
     def _attachments(request: InteractionRequest) -> tuple[Attachment, ...]:
@@ -210,6 +237,17 @@ class AIInteractionService:
     async def _ensure_uploaded_files(
         attachments: tuple[Attachment, ...], client: Any, base_dir: Path
     ) -> tuple[Attachment, ...]:
+        AIInteractionService._validate_attachment_registry(attachments)
+        total_upload_bytes = sum(
+            resolve_upload_path(base_dir, attachment.filename).stat().st_size
+            for attachment in attachments
+            if attachment.file_id is None
+        )
+        if total_upload_bytes > MAX_TOTAL_UPLOAD_BYTES:
+            raise UploadValidationError(
+                "Attachments exceed the total request limit: "
+                f"{total_upload_bytes} > {MAX_TOTAL_UPLOAD_BYTES} bytes"
+            )
         uploaded_attachments: list[Attachment] = []
         for attachment in attachments:
             if attachment.file_id is not None:
@@ -220,6 +258,39 @@ class AIInteractionService:
             )
             uploaded_attachments.append(replace(attachment, file_id=file_id))
         return tuple(uploaded_attachments)
+
+    @staticmethod
+    def _validate_attachment_registry(attachments: tuple[Attachment, ...]) -> None:
+        if len(attachments) > MAX_ATTACHMENTS_PER_REQUEST:
+            raise UploadValidationError(
+                "Too many attachments in one request: "
+                f"{len(attachments)} > {MAX_ATTACHMENTS_PER_REQUEST}"
+            )
+        seen: set[str] = set()
+        for attachment in attachments:
+            filename = attachment.filename
+            if filename in seen:
+                raise UploadValidationError(
+                    f"Duplicate attachment filename: {filename}"
+                )
+            seen.add(filename)
+            requested = Path(filename)
+            if requested.is_absolute() or ".." in requested.parts:
+                raise UploadValidationError(
+                    "Attachment filename must be a current-request relative path"
+                )
+            if ".previews" in requested.parts:
+                raise UploadValidationError("Preview artifacts cannot be uploaded")
+
+    @staticmethod
+    def _authorize_attachment_ids(
+        context: RequestContext, attachments: tuple[Attachment, ...]
+    ) -> None:
+        context.allowed_file_ids = frozenset(
+            attachment.file_id
+            for attachment in attachments
+            if attachment.file_id is not None
+        )
 
     @staticmethod
     def _build_input(
@@ -258,6 +329,14 @@ class AIInteractionService:
                 return f"Uploaded {noun} by user: {filenames} with request: {caption}\n"
             return f"Uploaded {noun} by user: {filenames}\n"
         return f"User request: {request.text or ''}\n"
+
+    @staticmethod
+    def _sanitize_display_filename(original_filename: str) -> str:
+        safe_filename = Path(original_filename.replace("\\", "/")).name
+        safe_filename = _UNSAFE_FILENAME_CHARS.sub("_", safe_filename).strip(" .")
+        if safe_filename in {"", ".", ".."}:
+            return "upload.bin"
+        return safe_filename
 
     @staticmethod
     async def _collect_run(

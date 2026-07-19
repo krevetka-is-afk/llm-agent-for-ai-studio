@@ -78,9 +78,7 @@ class OAuthGatewayClient:
             )
         return tuple(folders)
 
-    async def get_credentials(
-        self, subject_id: str, folder_id: str
-    ) -> UserCredentials:
+    async def get_credentials(self, subject_id: str, folder_id: str) -> UserCredentials:
         payload = await self._request_json(
             "POST", f"/v1/users/{_path_subject(subject_id)}/credentials"
         )
@@ -101,7 +99,9 @@ class OAuthGatewayClient:
     async def _request_json(self, method: str, path: str) -> dict[str, object]:
         try:
             async with ClientSession(headers=self._headers) as session:
-                async with session.request(method, f"{self._base_url}{path}") as response:
+                async with session.request(
+                    method, f"{self._base_url}{path}"
+                ) as response:
                     if response.status == 404:
                         raise GatewayClientNotConnected("Yandex Cloud is not connected")
                     if response.status == 401:

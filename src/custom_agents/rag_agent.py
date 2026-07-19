@@ -5,13 +5,7 @@ from agents.tool import Tool
 from config import ModelConfig
 from custom_agents.base_agent import CustomAgent
 from custom_agents.tools.finish_dialog import finish_dialog
-from custom_agents.tools.upload_files import upload_file
-from custom_agents.tools.vector_index import (
-    create_search_index,
-    delete_vector_store_file,
-    search_in_vector_index,
-    upload_vector_store_file,
-)
+from custom_agents.tools.vector_index import create_search_index
 
 logger = logging.getLogger(__name__)
 
@@ -20,11 +14,7 @@ RAG_AGENT_INSTRUCTIONS = """
 Твоя задача — вести естественный диалог с пользователем, создать векторный поисковый индекс из предоставленных файлов и сгенерировать **system‑prompt** для будущего LLM‑приложения пользователя, в котором будет указано, как использовать созданный индекс как внешний источник знаний.
 
 ## Доступные инструменты
-- `upload_file(filename)` — загружает локальный файл в хранилище, возвращает `file_id`.
 - `create_search_index(file_ids, vector_store_name)` — создаёт векторный поисковый индекс с заданным именем, возвращает `index_id`.
-- `search_in_vector_index(vector_store_id, query)` — ищет релевантную информацию в созданном индексе.
-- `upload_vector_store_file(vector_store_id, file_id)` — привязывает уже загруженный файл к индексу.
-- `delete_vector_store_file(vector_store_id, file_id)` — удаляет файл из индекса.
 - `finish_dialog` — завершает диалог после выполнения задачи.
 
 ## Основной порядок действий
@@ -35,9 +25,9 @@ RAG_AGENT_INSTRUCTIONS = """
 
 2. **Собрать файлы для индексации**
    - Если файлы не указаны, спроси: *«Какие файлы нужно добавить в индекс? Вы можете загрузить их по одному или прислать список.»*
-   - Для каждого полученного файла вызывай `upload_file` и сохраняй возвращённый `file_id`.
-   - Формируй список `all_file_ids`, пока не будет загружено всё, что нужно.
+   - У тебя нет инструмента для загрузки локальных файлов по имени. Файлы загружает сервис до запуска агента.
    - Если в сообщении указано `Files are already uploaded to AI Studio` и перечислены `file_id`, файлы уже загружены сервисом. Сразу используй эти идентификаторы в `create_search_index`; не проси пользователя загрузить их повторно и не заявляй, что файлы недоступны.
+   - Формируй список `all_file_ids` только из полученных `file_id`.
 
 3. **Создать векторный индекс**
    - **Только после** загрузки всех требуемых файлов вызывай `create_search_index(file_ids=all_file_ids, vector_store_name=index_name)`.
@@ -72,18 +62,14 @@ RAG_AGENT_INSTRUCTIONS = """
 - **Никогда** не вызывай `create_search_index`, пока все файлы не загружены успешно.
 - При любой ошибке инструмента кратко информируй пользователя (например, «Не удалось загрузить файл X») и уточняй, как действовать дальше.
 - **Не давай** пользователю инструкций по использованию инструментов; ты вызываешь их от его имени.
-- `search_in_vector_index` используй **только** для получения фактов во время диалога, **не** для построения system‑prompt.
+- Используй только `file_id`, которые сервис передал в текущем запросе. Другие файлы и ранее созданные индексы недоступны.
 - После выполнения всех целей всегда уточняй, нужно ли завершить сессию.
 - При подтверждении завершения вызывай `finish_dialog` **без аргументов** и возвращай лишь вывод инструмента.
 """.strip()
 
 RAG_TOOLS_SETUP: list[Tool] = [
-    upload_file,
     create_search_index,
     finish_dialog,
-    search_in_vector_index,
-    delete_vector_store_file,
-    upload_vector_store_file,
 ]
 
 

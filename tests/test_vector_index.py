@@ -1,0 +1,141 @@
+from types import SimpleNamespace
+from typing import Any
+
+import pytest
+
+from custom_agents.tools import vector_index
+
+
+class FakeVectorStores:
+    def __init__(self, statuses: list[str]) -> None:
+        self._statuses = statuses
+        self.retrieve_calls: list[str] = []
+        self.create_kwargs: dict[str, Any] | None = None
+
+    def create(self, **kwargs: Any) -> SimpleNamespace:
+        self.create_kwargs = kwargs
+        return SimpleNamespace(id="vs_123")
+
+    def retrieve(self, vector_store_id: str) -> SimpleNamespace:
+        self.retrieve_calls.append(vector_store_id)
+        if self._statuses:
+            status = self._statuses.pop(0)
+        else:
+            status = "in_progress"
+        return SimpleNamespace(status=status)
+
+
+class FakeClient:
+    def __init__(self, statuses: list[str] | None = None) -> None:
+        self.vector_stores = FakeVectorStores(statuses or [])
+
+
+def make_ctx(client: FakeClient) -> SimpleNamespace:
+    return SimpleNamespace(
+        context=SimpleNamespace(
+            user_id="user_1",
+            client=client,
+            allowed_file_ids=frozenset({"file_1", "file_2"}),
+        )
+    )
+
+
+def test_create_search_index_returns_id_when_completed() -> None:
+    client = FakeClient(["in_progress", "completed"])
+    sleeps: list[float] = []
+
+    result = vector_index._create_search_index_impl(
+        make_ctx(client),
+        ["file_1", "file_2"],
+        "knowledge",
+        sleep=sleeps.append,
+    )
+
+    assert result == "vs_123"
+    assert client.vector_stores.create_kwargs is not None
+    assert client.vector_stores.create_kwargs["file_ids"] == ["file_1", "file_2"]
+    assert client.vector_stores.create_kwargs["name"] == "knowledge"
+    assert client.vector_stores.retrieve_calls == ["vs_123", "vs_123"]
+    assert sleeps == [3.0]
+
+    sleeps.clear()
+    vector_index._wait_for_vector_store_completed(
+        client=FakeClient(["completed"]),
+        vector_store_id="vs_done",
+        tool_logger=vector_index.logger,
+        sleep=sleeps.append,
+    )
+    assert sleeps == []
+
+
+@pytest.mark.parametrize("status", ["failed", "cancelled", "expired"])
+def test_known_terminal_failures_raise_typed_error(status: str) -> None:
+    client = FakeClient([status])
+
+    with pytest.raises(vector_index.VectorIndexTerminalStatusError) as exc_info:
+        vector_index._wait_for_vector_store_completed(
+            client=client,
+            vector_store_id="vs_bad",
+            tool_logger=vector_index.logger,
+            sleep=lambda _: None,
+        )
+
+    assert exc_info.value.vector_store_id == "vs_bad"
+    assert exc_info.value.status == status
+
+
+def test_perpetual_in_progress_times_out_without_real_sleep() -> None:
+    client = FakeClient(["in_progress", "in_progress", "in_progress"])
+    sleeps: list[float] = []
+
+    with pytest.raises(vector_index.VectorIndexPollingTimeoutError) as exc_info:
+        vector_index._wait_for_vector_store_completed(
+            client=client,
+            vector_store_id="vs_slow",
+            tool_logger=vector_index.logger,
+            sleep=sleeps.append,
+            monotonic=lambda: 0.0,
+            max_attempts=3,
+        )
+
+    assert exc_info.value.vector_store_id == "vs_slow"
+    assert exc_info.value.last_status == "in_progress"
+    assert exc_info.value.attempts == 3
+    assert sleeps == [3.0, 3.0]
+
+
+def test_unknown_status_raises_bounded_typed_error() -> None:
+    client = FakeClient(["migrating"])
+
+    with pytest.raises(vector_index.VectorIndexUnknownStatusError) as exc_info:
+        vector_index._wait_for_vector_store_completed(
+            client=client,
+            vector_store_id="vs_unknown",
+            tool_logger=vector_index.logger,
+            sleep=lambda _: None,
+        )
+
+    assert exc_info.value.vector_store_id == "vs_unknown"
+    assert exc_info.value.status == "migrating"
+    assert exc_info.value.attempt == 1
+    assert client.vector_stores.retrieve_calls == ["vs_unknown"]
+
+
+def test_file_ids_must_belong_to_current_request() -> None:
+    allowed = frozenset({"file_1", "file_2"})
+
+    vector_index._validate_authorized_file_ids(["file_1"], allowed)
+
+    with pytest.raises(vector_index.VectorIndexAuthorizationError):
+        vector_index._validate_authorized_file_ids(["file_other"], allowed)
+    with pytest.raises(vector_index.VectorIndexAuthorizationError):
+        vector_index._validate_authorized_file_ids([], allowed)
+    with pytest.raises(vector_index.VectorIndexAuthorizationError):
+        vector_index._validate_authorized_file_ids(["file_1", "file_1"], allowed)
+
+
+def test_tool_schema_stays_compatible_for_agent() -> None:
+    assert vector_index.create_search_index.params_json_schema["required"] == [
+        "file_ids",
+        "vector_store_name",
+    ]

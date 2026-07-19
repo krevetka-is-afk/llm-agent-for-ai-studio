@@ -25,10 +25,15 @@ def test_oauth_is_optional_and_shared_yandex_credentials_are_not_required(
 
     load_config(Path("config.yaml"))
 
-def test_gateway_reads_yandex_cloud_secrets_without_loading_bot_config(monkeypatch) -> None:
+
+def test_gateway_reads_yandex_cloud_secrets_without_loading_bot_config(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("YC_OAUTH_CLIENT_ID", "client-id")
     monkeypatch.setenv("YC_OAUTH_CLIENT_SECRET", "client-secret")
-    monkeypatch.setenv("YC_OAUTH_REDIRECT_URI", "https://gateway.example/yc/oauth/callback")
+    monkeypatch.setenv(
+        "YC_OAUTH_REDIRECT_URI", "https://gateway.example/yc/oauth/callback"
+    )
     monkeypatch.setenv("YC_TOKEN_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii"))
     monkeypatch.setenv("OAUTH_GATEWAY_SHARED_SECRET", "shared-secret")
 
@@ -49,9 +54,50 @@ def test_bot_reads_optional_http_proxy_url(monkeypatch) -> None:
 
 def test_web_ui_uses_gateway_without_requiring_telegram_token(monkeypatch) -> None:
     monkeypatch.delenv("BOT_TOKEN", raising=False)
-    monkeypatch.setenv("YC_API_KEY_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii"))
+    monkeypatch.setenv(
+        "YC_API_KEY_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii")
+    )
 
     config = load_web_ui_config(Path("config.yaml"))
 
     assert config.api_key_store.storage_path.name == "yc_api_keys.db"
     assert config.ai_service.consultant.model_name
+
+
+def test_runtime_paths_can_be_overridden_from_environment(
+    monkeypatch, tmp_path
+) -> None:
+    upload_dir = tmp_path / "uploads"
+    conversation_db = tmp_path / "conversation.db"
+    monkeypatch.setenv("BOT_TOKEN", "123456:token")
+    monkeypatch.setenv("UPLOADED_FILES_DIR", str(upload_dir))
+    monkeypatch.setenv("CONVERSATION_DB_PATH", str(conversation_db))
+
+    config = load_config(Path("config.yaml"))
+
+    assert config.ai_service.paths.uploaded_files_dir == upload_dir.resolve()
+    assert config.ai_service.session_db_config.path == conversation_db.resolve()
+    assert config.ai_service.rag_model.sessions_db_path == conversation_db.resolve()
+    assert config.ai_service.one_prompt.sessions_db_path == conversation_db.resolve()
+    assert config.ai_service.consultant.sessions_db_path == conversation_db.resolve()
+
+
+def test_web_ui_runtime_paths_can_be_overridden_from_environment(
+    monkeypatch, tmp_path
+) -> None:
+    upload_dir = tmp_path / "web-uploads"
+    conversation_db = tmp_path / "web-conversation.db"
+    monkeypatch.delenv("BOT_TOKEN", raising=False)
+    monkeypatch.setenv(
+        "YC_API_KEY_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii")
+    )
+    monkeypatch.setenv("UPLOADED_FILES_DIR", str(upload_dir))
+    monkeypatch.setenv("CONVERSATION_DB_PATH", str(conversation_db))
+
+    config = load_web_ui_config(Path("config.yaml"))
+
+    assert config.ai_service.paths.uploaded_files_dir == upload_dir.resolve()
+    assert config.ai_service.session_db_config.path == conversation_db.resolve()
+    assert config.ai_service.rag_model.sessions_db_path == conversation_db.resolve()
+    assert config.ai_service.one_prompt.sessions_db_path == conversation_db.resolve()
+    assert config.ai_service.consultant.sessions_db_path == conversation_db.resolve()

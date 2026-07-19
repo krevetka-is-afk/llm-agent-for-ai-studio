@@ -18,7 +18,9 @@ logger = logging.getLogger(__name__)
 AUTHORIZATION_ENDPOINT = "https://auth.yandex.cloud/oauth/authorize"
 TOKEN_ENDPOINT = "https://auth.yandex.cloud/oauth/token"
 REVOCATION_ENDPOINT = "https://auth.yandex.cloud/oauth/revoke"
-RESOURCE_MANAGER_ENDPOINT = "https://resource-manager.api.cloud.yandex.net/resource-manager/v1"
+RESOURCE_MANAGER_ENDPOINT = (
+    "https://resource-manager.api.cloud.yandex.net/resource-manager/v1"
+)
 TOKEN_REFRESH_SKEW_SECONDS = 60
 STATE_TTL_SECONDS = 600
 
@@ -125,7 +127,10 @@ class IAMTokenCache:
 
     def get(self, subject_id: str) -> str | None:
         cached = self._tokens.get(subject_id)
-        if cached is None or cached.expires_at <= int(time.time()) + TOKEN_REFRESH_SKEW_SECONDS:
+        if (
+            cached is None
+            or cached.expires_at <= int(time.time()) + TOKEN_REFRESH_SKEW_SECONDS
+        ):
             return None
         return cached.access_token
 
@@ -210,7 +215,9 @@ class YandexCloudOAuthClient:
             )
             collection = response.get(resource)
             if not isinstance(collection, list):
-                raise GatewayRemoteError(f"Yandex Cloud returned invalid {resource} data")
+                raise GatewayRemoteError(
+                    f"Yandex Cloud returned invalid {resource} data"
+                )
             for item in collection:
                 if not isinstance(item, dict):
                     raise GatewayRemoteError(
@@ -247,7 +254,9 @@ class YandexCloudOAuthClient:
                 payload = response.read().decode("utf-8")
         except HTTPError as exc:
             logger.warning("Yandex Cloud OAuth API returned HTTP %s", exc.code)
-            raise GatewayRemoteError(f"Yandex Cloud API returned HTTP {exc.code}") from exc
+            raise GatewayRemoteError(
+                f"Yandex Cloud API returned HTTP {exc.code}"
+            ) from exc
         except URLError as exc:
             raise GatewayRemoteError("Could not reach Yandex Cloud API") from exc
         if not payload.strip():
@@ -278,9 +287,13 @@ class OAuthGateway:
 
     def begin_authorization(self, subject_id: str) -> str:
         state, code_verifier = self._sessions.create(subject_id)
-        challenge = base64.urlsafe_b64encode(
-            hashlib.sha256(code_verifier.encode("ascii")).digest()
-        ).rstrip(b"=").decode("ascii")
+        challenge = (
+            base64.urlsafe_b64encode(
+                hashlib.sha256(code_verifier.encode("ascii")).digest()
+            )
+            .rstrip(b"=")
+            .decode("ascii")
+        )
         query = urlencode(
             {
                 "response_type": "code",
@@ -338,7 +351,9 @@ class OAuthGateway:
 
     def validate_folder(self, subject_id: str, folder_id: str) -> None:
         if folder_id not in {folder.id for folder in self.list_folders(subject_id)}:
-            raise GatewayRemoteError("The selected folder is not available to this user")
+            raise GatewayRemoteError(
+                "The selected folder is not available to this user"
+            )
 
     def disconnect(self, subject_id: str) -> None:
         try:
@@ -349,14 +364,14 @@ class OAuthGateway:
             try:
                 self._remote.revoke(refresh_token)
             except GatewayRemoteError:
-                logger.warning("Could not revoke Yandex Cloud token for subject_id=%s", subject_id)
+                logger.warning(
+                    "Could not revoke Yandex Cloud token for subject_id=%s", subject_id
+                )
         self._iam_cache.delete(subject_id)
         self._credentials.delete_refresh_token(subject_id)
 
 
-def _response_string(
-    payload: dict[str, object], field: str, resource: str
-) -> str:
+def _response_string(payload: dict[str, object], field: str, resource: str) -> str:
     value = payload.get(field)
     if not isinstance(value, str) or not value:
         raise GatewayRemoteError(f"Yandex Cloud returned an invalid {resource} {field}")

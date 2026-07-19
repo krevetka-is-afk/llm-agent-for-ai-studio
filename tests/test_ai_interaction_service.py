@@ -2,8 +2,22 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
-from ai_interaction_service import AIInteractionService, Attachment, InteractionRequest
-from config import AIServiceConfig, ConnectionConfig, ModelConfig, PathConfig, SessionDBConfig
+import pytest
+
+from ai_interaction_service import (
+    AIInteractionService,
+    Attachment,
+    InteractionRequest,
+    MAX_ATTACHMENTS_PER_REQUEST,
+    UploadValidationError,
+)
+from config import (
+    AIServiceConfig,
+    ConnectionConfig,
+    ModelConfig,
+    PathConfig,
+    SessionDBConfig,
+)
 from context import AIStudioCredentials, ConversationOptions, ConversationState
 from result_assembly import IndexedFileResult, VectorIndexResultPart
 
@@ -37,8 +51,7 @@ class IndexCreatingFakeAgent(FakeAgent):
                     "call_id": "call-index",
                     "name": "create_search_index",
                     "arguments": (
-                        '{"file_ids":["file-first"],'
-                        '"vector_store_name":"knowledge"}'
+                        '{"file_ids":["file-first"],"vector_store_name":"knowledge"}'
                     ),
                 }
             ),
@@ -89,7 +102,9 @@ def test_service_routes_to_agent_selected_by_conversation_state(tmp_path: Path) 
             InteractionRequest(
                 user_id="42",
                 text="find this document",
-                credentials=AIStudioCredentials(api_key="AQAAAA-key", folder_id="folder"),
+                credentials=AIStudioCredentials(
+                    api_key="AQAAAA-key", folder_id="folder"
+                ),
                 conversation_state=state,
                 user_files_dir=service.user_files_dir("42"),
             )
@@ -159,6 +174,7 @@ def test_service_returns_an_authoritative_vector_index_part(tmp_path: Path) -> N
             expires_after_days=1,
         ),
     )
+    assert rag.calls[0]["context"].allowed_file_ids == frozenset({"file-first"})
 
 
 def test_service_saves_upload_in_the_user_directory(tmp_path: Path) -> None:
@@ -177,10 +193,33 @@ def test_service_saves_upload_in_the_user_directory(tmp_path: Path) -> None:
     assert attachment.filename.endswith("_report.txt")
     assert attachment.display_name == "report.txt"
     assert attachment.caption == "Index this"
-    assert (service.user_files_dir("web-connection") / attachment.filename).read_bytes() == b"data"
+    assert (
+        service.user_files_dir("web-connection") / attachment.filename
+    ).read_bytes() == b"data"
 
 
-def test_service_builds_a_single_request_for_multiple_uploaded_files(tmp_path: Path) -> None:
+def test_service_sanitizes_unsafe_display_filename(tmp_path: Path) -> None:
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+    )
+
+    attachment = service.save_attachment(
+        "web-connection",
+        "..\\..// bad:\x00name?.txt ",
+        b"data",
+    )
+
+    assert attachment.display_name == "bad_name_.txt"
+    assert "/" not in attachment.filename
+    assert ".." not in Path(attachment.filename).parts
+
+
+def test_service_builds_a_single_request_for_multiple_uploaded_files(
+    tmp_path: Path,
+) -> None:
     request = InteractionRequest(
         user_id="42",
         text="Create an index",
@@ -230,6 +269,9 @@ def test_service_reuses_uploaded_files_after_coordinator_delegates_to_rag(
         "these file_ids now. Do not ask the user to upload the files again. "
         "User request: Create an index\n"
     )
+    assert rag.calls[0]["context"].allowed_file_ids == frozenset(
+        {"file-first", "file-second"}
+    )
 
 
 def test_service_uploads_files_before_running_rag_after_delegation(
@@ -262,10 +304,15 @@ def test_service_uploads_files_before_running_rag_after_delegation(
             InteractionRequest(
                 user_id="42",
                 text="Create an index",
-                credentials=AIStudioCredentials(api_key="AQAAAA-key", folder_id="folder"),
+                credentials=AIStudioCredentials(
+                    api_key="AQAAAA-key", folder_id="folder"
+                ),
                 conversation_state=ConversationState(),
                 user_files_dir=files_dir,
-                attachments=(Attachment(filename="first.pdf"), Attachment(filename="second.pdf")),
+                attachments=(
+                    Attachment(filename="first.pdf"),
+                    Attachment(filename="second.pdf"),
+                ),
             )
         )
     )
@@ -273,3 +320,124 @@ def test_service_uploads_files_before_running_rag_after_delegation(
     assert uploaded == ["first.pdf", "second.pdf"]
     assert "file_id: file-first.pdf" in rag.calls[0]["message"]
     assert "file_id: file-second.pdf" in rag.calls[0]["message"]
+    assert rag.calls[0]["context"].allowed_file_ids == frozenset(
+        {"file-first.pdf", "file-second.pdf"}
+    )
+
+
+def test_service_rejects_non_current_request_paths_before_upload(
+    tmp_path: Path,
+) -> None:
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+    )
+    state = ConversationState()
+    state.update_state(ConversationOptions.RAG)
+
+    with pytest.raises(UploadValidationError):
+        asyncio.run(
+            service.interact(
+                InteractionRequest(
+                    user_id="42",
+                    text="Create an index",
+                    credentials=AIStudioCredentials(
+                        api_key="AQAAAA-key", folder_id="folder"
+                    ),
+                    conversation_state=state,
+                    user_files_dir=service.user_files_dir("42"),
+                    attachments=(Attachment(filename="../stale.pdf"),),
+                )
+            )
+        )
+
+
+def test_service_rejects_preview_artifacts_before_upload(tmp_path: Path) -> None:
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+    )
+    state = ConversationState()
+    state.update_state(ConversationOptions.RAG)
+
+    with pytest.raises(UploadValidationError):
+        asyncio.run(
+            service.interact(
+                InteractionRequest(
+                    user_id="42",
+                    text="Create an index",
+                    credentials=AIStudioCredentials(
+                        api_key="AQAAAA-key", folder_id="folder"
+                    ),
+                    conversation_state=state,
+                    user_files_dir=service.user_files_dir("42"),
+                    attachments=(Attachment(filename=".previews/page.png"),),
+                )
+            )
+        )
+
+
+def test_service_limits_attachments_per_request(tmp_path: Path) -> None:
+    attachments = tuple(
+        Attachment(filename=f"file-{index}.txt")
+        for index in range(MAX_ATTACHMENTS_PER_REQUEST + 1)
+    )
+
+    with pytest.raises(UploadValidationError):
+        asyncio.run(
+            AIInteractionService._ensure_uploaded_files(
+                attachments,
+                client=object(),
+                base_dir=tmp_path,
+            )
+        )
+
+
+def test_service_disables_sensitive_tracing(tmp_path: Path) -> None:
+    rag = FakeAgent()
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=rag,
+        one_prompt_agent=FakeAgent(),
+    )
+    state = ConversationState()
+    state.update_state(ConversationOptions.RAG)
+
+    asyncio.run(
+        service.interact(
+            InteractionRequest(
+                user_id="42",
+                text="Create an index",
+                credentials=AIStudioCredentials(
+                    api_key="AQAAAA-key", folder_id="folder"
+                ),
+                conversation_state=state,
+                user_files_dir=service.user_files_dir("42"),
+            )
+        )
+    )
+
+    run_config = rag.calls[0]["run_config"]
+    assert run_config.tracing_disabled is True
+    assert run_config.trace_include_sensitive_data is False
+
+
+def test_reset_conversation_removes_saved_uploads(tmp_path: Path) -> None:
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+    )
+    saved = service.save_attachment("42", "report.txt", b"data")
+    saved_path = service.user_files_dir("42") / saved.filename
+    assert saved_path.exists()
+
+    asyncio.run(service.reset_conversation("42"))
+
+    assert not service.user_files_dir("42").exists()
