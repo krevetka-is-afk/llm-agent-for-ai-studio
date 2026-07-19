@@ -54,3 +54,4 @@ def test_web_ui_uses_gateway_without_requiring_telegram_token(monkeypatch) -> No
     config = load_web_ui_config(Path("config.yaml"))
 
     assert config.api_key_store.storage_path.name == "yc_api_keys.db"
+    assert config.ai_service.consultant.model_name

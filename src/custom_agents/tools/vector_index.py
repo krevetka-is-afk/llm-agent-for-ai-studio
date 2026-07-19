@@ -36,7 +36,7 @@ def create_search_index(
     Build a vector store from the provided files.
 
     Args:
-        name: Human-readable name for the vector store.
+        vector_store_name: Human-readable name for the vector store.
         file_ids: List of file ids to include in the vector store.
 
     Returns:

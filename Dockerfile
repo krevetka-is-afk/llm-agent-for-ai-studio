@@ -3,6 +3,10 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 RUN uv --version
 
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY pyproject.toml uv.lock README.md ./
 

@@ -47,21 +47,25 @@ class ApiKeyStoreConfig:
 
 
 @dataclass(frozen=True)
-class WebUIConfig:
-    connection: ConnectionConfig
-    model: ModelConfig
-    api_key_store: ApiKeyStoreConfig
-
-
-@dataclass(frozen=True)
-class AppConfig:
-    bot: BotConfig
+class AIServiceConfig:
     paths: PathConfig
     connection: ConnectionConfig
     session_db_config: SessionDBConfig
     rag_model: ModelConfig
     one_prompt: ModelConfig
     consultant: ModelConfig
+
+
+@dataclass(frozen=True)
+class AppConfig:
+    bot: BotConfig
+    ai_service: AIServiceConfig
+
+
+@dataclass(frozen=True)
+class WebUIConfig:
+    ai_service: AIServiceConfig
+    api_key_store: ApiKeyStoreConfig
 
 
 def load_config(path: str | Path = "config.yaml") -> AppConfig:
@@ -90,12 +94,14 @@ def load_config(path: str | Path = "config.yaml") -> AppConfig:
 
     return AppConfig(
         bot=bot,
-        paths=paths,
-        connection=connection,
-        session_db_config=session_db,
-        rag_model=_safe_get(models, "rag_model"),
-        one_prompt=_safe_get(models, "one_prompt"),
-        consultant=_safe_get(models, "consultant"),
+        ai_service=AIServiceConfig(
+            paths=paths,
+            connection=connection,
+            session_db_config=session_db,
+            rag_model=_safe_get(models, "rag_model"),
+            one_prompt=_safe_get(models, "one_prompt"),
+            consultant=_safe_get(models, "consultant"),
+        ),
     )
 
 
@@ -106,11 +112,21 @@ def load_web_ui_config(path: str | Path = "config.yaml") -> WebUIConfig:
     session_db_path = _safe_get(raw, "session_db", "path")
     models = _parse_models(_safe_get(raw, "models"), session_db_path)
     return WebUIConfig(
-        connection=ConnectionConfig(
-            base_url=_safe_get(raw, "client", "base_url"),
-            timeout=_safe_get(raw, "client", "timeout"),
+        ai_service=AIServiceConfig(
+            paths=PathConfig(
+                uploaded_files_dir=Path(
+                    _safe_get(raw, "paths", "uploaded_files_dir")
+                ).resolve()
+            ),
+            connection=ConnectionConfig(
+                base_url=_safe_get(raw, "client", "base_url"),
+                timeout=_safe_get(raw, "client", "timeout"),
+            ),
+            session_db_config=SessionDBConfig(path=Path(session_db_path).resolve()),
+            rag_model=_safe_get(models, "rag_model"),
+            one_prompt=_safe_get(models, "one_prompt"),
+            consultant=_safe_get(models, "consultant"),
         ),
-        model=_safe_get(models, "one_prompt"),
         api_key_store=_load_api_key_store_config(),
     )
 

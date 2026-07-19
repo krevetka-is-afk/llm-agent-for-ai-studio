@@ -1,6 +1,6 @@
 import logging
 
-from agents import Agent, OpenAIProvider, RunConfig, Runner
+from agents import Agent, RunConfig, Runner
 from agents.memory import SQLiteSession
 from agents.tool import Tool
 
@@ -23,7 +23,9 @@ class CustomAgent:
         self.instruction = instruction
         self.tools = tools or []
 
-    async def respond(self, message, context: RequestContext) -> AsyncIterator[Any]:
+    async def respond(
+        self, message: str, context: RequestContext, run_config: RunConfig
+    ) -> AsyncIterator[Any]:
         if not message.strip():
             return
 
@@ -36,20 +38,12 @@ class CustomAgent:
         )
         session: SQLiteSession = get_session(context.user_id, self.session_db_path)
 
-        logging.info(f"Invoke {self.name} model with {message=} {session=}")
+        logging.info("Invoking %s model with session=%s", self.name, session)
         agent = Agent(
             model=f"gpt://{context.folder_id}/{self.model_config.model_name}",
             name=self.name,
             instructions=self.instruction,
             tools=self.tools,
-        )
-        run_config = RunConfig(
-            model_provider=OpenAIProvider(
-                api_key=context.access_token,
-                project=context.folder_id,
-                base_url=self.model_config.base_url,
-                use_responses=True,
-            ),
         )
         result = Runner.run_streamed(
             starting_agent=agent,

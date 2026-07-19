@@ -1,24 +1,6 @@
-import logging
-import io
 from html import escape
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Optional
-
-from openai.types.responses import ResponseTextDeltaEvent
-
-from config import AppConfig
-from context import (
-    get_user_client,
-    RequestContext,
-    ConversationState,
-    ConversationOptions,
-)
-from custom_agents.rag_agent import build_rag_agent
-from custom_agents.one_prompt_agent import build_one_prompt_agent
-from custom_agents.coordinator_agent import build_coordinator_agent
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -40,115 +22,19 @@ COMMANDS = [
         description="сбросить текущую сессию",
     ),
     CommandHelp(
-        command="/connect_yc",
-        args_hint=None,
-        description="подключить Yandex Cloud",
-    ),
-    CommandHelp(
-        command="/yc_status",
-        args_hint=None,
-        description="показать статус подключения Yandex Cloud",
-    ),
-    CommandHelp(
-        command="/yc_folders",
-        args_hint=None,
-        description="выбрать папку Yandex Cloud",
-    ),
-    CommandHelp(
-        command="/disconnect_yc",
-        args_hint=None,
-        description="отключить Yandex Cloud",
-    ),
-    CommandHelp(
         command="/set_api_token",
         args_hint="<token>",
-        description="сохранить API токен (расширенный режим)",
+        description="сохранить API-ключ",
     ),
     CommandHelp(
         command="/set_folder_id",
         args_hint="<folder_id>",
-        description="сохранить folder id (расширенный режим)",
+        description="сохранить folder ID",
     ),
 ]
 
 
 class MessageService:
-    def __init__(self, config: AppConfig):
-        self._connection_settings = config.connection
-        self._rag_server = build_rag_agent(config.rag_model)
-        self._one_prompt_server = build_one_prompt_agent(config.one_prompt)
-        self._coordinator_server = build_coordinator_agent(config.consultant)
-
-    @staticmethod
-    def build_prompt(
-        *,
-        text: Optional[str],
-        caption: Optional[str],
-        file_name: Optional[str],
-    ) -> str:
-        if file_name and caption:
-            return f"Uploaded file by user: {file_name} with request: {caption}\n"
-        if file_name:
-            return f"Uploaded file by user: {file_name}\n"
-        return f"User request: {text or ''}\n"
-
-    async def generate_response(
-        self,
-        *,
-        user_id: str,
-        access_token: str,
-        folder_id: str,
-        conversation_state: ConversationState,
-        base_dir: Path,
-        combined_prompt: str,
-    ) -> str:
-        user_client = get_user_client(access_token, folder_id, self._connection_settings)
-
-        context = RequestContext(
-            user_id=user_id,
-            user_files_dir=base_dir,
-            client=user_client,
-            state=conversation_state,
-            access_token=access_token,
-            folder_id=folder_id,
-        )
-
-        if conversation_state.state == ConversationOptions.COORDINATOR:
-            logging.info(f"Call coordinator llm with prompt {combined_prompt}")
-            output = await self._get_streaming_response(
-                self._coordinator_server, combined_prompt, context=context
-            )
-            logging.info(f"{output=} {conversation_state.state=}")
-
-        if conversation_state.state == ConversationOptions.RAG:
-            logging.info(f"Call coordinator llm with prompt {combined_prompt}")
-            output = await self._get_streaming_response(
-                self._rag_server, combined_prompt, context=context
-            )
-            logging.info(f"{output=} {conversation_state.state=}")
-        elif conversation_state.state == ConversationOptions.ONE_PROMPT:
-            logging.info(f"Call one_prompt llm with prompt {combined_prompt}")
-            output = await self._get_streaming_response(
-                self._one_prompt_server, combined_prompt, context=context
-            )
-            logging.info(f"{output=} {conversation_state=}")
-
-        return output
-
-    @staticmethod
-    async def _get_streaming_response(
-        model_server, input_user_message, context: RequestContext
-    ):
-        output = io.StringIO()
-        async for event in model_server.respond(
-            message=input_user_message, context=context
-        ):
-            if event.type == "raw_response_event" and isinstance(
-                event.data, ResponseTextDeltaEvent
-            ):
-                output.write(event.data.delta)
-        return output.getvalue()
-
     @staticmethod
     def render_help_msg() -> str:
         lines = ["<b>Доступные команды</b>"]
@@ -181,7 +67,7 @@ class MessageService:
     welcome_message = (
         "Привет! Я — бот‑помощник с функциями LLM‑управления.\n"
         "Отправьте любой запрос, а я решу, какая из моих возможностей вам нужна.\n"
-        "Подключите свой Yandex Cloud командой /connect_yc.\n"
+        "Подключите Yandex Cloud командами /set_api_token и /set_folder_id.\n"
         "Текст переданный без команды будет обработан LLM‑моделью, которая может вызвать "
-        "одну из её функций (загрузка, индексация, поиск, кино‑поиск)."
+        "одну из её функций (загрузка, индексация, поиск)."
     )

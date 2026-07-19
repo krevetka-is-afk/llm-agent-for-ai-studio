@@ -5,12 +5,10 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
-from message_service import MessageService
+from ai_interaction_service import AIInteractionService
 from config import load_config, AppConfig
 from bot_handlers import create_router
 from context import UserStore
-from experimental.oauth.client import OAuthGatewayClient
-from experimental.oauth.config import load_oauth_gateway_client_config
 from telegram_session import HttpProxyTelegramSession
 
 logging.basicConfig(
@@ -35,21 +33,13 @@ def create_app(config: AppConfig) -> tuple[Bot, Dispatcher]:
     dp = Dispatcher()
 
     users_store = UserStore()
-    message_service = MessageService(config)
-    oauth_gateway_config = load_oauth_gateway_client_config()
-    oauth_gateway = (
-        OAuthGatewayClient(oauth_gateway_config)
-        if oauth_gateway_config is not None
-        else None
-    )
+    ai_service = AIInteractionService(config.ai_service)
 
     router = create_router(
         bot=bot,
-        message_service=message_service,
-        session_db=config.session_db_config,
-        paths=config.paths,
+        ai_service=ai_service,
+        paths=config.ai_service.paths,
         user_store=users_store,
-        oauth_gateway=oauth_gateway,
     )
 
     dp.include_router(router)
