@@ -151,3 +151,4 @@ class RequestContext:
     state: ConversationState
     api_key: str
     folder_id: str
+    allowed_file_ids: frozenset[str] = frozenset()

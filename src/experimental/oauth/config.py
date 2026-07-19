@@ -64,7 +64,8 @@ def load_oauth_gateway_client_config() -> OAuthGatewayClientConfig | None:
     missing = [name for name, value in values.items() if not value]
     if missing:
         raise RuntimeError(
-            "Incomplete OAuth Gateway client configuration; missing: " + ", ".join(missing)
+            "Incomplete OAuth Gateway client configuration; missing: "
+            + ", ".join(missing)
         )
     return OAuthGatewayClientConfig(
         base_url=_required_value(values, "OAUTH_GATEWAY_URL").rstrip("/"),

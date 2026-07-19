@@ -16,7 +16,13 @@ logger = logging.getLogger(__name__)
 
 
 class CustomAgent:
-    def __init__(self, model_config: ModelConfig, name: str, instruction: str, tools: list[Tool] | None = None):
+    def __init__(
+        self,
+        model_config: ModelConfig,
+        name: str,
+        instruction: str,
+        tools: list[Tool] | None = None,
+    ):
         self.session_db_path = model_config.sessions_db_path
         self.model_config = model_config
         self.name = name

@@ -46,7 +46,9 @@ def create_router(
     @router.message(Command(commands=["set_api_token"]))
     async def cmd_set_token(message: types.Message):
         if not _is_private_chat(message):
-            await message.reply("Для безопасности API-ключ можно отправлять только в личном чате с ботом.")
+            await message.reply(
+                "Для безопасности API-ключ можно отправлять только в личном чате с ботом."
+            )
             return
         user_id = str(_require_from_user(message).id)
         api_token = _last_command_argument(message)
@@ -59,12 +61,16 @@ def create_router(
             )
             return
         user_store.set_pending_api_token(user_id, api_token, message.message_id)
-        await _validate_pending_connection(message, user_id, user_store, ai_service, bot)
+        await _validate_pending_connection(
+            message, user_id, user_store, ai_service, bot
+        )
 
     @router.message(Command(commands=["set_folder_id"]))
     async def cmd_set_folder_id(message: types.Message):
         if not _is_private_chat(message):
-            await message.reply("Для безопасности folder ID можно отправлять только в личном чате с ботом.")
+            await message.reply(
+                "Для безопасности folder ID можно отправлять только в личном чате с ботом."
+            )
             return
         user_id = str(_require_from_user(message).id)
         folder_id = _last_command_argument(message)
@@ -77,7 +83,9 @@ def create_router(
             )
             return
         user_store.set_pending_folder_id(user_id, folder_id, message.message_id)
-        await _validate_pending_connection(message, user_id, user_store, ai_service, bot)
+        await _validate_pending_connection(
+            message, user_id, user_store, ai_service, bot
+        )
 
     @router.message()
     async def universal_handler(message: types.Message) -> None:
@@ -128,19 +136,27 @@ async def _validate_pending_connection(
 ) -> None:
     credentials = user_store.get_pending_credentials(user_id)
     if credentials is None:
-        await message.reply("Данные сохранены временно. Отправьте второе значение для проверки подключения.")
+        await message.reply(
+            "Данные сохранены временно. Отправьте второе значение для проверки подключения."
+        )
         return
     try:
         await ai_service.validate_connection(credentials)
     except Exception:
-        logging.exception("AI Studio connection validation failed for user_id=%s", user_id)
-        await message.reply("Не удалось проверить подключение. Проверьте API-ключ и folder ID.")
+        logging.exception(
+            "AI Studio connection validation failed for user_id=%s", user_id
+        )
+        await message.reply(
+            "Не удалось проверить подключение. Проверьте API-ключ и folder ID."
+        )
         return
 
     message_ids = user_store.activate_pending_credentials(user_id)
     deleted = await _delete_secret_messages(bot, message.chat.id, message_ids)
     if deleted:
-        await message.reply("Подключение проверено. Сообщения с ключом и folder ID удалены.")
+        await message.reply(
+            "Подключение проверено. Сообщения с ключом и folder ID удалены."
+        )
     else:
         await message.reply(
             "Подключение проверено. Не удалось удалить одно из сообщений — удалите их вручную."

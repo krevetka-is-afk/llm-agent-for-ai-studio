@@ -32,10 +32,10 @@ def build_formatter() -> logging.Formatter:
 
 
 def configure_logging(
-        level: int = logging.INFO,
-        *,
-        log_dir: Optional[Path] = None,
-        console_level: int = logging.CRITICAL,
+    level: int = logging.INFO,
+    *,
+    log_dir: Optional[Path] = None,
+    console_level: int = logging.CRITICAL,
 ) -> Path:
     target_log_dir = log_dir or Path(__file__).resolve().parent.parent / "logs"
     target_log_dir.mkdir(parents=True, exist_ok=True)
@@ -62,8 +62,8 @@ def configure_logging(
 
 
 def bind_logger(
-        logger: Union[logging.Logger, logging.LoggerAdapter[Any]],
-        **context: Optional[str],
+    logger: Union[logging.Logger, logging.LoggerAdapter[Any]],
+    **context: Optional[str],
 ) -> logging.LoggerAdapter[Any]:
     if isinstance(logger, logging.LoggerAdapter):
         # noinspection PyInvalidCast
@@ -73,5 +73,7 @@ def bind_logger(
         base_logger = logger
         combined_context = {}
 
-    combined_context.update({key: value for key, value in context.items() if value is not None})
+    combined_context.update(
+        {key: value for key, value in context.items() if value is not None}
+    )
     return logging.LoggerAdapter(base_logger, combined_context)

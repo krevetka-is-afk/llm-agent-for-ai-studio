@@ -1,9 +1,9 @@
 import asyncio
+import logging
 import mimetypes
 from collections.abc import Sequence
 from pathlib import Path
-import subprocess
-from typing import Any, cast, Coroutine, Mapping, Optional, TypeVar
+from typing import Any, cast, Coroutine, Mapping, Optional, Protocol, TypeVar
 from uuid import uuid4
 
 import streamlit as st
@@ -15,12 +15,19 @@ from ai_interaction_service import (
     Attachment,
     InteractionRequest,
     InteractionResult,
+    MAX_ATTACHMENTS_PER_REQUEST,
+    MAX_TOTAL_UPLOAD_BYTES,
+    UploadValidationError,
 )
+from custom_agents.tools.upload_files import MAX_UPLOAD_BYTES
+from custom_agents.tools.vector_index import VectorIndexPollingError
 from ui.api_key_store import ApiKeyConnection, ApiKeyStoreError, EncryptedApiKeyStore
 from config import WebUIConfig, load_web_ui_config
 from context import AIStudioCredentials, ConversationState
 from result_assembly import result_part_to_record
 
+
+logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="AI Studio Chat", page_icon="AI", layout="centered")
 
@@ -33,7 +40,6 @@ FOLDER_ID_GUIDE_URL = (
     "https://yandex.cloud/ru/docs/resource-manager/operations/folder/get-id"
 )
 MAX_TEXT_PREVIEW_BYTES = 100_000
-MAX_PDF_PREVIEW_BYTES = 10 * 1024 * 1024
 
 
 @st.cache_resource
@@ -174,6 +180,31 @@ def _attachment_record(
     }
 
 
+class UploadMetadata(Protocol):
+    name: str
+    size: int
+
+
+def _validate_uploaded_files(uploaded_files: Sequence[UploadMetadata]) -> None:
+    if len(uploaded_files) > MAX_ATTACHMENTS_PER_REQUEST:
+        raise UploadValidationError(
+            f"За один запрос можно прикрепить не более {MAX_ATTACHMENTS_PER_REQUEST} файлов."
+        )
+    oversized = next(
+        (file for file in uploaded_files if file.size > MAX_UPLOAD_BYTES), None
+    )
+    if oversized is not None:
+        limit_mib = MAX_UPLOAD_BYTES // (1024 * 1024)
+        raise UploadValidationError(
+            f"Файл «{oversized.name}» превышает лимит {limit_mib} МБ."
+        )
+    if sum(file.size for file in uploaded_files) > MAX_TOTAL_UPLOAD_BYTES:
+        limit_mib = MAX_TOTAL_UPLOAD_BYTES // (1024 * 1024)
+        raise UploadValidationError(
+            f"Общий размер файлов превышает лимит {limit_mib} МБ."
+        )
+
+
 def _render_attachment(
     ai_service: AIInteractionService,
     user_id: str,
@@ -208,15 +239,18 @@ def _render_attachment(
         key=f"download-{filename}",
     )
     with st.expander("Просмотреть файл"):
-        _render_attachment_preview(path, data, mime_type)
+        _render_attachment_preview(data, mime_type)
 
 
-def _render_attachment_preview(path: Path, data: bytes, mime_type: str) -> None:
+def _render_attachment_preview(data: bytes, mime_type: str) -> None:
     if mime_type.startswith("image/"):
         st.image(data)
         return
     if mime_type == "application/pdf":
-        _render_pdf_preview(path, len(data))
+        st.info(
+            "Предпросмотр PDF отключён для безопасности. "
+            "Скачайте файл, чтобы открыть его."
+        )
         return
     if mime_type.startswith("audio/"):
         st.audio(data, format=mime_type)
@@ -233,7 +267,9 @@ def _render_attachment_preview(path: Path, data: bytes, mime_type: str) -> None:
         if len(data) > MAX_TEXT_PREVIEW_BYTES:
             st.caption("Показаны первые 100 000 байт. Полную версию можно скачать.")
         return
-    st.info("Предпросмотр для этого формата недоступен. Скачайте файл, чтобы открыть его.")
+    st.info(
+        "Предпросмотр для этого формата недоступен. Скачайте файл, чтобы открыть его."
+    )
 
 
 def _render_result_parts(parts: Sequence[Any]) -> None:
@@ -285,38 +321,6 @@ def _render_vector_index_result(part: Mapping[str, Any]) -> None:
             )
 
 
-def _render_pdf_preview(pdf_path: Path, size: int) -> None:
-    if size > MAX_PDF_PREVIEW_BYTES:
-        st.info("PDF больше 10 МБ. Скачайте файл, чтобы открыть его.")
-        return
-    preview_dir = pdf_path.parent / ".previews"
-    preview_path = preview_dir / f"{pdf_path.name}.png"
-    try:
-        if not preview_path.exists() or preview_path.stat().st_mtime < pdf_path.stat().st_mtime:
-            preview_dir.mkdir(exist_ok=True)
-            subprocess.run(
-                [
-                    "pdftoppm",
-                    "-f",
-                    "1",
-                    "-l",
-                    "1",
-                    "-singlefile",
-                    "-png",
-                    "-scale-to",
-                    "1600",
-                    str(pdf_path),
-                    str(preview_path.with_suffix("")),
-                ],
-                check=True,
-                capture_output=True,
-                timeout=30,
-            )
-        st.image(preview_path, caption="Первая страница PDF")
-    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        st.warning("Не удалось подготовить предпросмотр PDF. Скачайте файл, чтобы открыть его.")
-
-
 T = TypeVar("T")
 
 
@@ -327,7 +331,9 @@ def _run_async(awaitable: Coroutine[Any, Any, T]) -> T:
 def main() -> None:
     st.title("AI Studio Chat")
     st.caption("Запросы выполняются в каталоге, связанном с вашим API-ключом.")
-    st.caption("Для RAG приложите несколько файлов и напишите: «Создай индекс из файлов».")
+    st.caption(
+        "Для RAG приложите несколько файлов и напишите: «Создай индекс из файлов»."
+    )
 
     config, store, ai_service = _load_services()
     connection_id = _connection_id()
@@ -357,6 +363,7 @@ def main() -> None:
     submission = st.chat_input(
         "Введите сообщение или приложите файлы",
         accept_file="multiple",
+        max_upload_size=MAX_UPLOAD_BYTES // (1024 * 1024),
         disabled=connection is None,
     )
     if submission is None or connection is None:
@@ -373,6 +380,7 @@ def main() -> None:
         return
 
     try:
+        _validate_uploaded_files(uploaded_files)
         attachments = tuple(
             ai_service.save_attachment(
                 connection_id,
@@ -382,6 +390,9 @@ def main() -> None:
             )
             for uploaded_file in uploaded_files
         )
+    except UploadValidationError as exc:
+        st.error(str(exc))
+        return
     except OSError:
         st.error("Не удалось сохранить загруженный файл. Повторите попытку.")
         return
@@ -397,7 +408,9 @@ def main() -> None:
     if attachments:
         message["attachments"] = [
             _attachment_record(attachment, uploaded_file)
-            for attachment, uploaded_file in zip(attachments, uploaded_files, strict=True)
+            for attachment, uploaded_file in zip(
+                attachments, uploaded_files, strict=True
+            )
         ]
     st.session_state.messages.append(message)
     with st.chat_message("user"):
@@ -421,8 +434,33 @@ def main() -> None:
                 )
                 answer = result.text
             except OpenAIError:
+                logger.warning(
+                    "AI Studio rejected interaction",
+                    extra={"user_id": connection_id},
+                )
                 answer = "AI Studio отклонил запрос. Проверьте ключ, каталог и права."
-            except Exception:
+            except UploadValidationError as exc:
+                logger.warning(
+                    "Upload validation rejected interaction",
+                    extra={"user_id": connection_id},
+                )
+                answer = str(exc)
+            except VectorIndexPollingError:
+                logger.exception(
+                    "Vector index lifecycle failed",
+                    extra={"user_id": connection_id},
+                )
+                answer = (
+                    "AI Studio не завершил создание индекса. Повторите попытку позднее."
+                )
+            except Exception as exc:
+                logger.exception(
+                    "AI interaction failed",
+                    extra={
+                        "user_id": connection_id,
+                        "error_type": type(exc).__name__,
+                    },
+                )
                 answer = "Не удалось выполнить запрос к AI Studio. Повторите попытку."
             result_parts = (
                 [result_part_to_record(part) for part in result.parts]

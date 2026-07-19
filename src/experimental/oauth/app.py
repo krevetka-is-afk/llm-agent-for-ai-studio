@@ -17,17 +17,16 @@ from .gateway import (
 )
 
 logger = logging.getLogger(__name__)
-OAUTH_GATEWAY_KEY: web.AppKey[OAuthGateway] = web.AppKey(
-    "oauth_gateway", OAuthGateway
-)
+OAUTH_GATEWAY_KEY: web.AppKey[OAuthGateway] = web.AppKey("oauth_gateway", OAuthGateway)
 
 
 def create_gateway_app(gateway: OAuthGateway, shared_secret: str) -> web.Application:
     @web.middleware
     async def internal_api_auth(request: web.Request, handler):
-        if request.path.startswith("/v1/") and request.headers.get(
-            "X-OAuth-Gateway-Key"
-        ) != shared_secret:
+        if (
+            request.path.startswith("/v1/")
+            and request.headers.get("X-OAuth-Gateway-Key") != shared_secret
+        ):
             raise web.HTTPUnauthorized(text="Invalid OAuth Gateway credentials")
         return await handler(request)
 
@@ -106,7 +105,9 @@ async def _validate_folder(request: web.Request) -> web.Response:
 
 
 async def _disconnect(request: web.Request) -> web.Response:
-    await asyncio.to_thread(_gateway(request).disconnect, request.match_info["subject_id"])
+    await asyncio.to_thread(
+        _gateway(request).disconnect, request.match_info["subject_id"]
+    )
     return web.Response(status=204)
 
 
@@ -153,7 +154,7 @@ def _gateway_http_error(exc: OAuthGatewayError) -> web.HTTPException:
 
 def _html_response(status: int, message: str) -> web.Response:
     body = (
-        "<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\">"
+        '<!doctype html><html lang="ru"><head><meta charset="utf-8">'
         "<title>Yandex Cloud</title></head><body><p>"
         f"{escape(message)}"
         "</p></body></html>"
