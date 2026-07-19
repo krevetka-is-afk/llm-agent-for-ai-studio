@@ -5,7 +5,7 @@
 
 ### Пререквизит
 
-`uv` & `≥python3.14`
+`uv` & Python `3.13`
 
 ### Клонируем репозиторий
 
@@ -18,6 +18,29 @@ cd llm-agent-for-ai-studio
 
 ```bash
 uv sync --frozen
+```
+
+### Быстрый запуск Web UI
+
+```bash
+cp .env.web.example .env.web
+uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode("ascii"))'
+```
+
+Вставьте сгенерированный ключ в `YC_API_KEY_ENCRYPTION_KEY` внутри `.env.web`.
+По умолчанию Docker хранит runtime-файлы в `/data`; локально можно оставить эти
+пути или заменить их на относительные:
+
+```dotenv
+UPLOADED_FILES_DIR=uploaded_files
+CONVERSATION_DB_PATH=conversation.db
+YC_API_KEY_DB_PATH=yc_api_keys.db
+```
+
+Запуск:
+
+```bash
+PYTHONPATH=src uv run --env-file .env.web streamlit run src/ui/app.py
 ```
 
 #### Для участия в разработке необходимо дополнительно
@@ -61,6 +84,8 @@ PYTHONPATH=src uv run --env-file .env.web streamlit run src/ui/app.py
 BOT_TOKEN=...
 # Опционально: HTTP/HTTPS proxy для Bot API, например https://user:password@proxy.example:8443
 TELEGRAM_PROXY_URL=...
+UPLOADED_FILES_DIR=/data/uploaded_files
+CONVERSATION_DB_PATH=/data/conversation.db
 ```
 
 Запуск бота:
@@ -129,6 +154,8 @@ ID каталога. Ключ отправляется только в Streamlit
 ```dotenv
 YC_API_KEY_ENCRYPTION_KEY=<Fernet key>
 YC_API_KEY_DB_PATH=/data/api_keys.db
+UPLOADED_FILES_DIR=/data/uploaded_files
+CONVERSATION_DB_PATH=/data/conversation.db
 ```
 
 Создать ключ можно в AI Studio: «Создать API-ключ». Он создаётся для сервисного
@@ -161,7 +188,9 @@ OAuth Gateway оставлен как эксперимент: он не запу
 ## Запуск в docker
 
 ```bash
-docker build -t my-rag-agent .
+cp .env.web.example .env.web
+uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode("ascii"))'
+# Вставьте ключ в YC_API_KEY_ENCRYPTION_KEY внутри .env.web.
 docker compose up -d --build
 ```
 
@@ -169,4 +198,25 @@ docker compose up -d --build
 и подготовьте `.env.gateway` из раздела выше. Перед публикацией callback настройте reverse proxy с HTTPS на
 `http://oauth-gateway:8080/yc/oauth/callback` и используйте его публичный URL как
 `YC_OAUTH_REDIRECT_URI`. Для web UI стандартный запуск не требует OAuth Gateway:
-Docker volume `api-key-credentials` хранит только зашифрованные API-ключи.
+Docker volume `web-data` хранит зашифрованные API-ключи, базу диалогов и
+загруженные файлы. Контейнер запускается от non-root пользователя и имеет
+healthcheck на `/_stcore/health`.
+
+Web UI принимает не более 5 файлов за запрос: до 10 МБ на файл и до 25 МБ
+суммарно. Streamlit ограничивает размер каждого upload до буферизации, а Docker
+ограничивает web-контейнер 1 ГБ памяти и 256 процессами. Локальные env-файлы с
+секретами храните с правами `0600`, например `chmod 600 .env.web`.
+
+## Зависимости
+
+Web runtime: `streamlit`, `openai-agents`, `openai`, `langchain-core`,
+`langchain-openai`, `cryptography`, `pyyaml`, `aiofiles` и транзитивные пакеты,
+которые попадают в production lock.
+
+Telegram/OAuth experimental: `aiogram`, `aiohttp` и `cryptography`; эти сервисы
+запускаются через compose profiles `telegram-experimental` и
+`oauth-experimental`.
+
+P1 cleanup: проверить и удалить неиспользуемые `chatkit`, `openai-chatkit`,
+`dotenv`/дублирование с `python-dotenv`, если они действительно не нужны текущему
+runtime.
