@@ -40,6 +40,35 @@ uv run pre-commit run --all-files
 PYTHONPATH=src uv run --env-file .env.web streamlit run src/ui/app.py
 ```
 
+### Telegram: ручное подключение API-ключом
+
+Текущий Telegram-бот не использует OAuth. В личном чате с ботом пользователь
+последовательно отправляет:
+
+```text
+/set_api_token <API-ключ>
+/set_folder_id <ID каталога>
+```
+
+После проверки минимальным запросом к AI Studio бот сохраняет подключение только
+в памяти процесса и удаляет оба исходных сообщения с API-ключом и ID каталога.
+При неуспешной проверке сообщения не удаляются, чтобы пользователь мог исправить
+значение. Команды с секретами отклоняются в группах и каналах.
+
+Переменные Telegram-бота в `.env.bot`:
+
+```dotenv
+BOT_TOKEN=...
+# Опционально: HTTP/HTTPS proxy для Bot API, например https://user:password@proxy.example:8443
+TELEGRAM_PROXY_URL=...
+```
+
+Запуск бота:
+
+```bash
+PYTHONPATH=src uv run --env-file .env.bot python src/app.py
+```
+
 ### Экспериментальный OAuth Gateway
 
 Замороженный прототип OAuth находится в `src/experimental/oauth/` и не входит в
@@ -51,16 +80,6 @@ refresh-токены и не содержит OAuth client secret. Для авт
 `https://<домен>/yc/oauth/callback` и связанное с ним OIDC-приложение Identity Hub
 с назначенными пользователями. Полная процедура приведена в
 [YANDEX_CLOUD_USER_OAUTH.md](YANDEX_CLOUD_USER_OAUTH.md).
-
-Переменные Telegram-бота в `.env.bot`:
-
-```dotenv
-BOT_TOKEN=...
-OAUTH_GATEWAY_URL=http://oauth-gateway:8080
-OAUTH_GATEWAY_SHARED_SECRET=<long random value>
-# Опционально: HTTP/HTTPS proxy для Bot API, например https://user:password@proxy.example:8443
-TELEGRAM_PROXY_URL=...
-```
 
 Переменные Gateway в `.env.gateway`:
 
@@ -83,20 +102,14 @@ uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_
 ```
 
 В production callback Gateway должен быть доступен по HTTPS через reverse proxy.
-После подтверждения доступа пользователь возвращается в Telegram и выполняет
-`/yc_folders`. Подробности и требования к OAuth client приведены в
-[YANDEX_CLOUD_USER_OAUTH.md](YANDEX_CLOUD_USER_OAUTH.md).
+Подробности и требования к OAuth client приведены в
+[YANDEX_CLOUD_USER_OAUTH.md](YANDEX_CLOUD_USER_OAUTH.md). Этот прототип пока не
+подключён к Telegram-боту и Streamlit.
 
 Для отдельного запуска Gateway используйте:
 
 ```bash
 PYTHONPATH=src uv run --env-file .env.gateway python -m experimental.oauth.app
-```
-
-Во втором терминале можно запустить экспериментального Telegram-бота:
-
-```bash
-PYTHONPATH=src uv run --env-file .env.bot python src/app.py
 ```
 
 Для staging-сервера с Caddy используйте
@@ -132,6 +145,15 @@ YC_API_KEY_DB_PATH=/data/api_keys.db
 4. Ввести оба значения в форму подключения на `agent-builder.s3rg.ru`.
 
 Подробные официальные инструкции: [создание ключа](https://aistudio.yandex.ru/docs/ru/ai-studio/operations/get-api-key.html) и [получение ID каталога](https://yandex.cloud/ru/docs/resource-manager/operations/folder/get-id).
+
+### Слой результата
+
+`AIInteractionService` возвращает не только текст модели, но и типизированные
+блоки результата. Для RAG слой связывает события вызова инструмента с его
+фактическим ответом и формирует блок векторного индекса с именем, ID и файлами.
+Streamlit рисует эти данные отдельной карточкой, а Telegram получает текстовую
+проекцию тех же блоков. Markdown модели остаётся самостоятельной диалоговой
+частью и не используется как источник технических идентификаторов.
 
 OAuth Gateway оставлен как эксперимент: он не запускается по умолчанию. Для
 отдельного теста используйте `docker compose --profile oauth-experimental up -d`.
