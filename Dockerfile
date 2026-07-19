@@ -1,11 +1,7 @@
 FROM python:3.13-slim-trixie
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.11.16 /uv /uvx /bin/
 
 RUN uv --version
-
-RUN apt-get update \
-    && apt-get install --no-install-recommends -y poppler-utils \
-    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY pyproject.toml uv.lock README.md ./
@@ -15,8 +11,17 @@ ENV UV_CACHE_DIR=/root/.cache/uv
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked
 
 ENV PATH="/app/.venv/bin:$PATH"
+ENV PYTHONPATH=/app
 
-COPY config.yaml config.yaml
-COPY src/ .
+RUN addgroup --system app \
+    && adduser --system --ingroup app app \
+    && mkdir -p /data /app/uploaded_files \
+    && chown -R app:app /app /data
+
+COPY --chown=app:app config.yaml config.yaml
+COPY --chown=app:app .streamlit .streamlit
+COPY --chown=app:app src/ .
+
+USER app
 
 CMD ["python", "app.py"]
