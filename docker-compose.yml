@@ -5,6 +5,10 @@ services:
     command: ["python", "-m", "experimental.oauth.app"]
     env_file: .env.gateway
     restart: unless-stopped
+    mem_limit: 1g
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
@@ -22,6 +26,10 @@ services:
     command: ["python", "app.py"]
     env_file: .env.bot
     restart: unless-stopped
+    mem_limit: 1g
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
     volumes:
       - bot-data:/data
 

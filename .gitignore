@@ -140,6 +140,20 @@ celerybeat.pid
 !.env.example
 !.env.*.example
 .envrc
+
+# Local cloud credentials
+authorized_key.json
+service-account-key.json
+service_account_key.json
+*-key.json
+*_key.json
+*credentials*.json
+*.pem
+*.p8
+*.p12
+*.pfx
+*.key
+
 .venv
 env/
 venv/
