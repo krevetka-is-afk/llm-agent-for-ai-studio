@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import logging
+
 from context import ConversationOptions
 from result_assembly import (
     AgentRunCollector,
@@ -110,3 +112,27 @@ def test_merged_run_keeps_tool_facts_and_uses_last_agent_text() -> None:
 
     assert merged.text == "Готово"
     assert merged.tool_executions == coordinator.tool_executions
+
+
+def test_collector_reports_malformed_tool_arguments(
+    caplog,
+) -> None:
+    collector = AgentRunCollector()
+
+    with caplog.at_level(logging.WARNING):
+        collector.consume(
+            SimpleNamespace(
+                type="run_item_stream_event",
+                name="tool_called",
+                item=SimpleNamespace(
+                    raw_item={
+                        "call_id": "call-bad",
+                        "name": "create_search_index",
+                        "arguments": "{broken-json",
+                    }
+                ),
+            )
+        )
+
+    assert collector.build().tool_executions[0].arguments == {}
+    assert "Malformed tool arguments" in caplog.text

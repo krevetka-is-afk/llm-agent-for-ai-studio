@@ -10,12 +10,12 @@ logger = logging.getLogger(__name__)
 
 @function_tool
 def delegate_rag(ctx: RunContextWrapper[RequestContext]) -> str:
-    """
-    Call this tool when the conversation is complete and no further
-    user interaction is needed.
-    Returns message that session is finished.
-    """
-    tool_logger = bind_logger(logger, user_id=ctx.context.user_id)
+    """Route the current request to the RAG specialist agent."""
+    tool_logger = bind_logger(
+        logger,
+        user_id=ctx.context.user_id,
+        request_id=ctx.context.request_id,
+    )
     tool_logger.info("Delegate rag tool invoked")
     ctx.context.state.update_state(ConversationOptions.RAG)
     return "TASK DELEGATED TO RAG AGENT"
@@ -23,12 +23,12 @@ def delegate_rag(ctx: RunContextWrapper[RequestContext]) -> str:
 
 @function_tool
 def delegate_one_prompt(ctx: RunContextWrapper[RequestContext]) -> str:
-    """
-    Call this tool when the conversation is complete and no further
-    user interaction is needed.
-    Returns message that session is finished.
-    """
-    tool_logger = bind_logger(logger, user_id=ctx.context.user_id)
+    """Route the current request to the one-prompt specialist agent."""
+    tool_logger = bind_logger(
+        logger,
+        user_id=ctx.context.user_id,
+        request_id=ctx.context.request_id,
+    )
     tool_logger.info("Delegate one_prompt tool invoked")
     ctx.context.state.update_state(ConversationOptions.ONE_PROMPT)
     return "TASK DELEGATED TO ONE PROMPT AGENT"

@@ -7,6 +7,8 @@ import aiofiles
 from aiogram import Bot, types
 from aiogram.types import ContentType, Message
 
+from file_security import sanitize_filename
+
 T = TypeVar("T")
 
 
@@ -21,7 +23,7 @@ async def download_media(bot: Bot, msg: types.Message, base_dir: Path) -> str:
     file_id = None
     filename = "unknown.bin"
 
-    logging.info(f"Message type = {msg.content_type}")
+    logging.info("Message type=%s", msg.content_type)
     if msg.content_type == ContentType.PHOTO:
         photo = _require(msg.photo, "photo attachment")
         if not photo:
@@ -64,14 +66,18 @@ async def download_media(bot: Bot, msg: types.Message, base_dir: Path) -> str:
     raw_bytes = _require(await bot.download_file(file_path), "downloaded file data")
     payload: bytes = raw_bytes.read()
 
-    safe_name = filename.replace("/", "_")
+    safe_name = sanitize_download_filename(filename)
     local_path = base_dir / safe_name
-    logging.info(f"Trying to save file {local_path}")
+    logging.info("Saving Telegram file path=%s", local_path)
     os.makedirs(base_dir, exist_ok=True)
     async with aiofiles.open(local_path, "wb") as f:
         await f.write(payload)
 
     return safe_name
+
+
+def sanitize_download_filename(filename: str) -> str:
+    return sanitize_filename(filename, fallback="download.bin")
 
 
 def classify_message(msg: Message) -> str:

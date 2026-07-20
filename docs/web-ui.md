@@ -1,0 +1,33 @@
+# Web UI
+
+## Настройка
+
+Создайте `.env.web` из примера и задайте Fernet-ключ:
+
+```bash
+cp .env.web.example .env.web
+uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode("ascii"))'
+```
+
+Минимальные переменные:
+
+```dotenv
+YC_API_KEY_ENCRYPTION_KEY=<Fernet key>
+YC_API_KEY_DB_PATH=/data/api_keys.db
+UPLOADED_FILES_DIR=/data/uploaded_files
+CONVERSATION_DB_PATH=/data/conversation.db
+```
+
+## Пользовательский поток
+
+1. Создать API-ключ сервисного аккаунта в
+   [Yandex AI Studio](https://aistudio.yandex.ru/).
+2. Скопировать ID выбранного каталога.
+3. Ввести ключ и ID каталога в sidebar.
+4. После проверки отправить запрос или приложить до пяти файлов.
+
+Лимиты: до 10 МБ на файл и до 25 МБ на один запрос. PDF доступен для скачивания,
+но не встраивается в небезопасный browser preview.
+
+API-ключ отправляется только backend-компоненту подключения, хранится
+зашифрованным и не включается в сообщения, result parts или tool context.

@@ -38,13 +38,14 @@ class CustomAgent:
         request_logger = bind_logger(
             logger,
             user_id=context.user_id,
+            request_id=context.request_id,
         )
         request_logger.info(
-            "Invoking ONE-PROMPT agent with %s chars of user input", len(message)
+            "Invoking %s with %s chars of user input", self.name, len(message)
         )
         session: SQLiteSession = get_session(context.user_id, self.session_db_path)
 
-        logging.info("Invoking %s model with session=%s", self.name, session)
+        request_logger.info("Invoking %s model", self.name)
         agent = Agent(
             model=f"gpt://{context.folder_id}/{self.model_config.model_name}",
             name=self.name,

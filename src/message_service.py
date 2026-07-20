@@ -31,6 +31,11 @@ COMMANDS = [
         args_hint="<folder_id>",
         description="сохранить folder ID",
     ),
+    CommandHelp(
+        command="/clear_credentials",
+        args_hint=None,
+        description="удалить API-ключ, folder ID и историю сессии",
+    ),
 ]
 
 

@@ -1,7 +1,7 @@
 [project]
 name = "llm-agent-for-ai-studio"
 version = "0.1.0"
-description = "Add your description here"
+description = "Multi-agent MVP for designing one-prompt and RAG applications in Yandex AI Studio"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
