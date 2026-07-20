@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from openai import OpenAI
@@ -15,3 +15,4 @@ class RequestContext:
     state: ConversationState
     folder_id: str
     allowed_file_ids: frozenset[str] = frozenset()
+    filenames_by_file_id: dict[str, str] = field(default_factory=dict)

@@ -75,6 +75,11 @@ def test_upload_local_file_enforces_size_limit(tmp_path):
 def test_rag_agent_has_no_model_facing_upload_file_tool():
     tool_names = {getattr(tool, "name", None) for tool in RAG_TOOLS_SETUP}
 
-    assert tool_names == {"create_search_index", "finish_dialog"}
+    assert tool_names == {
+        "create_search_index",
+        "update_agent_specification",
+        "finalize_agent_specification",
+        "finish_dialog",
+    }
     assert "upload_file" not in RAG_AGENT_INSTRUCTIONS
     assert not hasattr(upload_files_module, "upload_file")

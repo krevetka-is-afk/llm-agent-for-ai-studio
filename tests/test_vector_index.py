@@ -3,6 +3,7 @@ from typing import Any
 
 import pytest
 
+from conversation_state import ConversationOptions, ConversationState
 from custom_agents.tools import vector_index
 
 
@@ -30,23 +31,31 @@ class FakeClient:
         self.vector_stores = FakeVectorStores(statuses or [])
 
 
-def make_ctx(client: FakeClient) -> SimpleNamespace:
+def make_ctx(
+    client: FakeClient, state: ConversationState | None = None
+) -> SimpleNamespace:
     return SimpleNamespace(
         context=SimpleNamespace(
             user_id="user_1",
             request_id="request_1",
             client=client,
+            state=state,
             allowed_file_ids=frozenset({"file_1", "file_2"}),
+            filenames_by_file_id={
+                "file_1": "guide.pdf",
+                "file_2": "faq.txt",
+            },
         )
     )
 
 
 def test_create_search_index_returns_id_when_completed() -> None:
     client = FakeClient(["in_progress", "completed"])
+    state = ConversationState(ConversationOptions.RAG)
     sleeps: list[float] = []
 
     result = vector_index._create_search_index_impl(
-        make_ctx(client),
+        make_ctx(client, state),
         ["file_1", "file_2"],
         "knowledge",
         sleep=sleeps.append,
@@ -58,6 +67,18 @@ def test_create_search_index_returns_id_when_completed() -> None:
     assert client.vector_stores.create_kwargs["name"] == "knowledge"
     assert client.vector_stores.retrieve_calls == ["vs_123", "vs_123"]
     assert sleeps == [3.0]
+    assert state.agent_specification is not None
+    assert state.agent_specification.parameters["index_id"] == "vs_123"
+    assert [
+        source.source_id for source in state.agent_specification.knowledge_sources
+    ] == [
+        "file_1",
+        "file_2",
+    ]
+    assert [source.title for source in state.agent_specification.knowledge_sources] == [
+        "guide.pdf",
+        "faq.txt",
+    ]
 
     sleeps.clear()
     vector_index._wait_for_vector_store_completed(

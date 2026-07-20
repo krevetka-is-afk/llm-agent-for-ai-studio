@@ -1,9 +1,12 @@
 import asyncio
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from agent_specification import AgentSpecification, build_one_prompt_specification
+from component_catalog import TemplateId
 from ai_interaction_service import (
     AIInteractionService,
     Attachment,
@@ -19,7 +22,11 @@ from config import (
     SessionDBConfig,
 )
 from context import AIStudioCredentials, ConversationOptions, ConversationState
-from result_assembly import IndexedFileResult, VectorIndexResultPart
+from result_assembly import (
+    AgentSpecificationResultPart,
+    IndexedFileResult,
+    VectorIndexResultPart,
+)
 
 
 class FakeAgent:
@@ -64,6 +71,52 @@ class IndexCreatingFakeAgent(FakeAgent):
                 output="index-1",
             ),
         )
+
+
+class FinalizingFakeAgent(FakeAgent):
+    async def respond(self, **kwargs):
+        self.calls.append(kwargs)
+        specification = build_one_prompt_specification(
+            purpose="Draft concise support replies",
+            instructions="Be concise and do not invent facts.",
+            expected_result="Reusable support agent specification",
+        )
+        kwargs["context"].state.update_agent_specification(specification)
+        finalized = kwargs["context"].state.finalize_agent_specification()
+        kwargs["context"].state.finish_dialog()
+        yield SimpleNamespace(
+            type="run_item_stream_event",
+            name="tool_called",
+            item=SimpleNamespace(
+                raw_item={
+                    "call_id": "call-spec",
+                    "name": "finalize_agent_specification",
+                    "arguments": "{}",
+                }
+            ),
+        )
+        yield SimpleNamespace(
+            type="run_item_stream_event",
+            name="tool_output",
+            item=SimpleNamespace(
+                raw_item={"call_id": "call-spec"},
+                output=json.dumps(finalized.to_record()),
+            ),
+        )
+
+
+class SpecDelegatingFakeAgent(FakeAgent):
+    async def respond(self, **kwargs):
+        self.calls.append(kwargs)
+        kwargs["context"].state.update_agent_specification(
+            AgentSpecification(
+                template=TemplateId.RAG,
+                purpose="Temporary draft",
+            )
+        )
+        kwargs["context"].state.update_state(ConversationOptions.RAG)
+        if False:
+            yield None
 
 
 class FailingFakeAgent(FakeAgent):
@@ -173,15 +226,48 @@ def test_service_returns_an_authoritative_vector_index_part(tmp_path: Path) -> N
         )
     )
 
-    assert result.parts == (
-        VectorIndexResultPart(
-            index_name="knowledge",
-            index_id="index-1",
-            files=(IndexedFileResult("first.pdf", "file-first"),),
-            expires_after_days=1,
-        ),
+    assert result.parts[0] == VectorIndexResultPart(
+        index_name="knowledge",
+        index_id="index-1",
+        files=(IndexedFileResult("first.pdf", "file-first"),),
+        expires_after_days=1,
     )
+    assert len(result.parts) == 1
     assert rag.calls[0]["context"].allowed_file_ids == frozenset({"file-first"})
+
+
+def test_service_commits_and_exports_only_finalized_specification(
+    tmp_path: Path,
+) -> None:
+    one_prompt = FinalizingFakeAgent()
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=one_prompt,
+    )
+    state = ConversationState(ConversationOptions.ONE_PROMPT)
+
+    result = asyncio.run(
+        service.interact(
+            InteractionRequest(
+                user_id="42",
+                text="Create a support agent",
+                credentials=AIStudioCredentials(
+                    api_key="AQAAAA-key", folder_id="folder"
+                ),
+                conversation_state=state,
+                user_files_dir=service.user_files_dir("42"),
+            )
+        )
+    )
+
+    assert len(result.parts) == 1
+    assert isinstance(result.parts[0], AgentSpecificationResultPart)
+    assert result.parts[0].specification.purpose == "Draft concise support replies"
+    assert state.latest_agent_specification == result.parts[0].specification
+    assert result.next_state is ConversationOptions.COORDINATOR
+    assert state.state is ConversationOptions.COORDINATOR
 
 
 def test_service_saves_upload_in_the_user_directory(tmp_path: Path) -> None:
@@ -307,6 +393,36 @@ def test_service_commits_conversation_state_only_after_success(tmp_path: Path) -
         )
 
     assert state.state is ConversationOptions.COORDINATOR
+
+
+def test_service_does_not_commit_specification_draft_after_failure(
+    tmp_path: Path,
+) -> None:
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=SpecDelegatingFakeAgent(),
+        rag_agent=FailingFakeAgent(),
+        one_prompt_agent=FakeAgent(),
+    )
+    state = ConversationState()
+
+    with pytest.raises(RuntimeError, match="agent failed"):
+        asyncio.run(
+            service.interact(
+                InteractionRequest(
+                    user_id="42",
+                    text="Create a RAG agent",
+                    credentials=AIStudioCredentials(
+                        api_key="AQAAAA-key", folder_id="folder"
+                    ),
+                    conversation_state=state,
+                    user_files_dir=service.user_files_dir("42"),
+                )
+            )
+        )
+
+    assert state.state is ConversationOptions.COORDINATOR
+    assert state.agent_specification is None
 
 
 def test_service_context_uses_request_id_without_exposing_api_key(

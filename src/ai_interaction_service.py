@@ -225,6 +225,7 @@ class AIInteractionService:
                 for attachment in attachments
                 if attachment.file_id is not None
             },
+            specification=working_state.latest_agent_specification,
         )
         result = InteractionResult(
             text=render_result_text(parts),
@@ -233,7 +234,7 @@ class AIInteractionService:
             responded_by=responded_by,
             next_state=working_state.state,
         )
-        request.conversation_state.update_state(result.next_state)
+        request.conversation_state.commit_from(working_state)
         return result
 
     async def reset_conversation(self, user_id: str) -> None:
@@ -322,6 +323,11 @@ class AIInteractionService:
             for attachment in attachments
             if attachment.file_id is not None
         )
+        context.filenames_by_file_id = {
+            attachment.file_id: attachment.display_name or attachment.filename
+            for attachment in attachments
+            if attachment.file_id is not None
+        }
 
     @staticmethod
     def _build_input(

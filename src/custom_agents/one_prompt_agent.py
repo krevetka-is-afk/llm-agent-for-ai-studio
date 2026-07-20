@@ -3,8 +3,12 @@ import logging
 from agents.tool import Tool
 
 from config import ModelConfig
-from custom_agents.tools.finish_dialog import finish_dialog
 from custom_agents.base_agent import CustomAgent
+from custom_agents.tools.agent_specification import (
+    finalize_agent_specification,
+    update_agent_specification,
+)
+from custom_agents.tools.finish_dialog import finish_dialog
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +23,17 @@ Your workflow must follow these steps:
    - Use plain language, avoid unnecessary jargon, and make sure every requirement extracted in step 1 appears in the draft.
 
 3. **Present the draft to the user** and ask for confirmation.
+   - Before presenting the draft, call `update_agent_specification` with the confirmed purpose, audience, inputs, instructions, constraints, and expected result.
+   - If the tool returns missing fields, ask the user for those exact missing details before finalizing.
 4. **Iterate**:
    - If the user replies with a request for changes, modify the prompt accordingly, then go back to step 3.
+   - After each material change, call `update_agent_specification` again so the structured specification stays in sync with the latest draft.
    - Keep iterating until the user explicitly confirms that the prompt is ready.
 
 5. **Finish the dialog**:
-   - Once the user has confirmed the prompt, you must call the tool **`finish_dialog`** with **no arguments**.
+   - Once the user has confirmed the prompt, call `finalize_agent_specification`.
+   - If the finalized specification is not `ready`, ask only for the missing fields returned by the tool.
+   - When the finalized specification is `ready`, you must call the tool **`finish_dialog`** with **no arguments**.
    - Return the tool’s output directly as your final response (do not add extra text after the tool call).
 
 **Additional guidelines**
@@ -37,6 +46,8 @@ Your workflow must follow these steps:
 """.strip()
 
 ONE_PROMPT_TOOLS_SETUP: list[Tool] = [
+    update_agent_specification,
+    finalize_agent_specification,
     finish_dialog,
 ]
 

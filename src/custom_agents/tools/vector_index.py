@@ -170,6 +170,14 @@ def _create_search_index_impl(
     )
 
     tool_logger.info("Vector Store %s готов к работе", vector_store_id)
+    request_state = getattr(ctx.context, "state", None)
+    if request_state is not None:
+        request_state.attach_vector_index(
+            index_id=vector_store_id,
+            index_name=vector_store_name,
+            file_ids=tuple(file_ids),
+            source_titles=getattr(ctx.context, "filenames_by_file_id", None),
+        )
     return vector_store_id
 
 

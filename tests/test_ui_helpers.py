@@ -1,8 +1,10 @@
+import json
 from types import SimpleNamespace
 
 from ai_interaction_service import Attachment, UploadValidationError
 from ui.attachments import preview_kind_for_mime
 from ui.chat_flow import build_user_content, interaction_error_message
+from ui.result_view import agent_specification_json
 from ui.uploads import attachment_record
 
 
@@ -37,3 +39,16 @@ def test_chat_flow_maps_known_and_unknown_errors() -> None:
     assert interaction_error_message(RuntimeError("secret details")) == (
         "Не удалось выполнить запрос к AI Studio. Повторите попытку."
     )
+
+
+def test_agent_specification_json_preserves_unicode_and_nested_fields() -> None:
+    payload = agent_specification_json(
+        {
+            "template": "one_prompt",
+            "purpose": "Помощник службы поддержки",
+            "tools": [],
+        }
+    )
+
+    assert "Помощник службы поддержки" in payload
+    assert json.loads(payload)["template"] == "one_prompt"
