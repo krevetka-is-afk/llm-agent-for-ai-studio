@@ -183,6 +183,25 @@ Streamlit рисует эти данные отдельной карточкой
 OAuth Gateway оставлен как эксперимент: он не запускается по умолчанию. Для
 отдельного теста используйте `docker compose --profile oauth-experimental up -d`.
 
+### Credentialed E2E
+
+Credentialed Yandex AI Studio E2E tests are opt-in and use a dedicated API key
+and folder. The test uploads a tiny synthetic file, creates a one-day vector
+store, verifies the structured result, and then attempts to delete the remote
+resources. The call can consume quota; cleanup is best-effort. Copy
+`.env.e2e.example` to `.env.e2e`, set `RUN_YANDEX_AI_STUDIO_E2E=1`,
+`YC_AI_STUDIO_API_KEY`, and `YC_AI_STUDIO_FOLDER_ID`, then run:
+
+```bash
+PYTHONPATH=src uv run --env-file .env.e2e pytest -m yandex_ai_studio_e2e tests/e2e/test_yandex_ai_studio_rag_e2e.py
+```
+
+Use a dedicated short-lived key with the minimum role needed to manage AI Studio
+files and vector stores (`ai.assistants.admin`). Normal test runs skip these
+tests and do not call AI Studio. Set `YC_AI_STUDIO_E2E_KEEP_REMOTE=1` only while
+debugging; remote files and the vector store will then remain billable until
+they are deleted manually or expire.
+
 ## Запуск в docker
 
 ```bash
@@ -207,14 +226,13 @@ Web UI принимает не более 5 файлов за запрос: до
 
 ## Зависимости
 
-Web runtime: `streamlit`, `openai-agents`, `openai`, `langchain-core`,
-`langchain-openai`, `cryptography`, `pyyaml`, `aiofiles` и транзитивные пакеты,
-которые попадают в production lock.
+Web runtime: `streamlit`, `openai-agents`, `openai`, `cryptography`, `pyyaml`,
+`aiofiles` и транзитивные пакеты, которые попадают в production lock.
 
 Telegram/OAuth experimental: `aiogram`, `aiohttp` и `cryptography`; эти сервисы
 запускаются через compose profiles `telegram-experimental` и
 `oauth-experimental`.
 
-P1 cleanup: проверить и удалить неиспользуемые `chatkit`, `openai-chatkit`,
-`dotenv`/дублирование с `python-dotenv`, если они действительно не нужны текущему
-runtime.
+Неиспользуемые прямые зависимости ChatKit, LangChain и dotenv удалены из
+production dependency set; транзитивный `python-dotenv` остаётся зависимостью
+`openai-agents`, а `ty` — только dev-инструментом.
