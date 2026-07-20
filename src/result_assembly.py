@@ -7,6 +7,9 @@ from typing import Any, Literal, TypeAlias
 
 from openai.types.responses import ResponseTextDeltaEvent
 
+from agent_specification import (
+    AgentSpecification,
+)
 from context import ConversationOptions
 
 
@@ -48,7 +51,17 @@ class VectorIndexResultPart:
     kind: Literal["vector_index"] = field(init=False, default="vector_index")
 
 
-ResultPart: TypeAlias = MarkdownResultPart | VectorIndexResultPart
+@dataclass(frozen=True)
+class AgentSpecificationResultPart:
+    specification: AgentSpecification
+    kind: Literal["agent_specification"] = field(
+        init=False, default="agent_specification"
+    )
+
+
+ResultPart: TypeAlias = (
+    MarkdownResultPart | VectorIndexResultPart | AgentSpecificationResultPart
+)
 
 
 class AgentRunCollector:
@@ -153,12 +166,23 @@ class ResultAssembler:
         run: AgentRunResult,
         responded_by: ConversationOptions,
         filenames_by_file_id: Mapping[str, str],
+        specification: AgentSpecification | None = None,
     ) -> tuple[ResultPart, ...]:
         parts: list[ResultPart] = []
         if responded_by is ConversationOptions.RAG:
             parts.extend(
                 self._vector_index_parts(run.tool_executions, filenames_by_file_id)
             )
+        if specification is not None and self._has_ready_finalization(
+            run.tool_executions
+        ):
+            validated_specification = specification.with_validation_status()
+            if validated_specification.validate().is_ready:
+                parts.append(
+                    AgentSpecificationResultPart(
+                        specification=validated_specification,
+                    )
+                )
         if run.text.strip():
             parts.append(MarkdownResultPart(text=run.text))
         return tuple(parts)
@@ -203,6 +227,32 @@ class ResultAssembler:
             seen_index_ids.add(index_id)
         return parts
 
+    @staticmethod
+    def _has_ready_finalization(
+        tool_executions: tuple[ToolExecution, ...],
+    ) -> bool:
+        is_ready = False
+        for execution in tool_executions:
+            if execution.name == "update_agent_specification":
+                is_ready = False
+                continue
+            if execution.name != "finalize_agent_specification":
+                continue
+            output = execution.output
+            if isinstance(output, str):
+                try:
+                    output = json.loads(output)
+                except json.JSONDecodeError:
+                    is_ready = False
+                    continue
+            if isinstance(output, Mapping):
+                is_ready = (
+                    output.get("ready") is True or output.get("status") == "ready"
+                )
+            else:
+                is_ready = False
+        return is_ready
+
 
 def merge_agent_runs(
     *runs: AgentRunResult, text_from_last: bool = True
@@ -221,6 +271,11 @@ def merge_agent_runs(
 def result_part_to_record(part: ResultPart) -> dict[str, Any]:
     if isinstance(part, MarkdownResultPart):
         return {"kind": part.kind, "text": part.text}
+    if isinstance(part, AgentSpecificationResultPart):
+        return {
+            "kind": part.kind,
+            "specification": part.specification.to_record(),
+        }
     return {
         "kind": part.kind,
         "index_name": part.index_name,
@@ -237,6 +292,17 @@ def render_result_text(parts: tuple[ResultPart, ...]) -> str:
     for part in parts:
         if isinstance(part, MarkdownResultPart):
             sections.append(part.text.strip())
+            continue
+        if isinstance(part, AgentSpecificationResultPart):
+            spec = part.specification
+            lines = [
+                "Спецификация агента",
+                f"Шаблон: {spec.template.value}",
+                f"Статус: {spec.status.value}",
+            ]
+            if spec.missing_fields:
+                lines.append("Недостающие поля: " + ", ".join(spec.missing_fields))
+            sections.append("\n".join(lines))
             continue
         lines = [
             "Созданный векторный индекс",

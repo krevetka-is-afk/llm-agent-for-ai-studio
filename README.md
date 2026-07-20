@@ -1,7 +1,9 @@
 # llm-agent-for-ai-studio
 
 MVP ассистента, который помогает спроектировать one-prompt или RAG-приложение
-и создаёт необходимые ресурсы в Yandex AI Studio.
+и создаёт необходимые ресурсы в Yandex AI Studio. Завершённый сценарий возвращает
+валидированную `AgentSpecification`, которую можно скачать в JSON; RAG-вариант
+дополнительно включает созданный vector index и публичный `knowledge_search`.
 
 Основной пользовательский интерфейс — Streamlit Web UI. Telegram-бот и OAuth
 Gateway сохранены как экспериментальные адаптеры и не запускаются по умолчанию.
@@ -32,8 +34,10 @@ context он не передаётся.
 ```text
 src/
 ├── ai_interaction_service.py   # единый application service и transaction boundary
+├── agent_specification.py      # формальная JSON-спецификация создаваемого агента
+├── component_catalog.py        # каталог шаблонов и компонентов MVP
 ├── credentials.py             # credentials и OpenAI client factories
-├── conversation_state.py      # состояние маршрутизации агентов
+├── conversation_state.py      # route, draft/latest specification и commit boundary
 ├── request_context.py         # least-privilege tool context
 ├── user_store.py              # in-memory Telegram credentials + TTL
 ├── context.py                 # compatibility re-exports
@@ -48,7 +52,11 @@ src/
 
 - [Web UI и подключение](docs/web-ui.md)
 - [Архитектура](docs/architecture.md)
+- [Требования к MVP](docs/requirements.md)
+- [AgentSpecification](docs/agent-specification.md)
+- [Каталог компонентов](docs/component-catalog.md)
 - [Тестирование и credentialed E2E](docs/testing.md)
+- [Протокол проверки](docs/test-results.md)
 - [Docker и deployment](docs/deployment.md)
 - [Экспериментальный Telegram-бот](docs/telegram-experimental.md)
 - [Экспериментальный OAuth Gateway](docs/oauth-gateway-experimental.md)

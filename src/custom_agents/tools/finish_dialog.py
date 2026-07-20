@@ -21,5 +21,5 @@ def finish_dialog(ctx: RunContextWrapper[RequestContext]) -> str:
         request_id=ctx.context.request_id,
     )
     tool_logger.info("Finish dialog tool invoked")
-    ctx.context.state.reset_state()
+    ctx.context.state.finish_dialog()
     return "DIALOG_FINISHED"
