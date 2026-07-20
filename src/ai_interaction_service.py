@@ -1,7 +1,7 @@
 import asyncio
-import re
+import logging
 import shutil
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -24,6 +24,8 @@ from custom_agents.tools.upload_files import (
     resolve_upload_path,
     upload_local_file,
 )
+from file_security import sanitize_filename
+from logging_config import bind_logger
 from result_assembly import (
     AgentRunResult,
     AgentRunCollector,
@@ -33,6 +35,9 @@ from result_assembly import (
     render_result_text,
 )
 from session import get_session
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -50,6 +55,7 @@ class InteractionRequest:
     credentials: AIStudioCredentials
     conversation_state: ConversationState
     user_files_dir: Path
+    request_id: str = field(default_factory=lambda: uuid4().hex)
     attachment: Attachment | None = None
     attachments: tuple[Attachment, ...] = ()
 
@@ -77,7 +83,6 @@ UPLOAD_RETENTION_POLICY = (
     "User upload directories are request-scoped for model access and are removed "
     "when the user resets the conversation."
 )
-_UNSAFE_FILENAME_CHARS = re.compile(r"[^A-Za-z0-9._ -]+")
 
 
 class AIInteractionService:
@@ -136,14 +141,38 @@ class AIInteractionService:
         )
 
     async def interact(self, request: InteractionRequest) -> InteractionResult:
+        request_logger = bind_logger(
+            logger,
+            user_id=request.user_id,
+            request_id=request.request_id,
+        )
+        request_logger.info("AI interaction started")
+        try:
+            result = await self._interact(request)
+        except Exception as exc:
+            request_logger.exception(
+                "AI interaction failed",
+                extra={"error_type": type(exc).__name__},
+            )
+            raise
+        request_logger.info(
+            "AI interaction completed selected_agent=%s responded_by=%s next_state=%s",
+            result.selected_agent.name,
+            result.responded_by.name,
+            result.next_state.name,
+        )
+        return result
+
+    async def _interact(self, request: InteractionRequest) -> InteractionResult:
         selected_agent = request.conversation_state.state
+        working_state = request.conversation_state.copy()
         agent = self._agent_for(selected_agent)
         context = RequestContext(
             user_id=request.user_id,
+            request_id=request.request_id,
             user_files_dir=request.user_files_dir,
             client=get_api_key_client(request.credentials, self._config.connection),
-            state=request.conversation_state,
-            api_key=request.credentials.api_key,
+            state=working_state,
             folder_id=request.credentials.folder_id,
         )
         run_config = RunConfig(
@@ -172,9 +201,9 @@ class AIInteractionService:
         responded_by = selected_agent
         if (
             selected_agent is ConversationOptions.COORDINATOR
-            and request.conversation_state.state is not selected_agent
+            and working_state.state is not selected_agent
         ):
-            responded_by = request.conversation_state.state
+            responded_by = working_state.state
             attachments = await self._ensure_uploaded_files(
                 attachments, context.client, request.user_files_dir
             )
@@ -197,13 +226,15 @@ class AIInteractionService:
                 if attachment.file_id is not None
             },
         )
-        return InteractionResult(
+        result = InteractionResult(
             text=render_result_text(parts),
             parts=parts,
             selected_agent=selected_agent,
             responded_by=responded_by,
-            next_state=request.conversation_state.state,
+            next_state=working_state.state,
         )
+        request.conversation_state.update_state(result.next_state)
+        return result
 
     async def reset_conversation(self, user_id: str) -> None:
         db_paths = {
@@ -332,11 +363,7 @@ class AIInteractionService:
 
     @staticmethod
     def _sanitize_display_filename(original_filename: str) -> str:
-        safe_filename = Path(original_filename.replace("\\", "/")).name
-        safe_filename = _UNSAFE_FILENAME_CHARS.sub("_", safe_filename).strip(" .")
-        if safe_filename in {"", ".", ".."}:
-            return "upload.bin"
-        return safe_filename
+        return sanitize_filename(original_filename, fallback="upload.bin")
 
     @staticmethod
     async def _collect_run(

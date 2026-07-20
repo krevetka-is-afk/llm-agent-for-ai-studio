@@ -34,6 +34,7 @@ def make_ctx(client: FakeClient) -> SimpleNamespace:
     return SimpleNamespace(
         context=SimpleNamespace(
             user_id="user_1",
+            request_id="request_1",
             client=client,
             allowed_file_ids=frozenset({"file_1", "file_2"}),
         )

@@ -1,5 +1,4 @@
 import logging
-import sys
 import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -9,14 +8,8 @@ from ai_interaction_service import AIInteractionService
 from config import load_config, AppConfig
 from bot_handlers import create_router
 from context import UserStore
+from logging_config import configure_console_logging
 from telegram_session import HttpProxyTelegramSession
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    datefmt="%H:%M:%S",
-    stream=sys.stderr,
-)
 
 
 def create_app(config: AppConfig) -> tuple[Bot, Dispatcher]:
@@ -54,4 +47,5 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    configure_console_logging()
     asyncio.run(main())

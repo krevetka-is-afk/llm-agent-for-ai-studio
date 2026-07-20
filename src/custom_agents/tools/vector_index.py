@@ -82,7 +82,11 @@ class VectorIndexPollingTimeoutError(VectorIndexPollingError):
 
 
 def _tool_logger(ctx: RunContextWrapper[RequestContext]) -> logging.LoggerAdapter:
-    return bind_logger(logger, user_id=ctx.context.user_id)
+    return bind_logger(
+        logger,
+        user_id=ctx.context.user_id,
+        request_id=ctx.context.request_id,
+    )
 
 
 def _wait_for_vector_store_completed(

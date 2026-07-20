@@ -4,6 +4,8 @@ from html import escape
 
 from aiohttp import web
 
+from logging_config import configure_console_logging
+
 from .config import load_oauth_gateway_config
 from .credential_store import EncryptedCredentialStore
 from .gateway import (
@@ -163,7 +165,7 @@ def _html_response(status: int, message: str) -> web.Response:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO)
+    configure_console_logging()
     config = load_oauth_gateway_config()
     gateway = OAuthGateway(
         config,

@@ -1,6 +1,12 @@
 .git
 .github
 .idea
+.claude
+.codex
+.cursor
+.omc
+.omx
+.opencode
 .pytest_cache
 .ruff_cache
 .venv
@@ -19,6 +25,7 @@ logs/
 output/
 tmp/
 graphify-out/
+r/
 conversation_db/
 uploaded_files/
 files_to_upload/
@@ -26,3 +33,15 @@ files_to_upload/
 *.sqlite
 *.sqlite3
 .DS_Store
+
+authorized_key.json
+service-account-key.json
+service_account_key.json
+*-key.json
+*_key.json
+*credentials*.json
+*.pem
+*.p8
+*.p12
+*.pfx
+*.key

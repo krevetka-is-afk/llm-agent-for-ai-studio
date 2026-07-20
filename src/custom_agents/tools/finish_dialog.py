@@ -15,7 +15,11 @@ def finish_dialog(ctx: RunContextWrapper[RequestContext]) -> str:
     user interaction is needed.
     Returns message that session is finished.
     """
-    tool_logger = bind_logger(logger, user_id=ctx.context.user_id)
+    tool_logger = bind_logger(
+        logger,
+        user_id=ctx.context.user_id,
+        request_id=ctx.context.request_id,
+    )
     tool_logger.info("Finish dialog tool invoked")
     ctx.context.state.reset_state()
     return "DIALOG_FINISHED"

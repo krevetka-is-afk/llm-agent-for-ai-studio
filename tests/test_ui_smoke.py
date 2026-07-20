@@ -11,7 +11,8 @@ from ai_interaction_service import (
     UploadValidationError,
 )
 from custom_agents.tools.upload_files import MAX_UPLOAD_BYTES
-from ui.app import _validate_uploaded_files
+from ui.app import _attachment_record, _validate_uploaded_files
+from ai_interaction_service import Attachment
 
 
 def test_web_ui_starts_in_disconnected_state(tmp_path: Path, monkeypatch) -> None:
@@ -57,3 +58,19 @@ def test_web_ui_rejects_oversized_total_before_reading_content() -> None:
 
     with pytest.raises(UploadValidationError, match="Общий размер"):
         _validate_uploaded_files(files)
+
+
+def test_attachment_record_keeps_internal_and_original_filenames_separate() -> None:
+    attachment = Attachment(filename="generated-report.txt", display_name="report.txt")
+    uploaded_file = SimpleNamespace(
+        name="report.txt",
+        type="text/plain",
+        size=4,
+    )
+
+    assert _attachment_record(attachment, uploaded_file) == {
+        "filename": "generated-report.txt",
+        "original_filename": "report.txt",
+        "mime_type": "text/plain",
+        "size": 4,
+    }

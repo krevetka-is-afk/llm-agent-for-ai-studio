@@ -1,5 +1,6 @@
 import io
 import json
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal, TypeAlias
@@ -7,6 +8,9 @@ from typing import Any, Literal, TypeAlias
 from openai.types.responses import ResponseTextDeltaEvent
 
 from context import ConversationOptions
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -84,7 +88,11 @@ class AgentRunCollector:
         name = self._value(raw_item, "name")
         if not isinstance(name, str) or not name:
             return
-        arguments = self._parse_arguments(self._value(raw_item, "arguments"))
+        arguments = self._parse_arguments(
+            self._value(raw_item, "arguments"),
+            call_id=call_id,
+            tool_name=name,
+        )
         if call_id not in self._calls:
             self._call_order.append(call_id)
         self._calls[call_id] = ToolExecution(
@@ -104,16 +112,33 @@ class AgentRunCollector:
         )
 
     @staticmethod
-    def _parse_arguments(value: Any) -> dict[str, Any]:
+    def _parse_arguments(value: Any, *, call_id: str, tool_name: str) -> dict[str, Any]:
         if isinstance(value, Mapping):
             return dict(value)
         if not isinstance(value, str):
+            logger.warning(
+                "Malformed tool arguments call_id=%s tool=%s reason=not-string-or-mapping",
+                call_id,
+                tool_name,
+            )
             return {}
         try:
             parsed = json.loads(value)
         except json.JSONDecodeError:
+            logger.warning(
+                "Malformed tool arguments call_id=%s tool=%s reason=invalid-json",
+                call_id,
+                tool_name,
+            )
             return {}
-        return dict(parsed) if isinstance(parsed, Mapping) else {}
+        if not isinstance(parsed, Mapping):
+            logger.warning(
+                "Malformed tool arguments call_id=%s tool=%s reason=not-object",
+                call_id,
+                tool_name,
+            )
+            return {}
+        return dict(parsed)
 
     @staticmethod
     def _value(source: Any, name: str) -> Any:

@@ -1,11 +1,13 @@
 import logging
 import time
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, cast, Union, Optional
+from typing import Any, cast
 
 DEFAULT_CONTEXT_FIELDS = {
     "user_id": "-",
+    "request_id": "-",
     "message_id": "-",
     "response_id": "-",
 }
@@ -23,7 +25,8 @@ def build_formatter() -> logging.Formatter:
     formatter = ContextFormatter(
         fmt=(
             "%(asctime)s - [%(name)s] - %(levelname)s - "
-            "[user=%(user_id)s msg=%(message_id)s resp=%(response_id)s] - %(message)s"
+            "[user=%(user_id)s req=%(request_id)s msg=%(message_id)s "
+            "resp=%(response_id)s] - %(message)s"
         ),
         datefmt="%Y-%m-%d %H:%M:%S",
     )
@@ -34,7 +37,7 @@ def build_formatter() -> logging.Formatter:
 def configure_logging(
     level: int = logging.INFO,
     *,
-    log_dir: Optional[Path] = None,
+    log_dir: Path | None = None,
     console_level: int = logging.CRITICAL,
 ) -> Path:
     target_log_dir = log_dir or Path(__file__).resolve().parent.parent / "logs"
@@ -61,9 +64,20 @@ def configure_logging(
     return log_file
 
 
+def configure_console_logging(level: int = logging.INFO) -> None:
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(level)
+    console_handler.setFormatter(build_formatter())
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+    root_logger.handlers.clear()
+    root_logger.addHandler(console_handler)
+
+
 def bind_logger(
-    logger: Union[logging.Logger, logging.LoggerAdapter[Any]],
-    **context: Optional[str],
+    logger: logging.Logger | logging.LoggerAdapter[Any],
+    **context: str | None,
 ) -> logging.LoggerAdapter[Any]:
     if isinstance(logger, logging.LoggerAdapter):
         # noinspection PyInvalidCast

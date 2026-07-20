@@ -66,6 +66,13 @@ class IndexCreatingFakeAgent(FakeAgent):
         )
 
 
+class FailingFakeAgent(FakeAgent):
+    async def respond(self, **kwargs):
+        self.calls.append(kwargs)
+        raise RuntimeError("agent failed")
+        yield
+
+
 def _service_config(tmp_path: Path) -> AIServiceConfig:
     model = ModelConfig(
         model_name="test-model",
@@ -272,6 +279,70 @@ def test_service_reuses_uploaded_files_after_coordinator_delegates_to_rag(
     assert rag.calls[0]["context"].allowed_file_ids == frozenset(
         {"file-first", "file-second"}
     )
+    assert request.conversation_state.state is ConversationOptions.RAG
+
+
+def test_service_commits_conversation_state_only_after_success(tmp_path: Path) -> None:
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=DelegatingFakeAgent(),
+        rag_agent=FailingFakeAgent(),
+        one_prompt_agent=FakeAgent(),
+    )
+    state = ConversationState()
+
+    with pytest.raises(RuntimeError, match="agent failed"):
+        asyncio.run(
+            service.interact(
+                InteractionRequest(
+                    user_id="42",
+                    text="Create an index",
+                    credentials=AIStudioCredentials(
+                        api_key="AQAAAA-key", folder_id="folder"
+                    ),
+                    conversation_state=state,
+                    user_files_dir=service.user_files_dir("42"),
+                )
+            )
+        )
+
+    assert state.state is ConversationOptions.COORDINATOR
+
+
+def test_service_context_uses_request_id_without_exposing_api_key(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    agent = FakeAgent()
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=agent,
+        rag_agent=agent,
+        one_prompt_agent=agent,
+    )
+
+    with caplog.at_level("INFO"):
+        asyncio.run(
+            service.interact(
+                InteractionRequest(
+                    user_id="42",
+                    request_id="request-42",
+                    text="Hello",
+                    credentials=AIStudioCredentials(
+                        api_key="AQAAAA-super-secret", folder_id="folder"
+                    ),
+                    conversation_state=ConversationState(),
+                    user_files_dir=service.user_files_dir("42"),
+                )
+            )
+        )
+
+    context = agent.calls[0]["context"]
+    assert context.request_id == "request-42"
+    assert not hasattr(context, "api_key")
+    assert any(
+        getattr(record, "request_id", None) == "request-42" for record in caplog.records
+    )
+    assert "AQAAAA-super-secret" not in caplog.text
 
 
 def test_service_uploads_files_before_running_rag_after_delegation(
