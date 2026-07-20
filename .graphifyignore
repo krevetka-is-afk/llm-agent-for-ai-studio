@@ -1,0 +1,29 @@
+# Local credentials and environment files must never enter generated graphs.
+authorized_key.json
+service-account-key.json
+service_account_key.json
+*-key.json
+*_key.json
+*credentials*.json
+.env
+.env.*
+!.env.example
+!.env.e2e.example
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.crt
+*.cert
+*.der
+
+# Generated or local tool state is not part of the project knowledge graph.
+graphify-out/
+.git/
+.venv/
+.idea/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ty_cache/
