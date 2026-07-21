@@ -22,6 +22,7 @@ class ModelConfig:
     sessions_db_path: Path
     verbosity: Literal["low", "medium", "high"] | None = None
     max_retries: int | None = None
+    max_turns: int = 20
 
 
 @dataclass(frozen=True)
@@ -176,6 +177,7 @@ def _parse_models(
                     item, "session_db_path", default_value=default_session_db_path
                 )
             ).resolve(),
+            max_turns=_safe_get(item, "max_turns", default_value=20),
         )
 
     return parsed

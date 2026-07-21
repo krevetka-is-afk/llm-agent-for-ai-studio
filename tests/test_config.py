@@ -62,6 +62,9 @@ def test_web_ui_uses_gateway_without_requiring_telegram_token(monkeypatch) -> No
 
     assert config.api_key_store.storage_path.name == "yc_api_keys.db"
     assert config.ai_service.consultant.model_name
+    assert config.ai_service.consultant.max_turns == 20
+    assert config.ai_service.one_prompt.max_turns == 20
+    assert config.ai_service.rag_model.max_turns == 20
 
 
 def test_runtime_paths_can_be_overridden_from_environment(

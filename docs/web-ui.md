@@ -13,10 +13,14 @@ uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_
 
 ```dotenv
 YC_API_KEY_ENCRYPTION_KEY=<Fernet key>
-YC_API_KEY_DB_PATH=/data/api_keys.db
-UPLOADED_FILES_DIR=/data/uploaded_files
-CONVERSATION_DB_PATH=/data/conversation.db
+YC_API_KEY_DB_PATH=.local/api_keys.db
+UPLOADED_FILES_DIR=.local/uploaded_files
+CONVERSATION_DB_PATH=.local/conversation.db
 ```
+
+При локальном запуске базы и загруженные файлы сохраняются в доступном для
+записи каталоге `.local/`, который исключён из Git. Docker Compose отдельно
+переопределяет эти пути на `/data/...` внутри persistent volume.
 
 ## Пользовательский поток
 

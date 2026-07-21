@@ -8,3 +8,13 @@ def test_agent_prompts_do_not_contain_known_paste_or_markdown_artifacts() -> Non
     for prompt in prompts:
         assert "Обновлённый системный промпт" not in prompt
         assert "confirmation**" not in prompt
+
+
+def test_agent_prompts_distinguish_web_search_from_vector_rag() -> None:
+    coordinator = COORDINATOR_AGENT_INSTRUCTIONS.casefold()
+    one_prompt = ONE_PROMPT_AGENT_INSTRUCTIONS.casefold()
+
+    assert "веб-поиск сам по себе не является rag" in coordinator
+    assert "явный отказ пользователя от rag" in coordinator
+    assert "web search does not require a vector index" in one_prompt
+    assert "do not request knowledge_sources or index_id" in one_prompt

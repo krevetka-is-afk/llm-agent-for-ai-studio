@@ -7,17 +7,24 @@
 2. `AIInteractionService` создаёт clients Yandex AI Studio на границе сервиса.
 3. Агент получает `RequestContext` без API-ключа: только client, folder ID,
    директорию файлов, разрешённые file IDs и рабочую копию состояния.
-4. Coordinator при необходимости делегирует запрос RAG или one-prompt агенту.
-5. Специализированный агент через `update_agent_specification` обновляет
+4. `routing.py` до model call применяет только высокоуверенные явные решения:
+   отказ от RAG и запрос web-search без vector knowledge направляются в
+   one-prompt, а явный запрос RAG/vector index — в RAG. Неоднозначные запросы
+   остаются coordinator.
+5. Coordinator при необходимости делегирует оставшийся запрос RAG или
+   one-prompt агенту. Каждый запуск ограничен настраиваемым `max_turns` (20 по
+   умолчанию), чтобы сложный tool flow имел запас, но бесконечный цикл оставался
+   ограниченным.
+6. Специализированный агент через `update_agent_specification` обновляет
    типизированный черновик, а валидатор возвращает полный список недостающих
    обязательных полей.
-6. RAG tool после создания vector index авторитетно привязывает `index_id`,
+7. RAG tool после создания vector index авторитетно привязывает `index_id`,
    загруженные файлы и публичный `knowledge_search` к черновику.
-7. `finalize_agent_specification` публикует только структурно готовую
+8. `finalize_agent_specification` публикует только структурно готовую
    спецификацию; обычный markdown модели не интерпретируется как готовый артефакт.
-8. `ResultAssembler` собирает текст, vector index и подтверждённую
+9. `ResultAssembler` собирает текст, vector index и подтверждённую
    `AgentSpecification` из tool executions и рабочего состояния.
-9. Route, draft и latest specification коммитятся только после успешной сборки
+10. Route, draft и latest specification коммитятся только после успешной сборки
    результата.
 
 ## Границы модулей
@@ -25,6 +32,8 @@
 - `credentials.py` — модели credentials и фабрики sync/async OpenAI clients.
 - `conversation_state.py` — mutable route, draft/latest specification и
   транзакционные `copy()`/`commit_from()`.
+- `routing.py` — детерминированное распознавание только явного выбора между
+  one-prompt и vector RAG; ambiguous intent не классифицирует.
 - `user_store.py` — экспериментальное in-memory хранилище Telegram-пользователей.
 - `request_context.py` — least-privilege context, доступный агентам и tools.
 - `component_catalog.py` — каталог шаблонов `one_prompt`/`rag` и компонентов

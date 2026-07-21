@@ -62,9 +62,10 @@ API-совместимый интерфейс; Agent Builder управляет 
 
 ### UC-03. Автоматический выбор шаблона
 
-Coordinator выбирает `rag`, если запрос требует внешних источников или
-пользователь приложил файлы. Coordinator выбирает `one_prompt`, если достаточно
-одной системной инструкции.
+Явный запрос vector RAG, индекса или индексации приложенных файлов выбирает
+`rag`. Web search или внешнее API без пользовательской базы документов выбирают
+`one_prompt`. Последний явный отказ пользователя от RAG имеет приоритет над
+предыдущим route; неоднозначные требования уточняет coordinator.
 
 ### UC-04. Уточнение недостающих параметров
 
@@ -81,7 +82,7 @@ UI показывает typed result parts: vector index, agent specification и
 | ID | Требование | Acceptance criteria |
 | --- | --- | --- |
 | FR-01 | Система должна принимать текстовый запрос пользователя и вложения через Web UI. | Запрос преобразуется в `InteractionRequest`; ограничения количества и размера файлов проверяются до обращения к AI Studio. |
-| FR-02 | Система должна маршрутизировать запрос в coordinator, RAG или one-prompt agent по состоянию диалога. | `AIInteractionService` выбирает agent по `ConversationState`, а coordinator может делегировать в `RAG` или `ONE_PROMPT`. |
+| FR-02 | Система должна маршрутизировать запрос в coordinator, RAG или one-prompt agent по состоянию диалога и последнему явному выбору пользователя. | Явный отказ от vector RAG переключает sticky RAG route в `ONE_PROMPT`; web search без vector knowledge не считается RAG; ambiguous intent остаётся coordinator. |
 | FR-03 | Система должна создавать RAG vector index только из файлов текущего запроса. | `create_search_index` отклоняет пустые, дублирующиеся и неразрешённые `file_id`. |
 | FR-04 | Система должна собирать authoritative typed result из tool calls, а не только из текста модели. | `ResultAssembler` создаёт `VectorIndexResultPart` из `create_search_index` call/output. |
 | FR-05 | Система должна формировать `AgentSpecification` для завершённого результата пользователя. | `AgentSpecificationResultPart` появляется только после успешного вызова `finalize_agent_specification` и готовой валидации. |
@@ -103,13 +104,14 @@ UI показывает typed result parts: vector index, agent specification и
 | NFR-06 | Проверка качества должна быть автоматизируемой. | Поддерживаются `ruff format --check`, `ruff check`, `ty check`, `pytest -q`, `pre-commit`. |
 | NFR-07 | Credentialed E2E не должен запускаться случайно. | Тест помечен `yandex_ai_studio_e2e` и требует explicit env flag. |
 | NFR-08 | MVP должен оставаться малым и проверяемым. | Новые функции реализованы без новых production dependencies и без marketplace scope. |
+| NFR-09 | Внутренний model/tool flow должен иметь ограниченный, настраиваемый бюджет turns. | `ModelConfig.max_turns` передаётся в SDK Runner; значение по умолчанию и production config равны 20. |
 
 ## Трассировка
 
 | Требование | Модуль | Тест/проверка |
 | --- | --- | --- |
 | FR-01 | `src/ui/chat_flow.py`, `src/ui/uploads.py`, `src/ai_interaction_service.py` | `tests/test_ui_helpers.py`, `tests/test_ui_smoke.py`, `tests/test_ai_interaction_service.py` |
-| FR-02 | `src/ai_interaction_service.py`, `src/conversation_state.py`, `src/custom_agents/coordinator_agent.py` | `tests/test_ai_interaction_service.py` |
+| FR-02 | `src/routing.py`, `src/ai_interaction_service.py`, `src/conversation_state.py`, `src/custom_agents/coordinator_agent.py` | `tests/test_routing.py`, `tests/test_ai_interaction_service.py`, `tests/test_prompt_quality.py` |
 | FR-03 | `src/custom_agents/tools/vector_index.py` | `tests/test_vector_index.py` |
 | FR-04 | `src/result_assembly.py` | `tests/test_result_assembly.py` |
 | FR-05 | `src/custom_agents/tools/agent_specification.py`, `src/result_assembly.py`, `src/agent_specification.py` | `tests/test_agent_specification_tools.py`, `tests/test_result_assembly.py`, `tests/test_ai_interaction_service.py` |
@@ -126,3 +128,4 @@ UI показывает typed result parts: vector index, agent specification и
 | NFR-06 | `pyproject.toml`, `.pre-commit-config.yaml` | Quality gate commands |
 | NFR-07 | `tests/e2e/test_yandex_ai_studio_rag_e2e.py` | `pytest` skip без env; opt-in запуск с credentials |
 | NFR-08 | `pyproject.toml`, code review | `uv run pytest -q`, `uv run ty check`, dependency diff |
+| NFR-09 | `src/config.py`, `src/custom_agents/base_agent.py`, `config.yaml` | `tests/test_base_agent.py`, `tests/test_config.py` |

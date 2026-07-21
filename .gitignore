@@ -224,6 +224,7 @@ marimo/_lsp/
 __marimo__/
 
 # Local runtime state and user uploads
+.local/
 *.db
 *.db-journal
 conversation_db/

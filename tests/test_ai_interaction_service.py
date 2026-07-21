@@ -180,6 +180,85 @@ def test_service_routes_to_agent_selected_by_conversation_state(tmp_path: Path) 
     assert rag.calls[0]["context"].folder_id == "folder"
 
 
+def test_service_switches_sticky_rag_state_when_user_rejects_vector_search(
+    tmp_path: Path,
+) -> None:
+    coordinator = FakeAgent()
+    rag = FakeAgent()
+    one_prompt = FakeAgent()
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=coordinator,
+        rag_agent=rag,
+        one_prompt_agent=one_prompt,
+    )
+    state = ConversationState(ConversationOptions.RAG)
+    state.update_agent_specification(
+        AgentSpecification(template=TemplateId.RAG, purpose="Stale RAG draft")
+    )
+
+    result = asyncio.run(
+        service.interact(
+            InteractionRequest(
+                user_id="42",
+                text="Мне не нужен векторный поиск!",
+                credentials=AIStudioCredentials(
+                    api_key="AQAAAA-key", folder_id="folder"
+                ),
+                conversation_state=state,
+                user_files_dir=service.user_files_dir("42"),
+            )
+        )
+    )
+
+    assert result.selected_agent is ConversationOptions.ONE_PROMPT
+    assert result.responded_by is ConversationOptions.ONE_PROMPT
+    assert result.next_state is ConversationOptions.ONE_PROMPT
+    assert state.state is ConversationOptions.ONE_PROMPT
+    assert state.agent_specification is None
+    assert coordinator.calls == []
+    assert rag.calls == []
+    assert one_prompt.calls[0]["message"] == (
+        "User request: Мне не нужен векторный поиск!\n"
+    )
+
+
+def test_service_routes_web_search_without_vector_sources_to_one_prompt(
+    tmp_path: Path,
+) -> None:
+    coordinator = FakeAgent()
+    rag = FakeAgent()
+    one_prompt = FakeAgent()
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=coordinator,
+        rag_agent=rag,
+        one_prompt_agent=one_prompt,
+    )
+    state = ConversationState()
+
+    result = asyncio.run(
+        service.interact(
+            InteractionRequest(
+                user_id="42",
+                text="Источником будет веб-поиск",
+                credentials=AIStudioCredentials(
+                    api_key="AQAAAA-key", folder_id="folder"
+                ),
+                conversation_state=state,
+                user_files_dir=service.user_files_dir("42"),
+            )
+        )
+    )
+
+    assert result.selected_agent is ConversationOptions.ONE_PROMPT
+    assert result.responded_by is ConversationOptions.ONE_PROMPT
+    assert result.next_state is ConversationOptions.ONE_PROMPT
+    assert coordinator.calls == []
+    assert rag.calls == []
+    assert len(one_prompt.calls) == 1
+
+
 def test_service_provides_a_shared_user_files_directory(tmp_path: Path) -> None:
     fake_agent = FakeAgent()
     service = AIInteractionService(

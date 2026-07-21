@@ -45,6 +45,18 @@ class ConversationState:
         return self.draft_agent_specification or self.latest_agent_specification
 
     def update_state(self, new_state: ConversationOptions) -> None:
+        if new_state is not ConversationOptions.COORDINATOR:
+            target_template = specification_template_for(new_state)
+            if (
+                self.draft_agent_specification is not None
+                and self.draft_agent_specification.template is not target_template
+            ):
+                self.draft_agent_specification = None
+            if (
+                self.latest_agent_specification is not None
+                and self.latest_agent_specification.template is not target_template
+            ):
+                self.latest_agent_specification = None
         self.state = new_state
 
     def reset_state(self) -> None:
