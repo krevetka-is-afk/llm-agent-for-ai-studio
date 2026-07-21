@@ -7,8 +7,9 @@ cp .env.web.example .env.web
 docker compose up -d --build
 ```
 
-Web UI доступен на `127.0.0.1:8501`. Runtime data хранится в volume `web-data`.
-Контейнер запускается от non-root пользователя и имеет:
+Web UI доступен на `127.0.0.1:8501`. Docker Compose переопределяет локальные
+пути из `.env.web` на `/data/...`, поэтому runtime data хранится в volume
+`web-data`. Контейнер запускается от non-root пользователя и имеет:
 
 - healthcheck `/_stcore/health`;
 - `mem_limit: 1g`;

@@ -56,6 +56,7 @@ class CustomAgent:
             starting_agent=agent,
             input=message,
             context=context,
+            max_turns=self.model_config.max_turns,
             run_config=run_config,
             session=session,
         )

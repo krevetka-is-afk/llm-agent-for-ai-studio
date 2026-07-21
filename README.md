@@ -25,6 +25,9 @@ uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_
 PYTHONPATH=src uv run --env-file .env.web streamlit run src/ui/app.py
 ```
 
+Локальные базы и загруженные файлы сохраняются в `.local/`; этот каталог
+исключён из Git. В Docker Compose те же данные сохраняются в volume `web-data`.
+
 Пользователь вводит API-ключ Yandex AI Studio и ID каталога. Ключ проверяется
 минимальным запросом и хранится локально в зашифрованном виде; в model/tool
 context он не передаётся.
@@ -38,6 +41,7 @@ src/
 ├── component_catalog.py        # каталог шаблонов и компонентов MVP
 ├── credentials.py             # credentials и OpenAI client factories
 ├── conversation_state.py      # route, draft/latest specification и commit boundary
+├── routing.py                 # deterministic overrides for explicit route choices
 ├── request_context.py         # least-privilege tool context
 ├── user_store.py              # in-memory Telegram credentials + TTL
 ├── context.py                 # compatibility re-exports

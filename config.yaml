@@ -3,16 +3,19 @@ models:
     model_name: "gpt-oss-120b"
     temperature: 0.5
     max_output_tokens: 1000
+    max_turns: 20
     base_url: 'https://ai.api.cloud.yandex.net/v1'
   - one_prompt:
     model_name: "gpt-oss-120b"
     temperature: 0.5
     max_output_tokens: 1000
+    max_turns: 20
     base_url: 'https://ai.api.cloud.yandex.net/v1'
   - consultant:
     model_name: "gpt-oss-120b"
     temperature: 0.5
     max_output_tokens: 1000
+    max_turns: 20
     base_url: 'https://ai.api.cloud.yandex.net/v1'
 
 paths:

@@ -34,6 +34,7 @@ from result_assembly import (
     merge_agent_runs,
     render_result_text,
 )
+from routing import resolve_explicit_route
 from session import get_session
 
 
@@ -164,8 +165,23 @@ class AIInteractionService:
         return result
 
     async def _interact(self, request: InteractionRequest) -> InteractionResult:
-        selected_agent = request.conversation_state.state
         working_state = request.conversation_state.copy()
+        routing_decision = resolve_explicit_route(request.text)
+        if routing_decision is not None:
+            previous_state = working_state.state
+            working_state.update_state(routing_decision.target)
+            if previous_state is not routing_decision.target:
+                bind_logger(
+                    logger,
+                    user_id=request.user_id,
+                    request_id=request.request_id,
+                ).info(
+                    "Explicit routing override previous=%s target=%s reason=%s",
+                    previous_state.name,
+                    routing_decision.target.name,
+                    routing_decision.reason.value,
+                )
+        selected_agent = working_state.state
         agent = self._agent_for(selected_agent)
         context = RequestContext(
             user_id=request.user_id,
