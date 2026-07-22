@@ -60,7 +60,6 @@ src/
 - [AgentSpecification](docs/agent-specification.md)
 - [Каталог компонентов](docs/component-catalog.md)
 - [Тестирование и credentialed E2E](docs/testing.md)
-- [Протокол проверки](docs/test-results.md)
 - [Docker и deployment](docs/deployment.md)
 - [Экспериментальный Telegram-бот](docs/telegram-experimental.md)
 - [Экспериментальный OAuth Gateway](docs/oauth-gateway-experimental.md)
