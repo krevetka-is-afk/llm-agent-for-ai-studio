@@ -30,6 +30,26 @@ def test_web_ui_starts_in_disconnected_state(tmp_path: Path, monkeypatch) -> Non
     assert app.text_input[1].label == "API-ключ"
 
 
+def test_result_view_renders_multiple_agent_downloads_without_id_collision() -> None:
+    app = AppTest.from_string(
+        """
+from ui.result_view import render_result_parts
+
+specification = {
+    "kind": "agent_specification",
+    "specification": {
+        "template": "one_prompt",
+        "status": "complete",
+    },
+}
+render_result_parts([specification], key_prefix="first-assistant")
+render_result_parts([specification], key_prefix="second-assistant")
+"""
+    ).run()
+
+    assert not app.exception
+
+
 def _upload(name: str, size: int) -> SimpleNamespace:
     return SimpleNamespace(name=name, size=size)
 

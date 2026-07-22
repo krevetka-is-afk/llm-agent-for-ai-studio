@@ -133,11 +133,17 @@ def _initialize_chat_state() -> None:
 
 
 def _render_history(ai_service: AIInteractionService, connection_id: str) -> None:
-    for message in st.session_state.messages:
+    for message_index, message in enumerate(st.session_state.messages):
         with st.chat_message(message["role"]):
             result_parts = message.get("result_parts")
             if isinstance(result_parts, list):
-                render_result_parts(result_parts)
+                message_id = message.get("id")
+                key_prefix = (
+                    message_id
+                    if isinstance(message_id, str)
+                    else f"legacy-message-{message_index}"
+                )
+                render_result_parts(result_parts, key_prefix=key_prefix)
             else:
                 st.markdown(message["content"])
             attachments = message.get("attachments")
@@ -219,6 +225,7 @@ def _append_and_render_assistant_message(
     attachments: tuple[Attachment, ...],
     request_id: str,
 ) -> None:
+    assistant_message_id = f"{request_id}-assistant"
     with st.chat_message("assistant"):
         with st.spinner("Генерируется ответ..."):
             result, answer_text = _request_answer(
@@ -235,11 +242,15 @@ def _append_and_render_assistant_message(
                 else []
             )
             if result_parts:
-                render_result_parts(result_parts)
+                render_result_parts(
+                    result_parts,
+                    key_prefix=assistant_message_id,
+                )
             else:
                 st.markdown(answer_text)
 
     assistant_message: dict[str, Any] = {
+        "id": assistant_message_id,
         "role": "assistant",
         "content": answer_text,
     }

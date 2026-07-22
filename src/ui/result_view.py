@@ -5,8 +5,8 @@ from typing import Any, cast
 import streamlit as st
 
 
-def render_result_parts(parts: Sequence[Any]) -> None:
-    for raw_part in parts:
+def render_result_parts(parts: Sequence[Any], *, key_prefix: str) -> None:
+    for part_index, raw_part in enumerate(parts):
         if not isinstance(raw_part, Mapping):
             continue
         part = cast(Mapping[str, Any], raw_part)
@@ -14,14 +14,21 @@ def render_result_parts(parts: Sequence[Any]) -> None:
         if kind == "vector_index":
             render_vector_index_result(part)
         elif kind == "agent_specification":
-            render_agent_specification_result(part)
+            render_agent_specification_result(
+                part,
+                download_key=f"{key_prefix}-agent-specification-{part_index}",
+            )
         elif kind == "markdown":
             text = part.get("text")
             if isinstance(text, str) and text:
                 st.markdown(text)
 
 
-def render_agent_specification_result(part: Mapping[str, Any]) -> None:
+def render_agent_specification_result(
+    part: Mapping[str, Any],
+    *,
+    download_key: str,
+) -> None:
     specification = part.get("specification")
     if not isinstance(specification, Mapping):
         return
@@ -54,6 +61,7 @@ def render_agent_specification_result(part: Mapping[str, Any]) -> None:
             data=spec_json,
             file_name="agent-specification.json",
             mime="application/json",
+            key=download_key,
         )
 
 
