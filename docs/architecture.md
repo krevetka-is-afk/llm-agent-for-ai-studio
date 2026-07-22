@@ -18,14 +18,17 @@
 6. Специализированный агент через `update_agent_specification` обновляет
    типизированный черновик, а валидатор возвращает полный список недостающих
    обязательных полей.
-7. RAG tool после создания vector index авторитетно привязывает `index_id`,
+7. One-prompt agent при подтверждённой потребности в актуальных данных добавляет
+   публичный descriptor `web_search`; это не создаёт vector index и не заполняет
+   `knowledge_sources`.
+8. RAG tool после создания vector index авторитетно привязывает `index_id`,
    загруженные файлы и публичный `knowledge_search` к черновику.
-8. `finalize_agent_specification` публикует только структурно готовую
+9. `finalize_agent_specification` публикует только структурно готовую
    спецификацию; обычный markdown модели не интерпретируется как готовый артефакт.
-9. `ResultAssembler` собирает текст, vector index и подтверждённую
+10. `ResultAssembler` собирает текст, vector index и подтверждённую
    `AgentSpecification` из tool executions и рабочего состояния.
-10. Route, draft и latest specification коммитятся только после успешной сборки
-   результата.
+11. Route, draft и latest specification коммитятся только после успешной сборки
+    результата.
 
 ## Границы модулей
 
@@ -37,7 +40,7 @@
 - `user_store.py` — экспериментальное in-memory хранилище Telegram-пользователей.
 - `request_context.py` — least-privilege context, доступный агентам и tools.
 - `component_catalog.py` — каталог шаблонов `one_prompt`/`rag` и компонентов
-  `system_prompt`, `vector_index`, `knowledge_search`.
+  `system_prompt`, `web_search`, `vector_index`, `knowledge_search`.
 - `agent_specification.py` — переносимое JSON-описание создаваемого агента,
   статусы `draft`/`needs_clarification`/`ready` и детерминированная валидация.
 - `context.py` — временный compatibility shim для стабильности старых импортов.
@@ -61,9 +64,10 @@ Streamlit entrypoint остаётся `src/ui/app.py`, но детали раз�
 
 MVP возвращает не только markdown-текст модели, но и typed result part
 `agent_specification`. Для `one_prompt` спецификация фиксирует назначение,
-system instructions и expected result. Для `rag` дополнительно фиксируются
-knowledge sources, созданный `index_id`, ограничение TTL индекса и публичный
-tool descriptor `knowledge_search`.
+system instructions, expected result и, при необходимости, публичный built-in
+tool descriptor `web_search`. Для `rag` дополнительно фиксируются knowledge
+sources, созданный `index_id`, ограничение TTL индекса и публичный tool descriptor
+`knowledge_search`.
 
 Детерминированная валидация отделена от LLM-поведения. Если обязательные поля
 отсутствуют, спецификация получает статус `needs_clarification`; готовой она

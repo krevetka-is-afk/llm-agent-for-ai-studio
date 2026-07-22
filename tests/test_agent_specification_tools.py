@@ -48,6 +48,46 @@ def test_finalize_agent_specification_promotes_ready_draft() -> None:
     assert state.agent_specification is state.latest_agent_specification
 
 
+def test_one_prompt_update_adds_then_removes_web_search() -> None:
+    state = ConversationState(ConversationOptions.ONE_PROMPT)
+
+    added = json.loads(
+        _update_agent_specification_impl(
+            state,
+            purpose="Report current market developments",
+            instructions="Search before answering and cite sources.",
+            expected_result="A current briefing",
+            web_search=True,
+        )
+    )
+
+    assert added["status"] == AgentSpecificationStatus.READY.value
+    assert added["knowledge_sources"] == []
+    assert added["tools"][0]["tool_id"] == "web_search"
+    assert added["tools"][0]["parameters"] == {"search_context_size": "medium"}
+
+    finalized = json.loads(_finalize_agent_specification_impl(state))
+    assert finalized["tools"] == added["tools"]
+
+    removed = json.loads(_update_agent_specification_impl(state, web_search=False))
+    assert removed["tools"] == []
+    assert state.latest_agent_specification is None
+
+
+def test_one_prompt_update_omitting_web_search_preserves_existing_choice() -> None:
+    state = ConversationState(ConversationOptions.ONE_PROMPT)
+    _update_agent_specification_impl(state, web_search=True)
+
+    result = json.loads(
+        _update_agent_specification_impl(
+            state,
+            purpose="Report current market developments",
+        )
+    )
+
+    assert [tool["tool_id"] for tool in result["tools"]] == ["web_search"]
+
+
 def test_updating_finalized_specification_invalidates_previous_export() -> None:
     state = ConversationState(ConversationOptions.ONE_PROMPT)
     _update_agent_specification_impl(

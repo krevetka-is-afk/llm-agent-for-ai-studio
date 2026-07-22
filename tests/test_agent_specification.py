@@ -49,6 +49,38 @@ def test_complete_one_prompt_specification_is_ready_and_json_safe() -> None:
     assert json.loads(json.dumps(record, ensure_ascii=False)) == record
 
 
+def test_one_prompt_web_search_serializes_as_portable_tool_descriptor() -> None:
+    spec = build_one_prompt_specification(
+        purpose="Summarize current industry news",
+        instructions="Search the web before answering.",
+        expected_result="A current, source-grounded briefing",
+        web_search=True,
+    )
+
+    record = spec.to_record()
+
+    assert record["knowledge_sources"] == []
+    assert record["tools"] == [
+        {
+            "tool_id": "web_search",
+            "title": "Web search",
+            "description": "Searches the public web for current information.",
+            "parameters": {"search_context_size": "medium"},
+        }
+    ]
+
+
+def test_ordinary_one_prompt_specification_has_no_tools() -> None:
+    spec = build_one_prompt_specification(
+        purpose="Rewrite support replies",
+        instructions="Be concise.",
+        expected_result="A reusable system prompt",
+    )
+
+    assert spec.tools == ()
+    assert spec.to_record()["tools"] == []
+
+
 def test_incomplete_rag_specification_requires_sources_tool_and_index() -> None:
     spec = AgentSpecification(
         template=TemplateId.RAG,
@@ -231,8 +263,10 @@ def test_secrets_in_nested_components_block_export_and_are_redacted() -> None:
 
 
 def test_catalog_separates_public_application_tools_from_internal_tools() -> None:
+    one_prompt_template = template_descriptor(TemplateId.ONE_PROMPT)
     rag_template = template_descriptor(TemplateId.RAG)
     knowledge_search = component_descriptor("knowledge_search")
+    web_search = component_descriptor("web_search")
     finish_dialog = component_descriptor("finish_dialog")
 
     assert rag_template.required_fields == (
@@ -243,12 +277,18 @@ def test_catalog_separates_public_application_tools_from_internal_tools() -> Non
         "tools",
         "parameters.index_id",
     )
+    assert "tools" in one_prompt_template.optional_fields
+    assert "web_search" in one_prompt_template.components
     assert knowledge_search.kind is ComponentKind.APPLICATION_TOOL
+    assert web_search.kind is ComponentKind.APPLICATION_TOOL
+    assert web_search.parameters == {"search_context_size": "medium"}
     assert finish_dialog.kind is ComponentKind.INTERNAL_TOOL
     assert is_public_application_tool("knowledge_search")
+    assert is_public_application_tool("web_search")
     assert not is_public_application_tool("finish_dialog")
     public_ids = {
         component["component_id"] for component in catalog_record()["components"]
     }
     assert "knowledge_search" in public_ids
+    assert "web_search" in public_ids
     assert "finish_dialog" not in public_ids

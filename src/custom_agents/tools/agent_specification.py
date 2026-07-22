@@ -4,6 +4,7 @@ from typing import Any
 
 from agents import RunContextWrapper, function_tool
 
+from agent_specification import build_web_search_tool_descriptor
 from context import RequestContext
 
 
@@ -37,6 +38,7 @@ def _update_agent_specification_impl(
     instructions: str | None = None,
     constraints: list[str] | None = None,
     expected_result: str | None = None,
+    web_search: bool | None = None,
 ) -> str:
     specification = state.current_or_new_specification()
     updates: dict[str, Any] = {}
@@ -58,6 +60,14 @@ def _update_agent_specification_impl(
     if cleaned_constraints is not None:
         updates["constraints"] = cleaned_constraints
 
+    if web_search is not None:
+        tools_by_id = {tool.tool_id: tool for tool in specification.tools}
+        if web_search:
+            tools_by_id["web_search"] = build_web_search_tool_descriptor()
+        else:
+            tools_by_id.pop("web_search", None)
+        updates["tools"] = tuple(tools_by_id.values())
+
     updated = replace(specification, **updates).with_validation_status()
     state.update_agent_specification(updated)
     return _specification_response(updated)
@@ -76,6 +86,7 @@ def update_agent_specification(
     instructions: str | None = None,
     constraints: list[str] | None = None,
     expected_result: str | None = None,
+    web_search: bool | None = None,
 ) -> str:
     """
     Deterministically update the draft AgentSpecification from confirmed user
@@ -89,6 +100,7 @@ def update_agent_specification(
         instructions=instructions,
         constraints=constraints,
         expected_result=expected_result,
+        web_search=web_search,
     )
 
 

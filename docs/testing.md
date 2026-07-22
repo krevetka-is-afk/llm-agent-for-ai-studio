@@ -12,7 +12,8 @@ uv run pre-commit run --all-files
 
 Тесты фиксируют runtime entrypoints, Docker/Compose contract, compatibility
 imports, transactional conversation state, явные routing overrides и различие
-между web search и vector RAG, передачу `max_turns`, Telegram
+между web search и vector RAG, добавление/сохранение/удаление публичного
+`web_search` в one-prompt-спецификации, передачу `max_turns`, Telegram
 serialization/secret TTL, UI helpers и отсутствие API-ключа в tool context.
 
 ## Credentialed Yandex AI Studio E2E

@@ -18,3 +18,6 @@ def test_agent_prompts_distinguish_web_search_from_vector_rag() -> None:
     assert "явный отказ пользователя от rag" in coordinator
     assert "web search does not require a vector index" in one_prompt
     assert "do not request knowledge_sources or index_id" in one_prompt
+    assert "web_search=true" in one_prompt
+    assert "web_search=false" in one_prompt
+    assert "keep knowledge_sources empty" in one_prompt

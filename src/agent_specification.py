@@ -6,6 +6,7 @@ from typing import Any
 
 from component_catalog import (
     TemplateId,
+    component_descriptor,
     is_public_application_tool,
     template_required_fields,
 )
@@ -256,6 +257,7 @@ def build_one_prompt_specification(
     inputs: Sequence[str] = (),
     constraints: Sequence[str] = (),
     parameters: Mapping[str, Any] | None = None,
+    web_search: bool = False,
 ) -> AgentSpecification:
     return AgentSpecification(
         template=TemplateId.ONE_PROMPT,
@@ -264,9 +266,20 @@ def build_one_prompt_specification(
         inputs=tuple(inputs),
         instructions=instructions,
         constraints=tuple(constraints),
+        tools=(build_web_search_tool_descriptor(),) if web_search else (),
         expected_result=expected_result,
         parameters=parameters or {},
     ).with_validation_status()
+
+
+def build_web_search_tool_descriptor() -> ToolDescriptor:
+    component = component_descriptor("web_search")
+    return ToolDescriptor(
+        tool_id=component.component_id,
+        title=component.title,
+        description=component.description,
+        parameters=dict(component.parameters or {}),
+    )
 
 
 def build_rag_specification(

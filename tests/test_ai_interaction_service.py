@@ -80,6 +80,7 @@ class FinalizingFakeAgent(FakeAgent):
             purpose="Draft concise support replies",
             instructions="Be concise and do not invent facts.",
             expected_result="Reusable support agent specification",
+            web_search=True,
         )
         kwargs["context"].state.update_agent_specification(specification)
         finalized = kwargs["context"].state.finalize_agent_specification()
@@ -344,6 +345,9 @@ def test_service_commits_and_exports_only_finalized_specification(
     assert len(result.parts) == 1
     assert isinstance(result.parts[0], AgentSpecificationResultPart)
     assert result.parts[0].specification.purpose == "Draft concise support replies"
+    assert [tool.tool_id for tool in result.parts[0].specification.tools] == [
+        "web_search"
+    ]
     assert state.latest_agent_specification == result.parts[0].specification
     assert result.next_state is ConversationOptions.COORDINATOR
     assert state.state is ConversationOptions.COORDINATOR

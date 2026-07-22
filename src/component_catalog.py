@@ -73,8 +73,8 @@ TEMPLATES: dict[TemplateId, TemplateDescriptor] = {
             "an external knowledge base."
         ),
         required_fields=BASE_REQUIRED_FIELDS,
-        optional_fields=("audience", "inputs", "constraints", "parameters"),
-        components=("system_prompt",),
+        optional_fields=("audience", "inputs", "constraints", "parameters", "tools"),
+        components=("system_prompt", "web_search"),
     ),
     TemplateId.RAG: TemplateDescriptor(
         template_id=TemplateId.RAG,
@@ -117,6 +117,13 @@ COMPONENTS: dict[str, ComponentDescriptor] = {
             "It uses the created vector index through its index_id."
         ),
         parameters={"requires": "parameters.index_id"},
+    ),
+    "web_search": ComponentDescriptor(
+        component_id="web_search",
+        kind=ComponentKind.APPLICATION_TOOL,
+        title="Web search",
+        description="Searches the public web for current information.",
+        parameters={"search_context_size": "medium"},
     ),
     "delegate_rag": ComponentDescriptor(
         component_id="delegate_rag",

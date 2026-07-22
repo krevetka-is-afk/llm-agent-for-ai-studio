@@ -106,6 +106,7 @@ def test_ready_finalization_adds_typed_agent_specification() -> None:
         purpose="Draft support replies",
         instructions="Be concise and do not invent facts.",
         expected_result="Reusable support-agent specification",
+        web_search=True,
     )
     run = AgentRunResult(
         text="Спецификация готова.",
@@ -131,6 +132,14 @@ def test_ready_finalization_adds_typed_agent_specification() -> None:
     assert result_part_to_record(parts[0])["specification"]["purpose"] == (
         "Draft support replies"
     )
+    assert result_part_to_record(parts[0])["specification"]["tools"] == [
+        {
+            "description": "Searches the public web for current information.",
+            "parameters": {"search_context_size": "medium"},
+            "title": "Web search",
+            "tool_id": "web_search",
+        }
+    ]
 
 
 def test_incomplete_or_unconfirmed_specification_is_not_exported() -> None:

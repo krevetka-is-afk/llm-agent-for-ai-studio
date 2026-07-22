@@ -46,6 +46,19 @@ index.
 - `rag`: `purpose`, `instructions`, `expected_result`, `knowledge_sources`,
   `tools`.
 
+Правила one-prompt с веб-поиском:
+
+- `web_search` является опциональным публичным tool и добавляется только при
+  подтверждённой потребности в актуальной информации или поиске в интернете;
+- `knowledge_sources` остаётся пустым, поскольку встроенный веб-поиск не требует
+  vector index и не является RAG;
+- повторное обновление черновика без выбора `web_search` сохраняет прежнее
+  значение, а явный отказ удаляет только этот tool;
+- переносимый descriptor использует `tool_id: "web_search"` и безопасный параметр
+  `search_context_size: "medium"`; при выполнении через Yandex Responses API он
+  соответствует built-in tool
+  `{"type": "web_search", "search_context_size": "medium"}`.
+
 Дополнительные RAG-правила:
 
 - среди tools должен быть `knowledge_search`;
@@ -61,6 +74,29 @@ JSON-сериализации.
 артефакт появляется в результате только после успешного
 `finalize_agent_specification`; свободный markdown-текст модели не разбирается
 как источник структурированных полей.
+
+## Пример one-prompt-спецификации с Web Search
+
+```json
+{
+  "schema_version": "1.0",
+  "agent_type": "one_prompt",
+  "template": "one_prompt",
+  "purpose": "Предоставлять пользователю актуальные материалы из интернета",
+  "knowledge_sources": [],
+  "tools": [
+    {
+      "tool_id": "web_search",
+      "title": "Web search",
+      "description": "Searches the public web for current information.",
+      "parameters": {
+        "search_context_size": "medium"
+      }
+    }
+  ],
+  "status": "ready"
+}
+```
 
 ## Пример RAG-спецификации
 
@@ -118,4 +154,5 @@ JSON-сериализации.
   постоянного внешнего хранилища в MVP нет.
 - LLM формулирует уточняющие вопросы по `missing_fields`, но статус готовности
   определяется валидатором приложения и function-tool финализацией.
-- Произвольные внешние tools и marketplace компонентов находятся вне MVP.
+- Произвольные внешние function/MCP tools и marketplace компонентов находятся
+  вне MVP; встроенный `web_search` поддерживается явно.

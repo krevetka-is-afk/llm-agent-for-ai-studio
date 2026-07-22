@@ -10,9 +10,10 @@ agent entity.
 
 Agent Builder — прикладной слой поверх AI Studio, который помогает пользователю
 пройти от естественного запроса к проверяемой конфигурации будущего
-LLM-приложения. AI Studio предоставляет модели, файлы, vector stores и
-API-совместимый интерфейс; Agent Builder управляет пользовательским сценарием,
-валидацией, сборкой результата и экспортом спецификации.
+LLM-приложения. AI Studio предоставляет модели, встроенный Web Search, файлы,
+vector stores и API-совместимый интерфейс; Agent Builder управляет
+пользовательским сценарием, валидацией, сборкой результата и экспортом
+спецификации.
 
 ## Границы MVP
 
@@ -21,6 +22,7 @@ API-совместимый интерфейс; Agent Builder управляет 
 - Streamlit Web UI как основной интерфейс;
 - coordinator для выбора сценария;
 - one-prompt template;
+- опциональный built-in `web_search` для one-prompt;
 - RAG template с загрузкой файлов и созданием vector index;
 - минимальный каталог компонентов;
 - `AgentSpecification` с JSON-экспортом;
@@ -52,7 +54,9 @@ API-совместимый интерфейс; Agent Builder управляет 
 
 Пользователь описывает простое LLM-приложение без базы знаний. Система
 формирует system prompt, создаёт `AgentSpecification` с шаблоном `one_prompt` и
-позволяет скачать JSON.
+позволяет скачать JSON. Если пользователь подтверждает потребность в актуальной
+информации из интернета, спецификация дополнительно получает публичный
+`web_search`; `knowledge_sources` остаётся пустым.
 
 ### UC-02. Создание RAG-агента
 
@@ -90,7 +94,8 @@ UI показывает typed result parts: vector index, agent specification и
 | FR-07 | Система должна валидировать обязательные поля спецификации детерминированно. | Пустая/неполная spec получает `needs_clarification`; валидатор возвращает все `missing_fields`. |
 | FR-08 | RAG-спецификация должна содержать knowledge source и публичный `knowledge_search` tool, связанный с `index_id`. | Полная RAG spec содержит `knowledge_sources`, `parameters.index_id` и `tools[].tool_id == "knowledge_search"` с тем же `index_id`. |
 | FR-09 | Система должна экспортировать спецификацию в JSON без секретов. | UI показывает download button; `to_record()` заменяет значения secret-like parameter keys на `[REDACTED]`, а валидатор не допускает такую spec в статус `ready`. |
-| FR-10 | Внутренние orchestration tools не должны выдаваться за прикладные tools будущего агента. | В catalog/docs `delegate_*`, `finish_dialog`, `create_search_index`, `update_agent_specification` и `finalize_agent_specification` отделены от public `knowledge_search`. |
+| FR-10 | Внутренние orchestration tools не должны выдаваться за прикладные tools будущего агента. | В catalog/docs `delegate_*`, `finish_dialog`, `create_search_index`, `update_agent_specification` и `finalize_agent_specification` отделены от public `knowledge_search` и `web_search`. |
+| FR-11 | One-prompt-спецификация должна отражать подтверждённую потребность в веб-поиске. | `web_search=true` идемпотентно добавляет публичный descriptor с `search_context_size=medium`; `None` сохраняет выбор, `false` удаляет его; `knowledge_sources` остаётся пустым. |
 
 ## Нефункциональные требования
 
@@ -120,6 +125,7 @@ UI показывает typed result parts: vector index, agent specification и
 | FR-08 | `src/custom_agents/tools/vector_index.py`, `src/agent_specification.py` | `tests/test_vector_index.py`, `tests/test_agent_specification_tools.py`, `tests/test_agent_specification.py` |
 | FR-09 | `src/agent_specification.py`, `src/ui/result_view.py` | `tests/test_agent_specification.py`; UI smoke вручную/Streamlit |
 | FR-10 | `src/component_catalog.py`, `docs/component-catalog.md` | `tests/test_agent_specification.py` |
+| FR-11 | `src/custom_agents/one_prompt_agent.py`, `src/custom_agents/tools/agent_specification.py`, `src/agent_specification.py` | `tests/test_prompt_quality.py`, `tests/test_agent_specification_tools.py`, `tests/test_agent_specification.py` |
 | NFR-01 | `src/request_context.py`, `src/agent_specification.py` | `tests/test_context.py`, `tests/test_agent_specification.py` |
 | NFR-02 | `src/ui/chat_flow.py` | `tests/test_ui_helpers.py` |
 | NFR-03 | `src/conversation_state.py`, `src/ai_interaction_service.py` | `tests/test_context_compat.py`, `tests/test_ai_interaction_service.py` |
