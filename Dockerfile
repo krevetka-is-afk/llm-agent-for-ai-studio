@@ -12,6 +12,7 @@ RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked
 
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH=/app
+ENV PYTHONDONTWRITEBYTECODE=1
 
 RUN addgroup --system app \
     && adduser --system --ingroup app app \

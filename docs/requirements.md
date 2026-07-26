@@ -1,10 +1,10 @@
 # Требования к MVP Agent Builder
 
 Документ фиксирует проверяемые требования к MVP Agent Builder для практики.
-Текущий результат MVP — переносимая `AgentSpecification`, system prompt и, для
-RAG-сценария, созданный ресурс vector index в Yandex AI Studio. MVP не является
-полноценным marketplace компонентов и не создаёт отдельную постоянную remote
-agent entity.
+Текущий результат MVP — переносимая `AgentSpecification`, проверяемая
+runtime-конфигурация для Responses API, stateless test run и, для RAG-сценария,
+созданный vector store в Yandex AI Studio. MVP не является полноценным
+marketplace компонентов и не создаёт отдельную постоянную remote agent entity.
 
 ## Цель и место в AI Studio
 
@@ -12,8 +12,8 @@ Agent Builder — прикладной слой поверх AI Studio, кото
 пройти от естественного запроса к проверяемой конфигурации будущего
 LLM-приложения. AI Studio предоставляет модели, встроенный Web Search, файлы,
 vector stores и API-совместимый интерфейс; Agent Builder управляет
-пользовательским сценарием, валидацией, сборкой результата и экспортом
-спецификации.
+пользовательским сценарием, валидацией, сборкой результата, тестовым запуском и
+экспортом спецификации вместе с её исполняемой runtime-конфигурацией.
 
 ## Границы MVP
 
@@ -26,6 +26,10 @@ vector stores и API-совместимый интерфейс; Agent Builder у
 - RAG template с загрузкой файлов и созданием vector index;
 - минимальный каталог компонентов;
 - `AgentSpecification` с JSON-экспортом;
+- строгий импорт сериализованной спецификации и компиляция в runtime config;
+- stateless тестирование готового агента через Responses API;
+- отображение ответа, citations, usage и `response_id`;
+- JSON-экспорт фактически проверенной runtime-конфигурации;
 - детерминированная валидация обязательных полей;
 - локальные tests, lint, typecheck и opt-in credentialed E2E.
 
@@ -36,6 +40,8 @@ vector stores и API-совместимый интерфейс; Agent Builder у
 - постоянное облачное хранилище спецификаций;
 - production OAuth flow;
 - multi-replica coordination;
+- долговременная история тестовых запросов и streaming-ответы;
+- автоматическое восстановление удалённого или истёкшего vector store;
 - создание отдельной remote agent entity сверх system prompt/vector index.
 
 ## Акторы
@@ -43,8 +49,10 @@ vector stores и API-совместимый интерфейс; Agent Builder у
 - Пользователь Agent Builder — формулирует задачу будущего агента, загружает
   файлы и получает результат.
 - Agent Builder application service — маршрутизирует сценарий, запускает
-  агентов, создаёт AI Studio resources и собирает typed result.
-- AI Studio — выполняет model calls, хранит файлы и создаёт vector stores.
+  агентов, создаёт AI Studio resources, собирает typed result, компилирует
+  runtime-конфигурацию и выполняет stateless preview.
+- AI Studio — выполняет model calls и Responses API calls, хранит файлы и
+  создаёт vector stores.
 - Разработчик/проверяющий — запускает tests, анализирует документацию и
   воспроизводит MVP.
 
@@ -54,15 +62,18 @@ vector stores и API-совместимый интерфейс; Agent Builder у
 
 Пользователь описывает простое LLM-приложение без базы знаний. Система
 формирует system prompt, создаёт `AgentSpecification` с шаблоном `one_prompt` и
-позволяет скачать JSON. Если пользователь подтверждает потребность в актуальной
-информации из интернета, спецификация дополнительно получает публичный
-`web_search`; `knowledge_sources` остаётся пустым.
+позволяет проверить агента и скачать оба JSON-представления. Если пользователь
+подтверждает потребность в актуальной информации из интернета, спецификация
+дополнительно получает публичный `web_search`; runtime использует одноимённый
+built-in tool, а `knowledge_sources` остаётся пустым.
 
 ### UC-02. Создание RAG-агента
 
 Пользователь загружает файлы или явно просит RAG/базу знаний. Система загружает
 файлы в AI Studio, создаёт vector index, формирует system prompt,
 `knowledge_search` tool descriptor и экспортируемую `AgentSpecification`.
+Runtime-компилятор преобразует descriptor в built-in `file_search` с тем же
+`vector_store_id`; перед Responses API call ресурс проверяется через preflight.
 
 ### UC-03. Автоматический выбор шаблона
 
@@ -76,10 +87,19 @@ vector stores и API-совместимый интерфейс; Agent Builder у
 Если обязательные поля спецификации отсутствуют, валидатор возвращает полный
 список `missing_fields`, а спецификация получает статус `needs_clarification`.
 
-### UC-05. Проверка и экспорт результата
+### UC-05. Просмотр и экспорт результата
 
 UI показывает typed result parts: vector index, agent specification и markdown.
-Пользователь может скачать `AgentSpecification` как JSON.
+Для готовой спецификации пользователь может открыть JSON и скачать
+`AgentSpecification`.
+
+### UC-06. Stateless-тест готового агента
+
+Пользователь вводит отдельный тестовый запрос в карточке готового агента.
+Система строго восстанавливает спецификацию, компилирует её в runtime config,
+выполняет один Responses API call и показывает ответ, citations, usage и
+`response_id`. Пользователь может открыть и скачать тот же runtime JSON, который
+использовался для запуска. Тест не меняет состояние диалога Agent Builder.
 
 ## Функциональные требования
 
@@ -96,6 +116,11 @@ UI показывает typed result parts: vector index, agent specification и
 | FR-09 | Система должна экспортировать спецификацию в JSON без секретов. | UI показывает download button; `to_record()` заменяет значения secret-like parameter keys на `[REDACTED]`, а валидатор не допускает такую spec в статус `ready`. |
 | FR-10 | Внутренние orchestration tools не должны выдаваться за прикладные tools будущего агента. | В catalog/docs `delegate_*`, `finish_dialog`, `create_search_index`, `update_agent_specification` и `finalize_agent_specification` отделены от public `knowledge_search` и `web_search`. |
 | FR-11 | One-prompt-спецификация должна отражать подтверждённую потребность в веб-поиске. | `web_search=true` идемпотентно добавляет публичный descriptor с `search_context_size=medium`; `None` сохраняет выбор, `false` удаляет его; `knowledge_sources` остаётся пустым. |
+| FR-12 | Система должна строго восстанавливать доменную спецификацию из сериализованной записи перед исполнением. | Неизвестные поля, некорректные типы, неподдерживаемая версия схемы и неготовый статус приводят к контролируемой ошибке до обращения к провайдеру. |
+| FR-13 | Система должна детерминированно компилировать готовую спецификацию в runtime config. | One-prompt без tools создаёт пустой список tools; `web_search` преобразуется в built-in Web Search; `knowledge_search` преобразуется в `file_search` с тем же `index_id`. |
+| FR-14 | Пользователь должен иметь возможность stateless-проверки готового агента. | UI принимает отдельный test prompt, выполняет один Responses API call и показывает output text, citations, usage и `response_id`. |
+| FR-15 | Система должна экспортировать без секретов именно ту runtime-конфигурацию, которая используется для теста. | Test callback и runtime JSON callback используют общий `prepare_agent_runtime()`; экспорт не содержит API key и folder URI. |
+| FR-16 | RAG-runtime должен проверять доступность vector store до генерации ответа. | Для каждого `file_search.vector_store_id` выполняется retrieve; отсутствующий, недоступный или неготовый ресурс возвращает безопасную прикладную ошибку. |
 
 ## Нефункциональные требования
 
@@ -110,6 +135,9 @@ UI показывает typed result parts: vector index, agent specification и
 | NFR-07 | Credentialed E2E не должен запускаться случайно. | Тест помечен `yandex_ai_studio_e2e` и требует explicit env flag. |
 | NFR-08 | MVP должен оставаться малым и проверяемым. | Новые функции реализованы без новых production dependencies и без marketplace scope. |
 | NFR-09 | Внутренний model/tool flow должен иметь ограниченный, настраиваемый бюджет turns. | `ModelConfig.max_turns` передаётся в SDK Runner; значение по умолчанию и production config равны 20. |
+| NFR-10 | Тест готового агента не должен изменять основной диалог или черновик спецификации. | Preview выполняется отдельным application-service method без `ConversationState.commit_from()`. |
+| NFR-11 | Runtime-ошибки и credentials должны оставаться внутри доверенной границы сервиса. | Result view получает callbacks без API key; provider exceptions преобразуются в bounded сообщения без stack trace и secret details. |
+| NFR-12 | Preview должен сохраняться между rerun UI только для неизменённой спецификации. | Результат хранится под ключом карточки и сбрасывается при изменении canonical fingerprint спецификации. |
 
 ## Трассировка
 
@@ -123,15 +151,23 @@ UI показывает typed result parts: vector index, agent specification и
 | FR-06 | `src/agent_specification.py` | `tests/test_agent_specification.py` |
 | FR-07 | `src/agent_specification.py`, `src/component_catalog.py` | `tests/test_agent_specification.py` |
 | FR-08 | `src/custom_agents/tools/vector_index.py`, `src/agent_specification.py` | `tests/test_vector_index.py`, `tests/test_agent_specification_tools.py`, `tests/test_agent_specification.py` |
-| FR-09 | `src/agent_specification.py`, `src/ui/result_view.py` | `tests/test_agent_specification.py`; UI smoke вручную/Streamlit |
+| FR-09 | `src/agent_specification.py`, `src/ui/result_view.py` | `tests/test_agent_specification.py`, `tests/test_ui_smoke.py` |
 | FR-10 | `src/component_catalog.py`, `docs/component-catalog.md` | `tests/test_agent_specification.py` |
 | FR-11 | `src/custom_agents/one_prompt_agent.py`, `src/custom_agents/tools/agent_specification.py`, `src/agent_specification.py` | `tests/test_prompt_quality.py`, `tests/test_agent_specification_tools.py`, `tests/test_agent_specification.py` |
+| FR-12 | `src/agent_specification.py`, `src/agent_runtime.py` | `tests/test_agent_specification.py`, `tests/test_agent_runtime.py` |
+| FR-13 | `src/agent_runtime.py` | `tests/test_agent_runtime.py` |
+| FR-14 | `src/ai_interaction_service.py`, `src/agent_runner.py`, `src/yandex_responses_runner.py`, `src/ui/agent_test_panel.py` | `tests/test_ai_interaction_service.py`, `tests/test_yandex_responses_runner.py`, `tests/test_ui_helpers.py`, `tests/test_ui_smoke.py` |
+| FR-15 | `src/ai_interaction_service.py`, `src/agent_runtime.py`, `src/ui/agent_test_panel.py` | `tests/test_ai_interaction_service.py`, `tests/test_agent_runtime.py`, `tests/test_ui_smoke.py` |
+| FR-16 | `src/yandex_responses_runner.py` | `tests/test_yandex_responses_runner.py`, `tests/e2e/test_yandex_ai_studio_agent_runtime_e2e.py` |
 | NFR-01 | `src/request_context.py`, `src/agent_specification.py` | `tests/test_context.py`, `tests/test_agent_specification.py` |
-| NFR-02 | `src/ui/chat_flow.py` | `tests/test_ui_helpers.py` |
+| NFR-02 | `src/ui/chat_flow.py`, `src/ui/agent_test_panel.py`, `src/yandex_responses_runner.py` | `tests/test_ui_helpers.py`, `tests/test_yandex_responses_runner.py` |
 | NFR-03 | `src/conversation_state.py`, `src/ai_interaction_service.py` | `tests/test_context_compat.py`, `tests/test_ai_interaction_service.py` |
 | NFR-04 | `src/file_security.py`, `src/ui/uploads.py`, `src/ai_interaction_service.py` | `tests/test_upload_file_security.py`, `tests/test_ui_smoke.py` |
 | NFR-05 | `docs/*.md`, `docs/report/*.typ` | Документальная проверка |
 | NFR-06 | `pyproject.toml`, `.pre-commit-config.yaml` | Quality gate commands |
-| NFR-07 | `tests/e2e/test_yandex_ai_studio_rag_e2e.py` | `pytest` skip без env; opt-in запуск с credentials |
+| NFR-07 | `tests/e2e/test_yandex_ai_studio_rag_e2e.py`, `tests/e2e/test_yandex_ai_studio_agent_runtime_e2e.py` | `pytest` skip без env; opt-in запуск с credentials |
 | NFR-08 | `pyproject.toml`, code review | `uv run pytest -q`, `uv run ty check`, dependency diff |
 | NFR-09 | `src/config.py`, `src/custom_agents/base_agent.py`, `config.yaml` | `tests/test_base_agent.py`, `tests/test_config.py` |
+| NFR-10 | `src/ai_interaction_service.py`, `src/ui/chat_flow.py` | `tests/test_ai_interaction_service.py`, `tests/test_ui_smoke.py` |
+| NFR-11 | `src/ui/chat_flow.py`, `src/ui/agent_test_panel.py`, `src/yandex_responses_runner.py` | `tests/test_ui_helpers.py`, `tests/test_yandex_responses_runner.py` |
+| NFR-12 | `src/ui/agent_test_panel.py` | `tests/test_ui_helpers.py`, `tests/test_ui_smoke.py` |

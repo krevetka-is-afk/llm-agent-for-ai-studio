@@ -29,6 +29,15 @@
    `AgentSpecification` из tool executions и рабочего состояния.
 11. Route, draft и latest specification коммитятся только после успешной сборки
     результата.
+12. Для тестового запуска application service строго восстанавливает
+    `AgentSpecification` из result-part записи и повторно вычисляет readiness.
+13. Чистый compiler преобразует доменные `web_search`/`knowledge_search` в
+    provider-neutral `ExecutableAgentConfig` с нативными
+    `web_search`/`file_search`.
+14. `YandexResponsesAgentRunner` добавляет folder ID только при формировании
+    model URI, выполняет Vector Store preflight и вызывает Responses API.
+15. Ответ, citations и usage возвращаются в UI как stateless preview; builder
+    conversation state при этом не изменяется.
 
 ## Границы модулей
 
@@ -42,7 +51,14 @@
 - `component_catalog.py` — каталог шаблонов `one_prompt`/`rag` и компонентов
   `system_prompt`, `web_search`, `vector_index`, `knowledge_search`.
 - `agent_specification.py` — переносимое JSON-описание создаваемого агента,
-  статусы `draft`/`needs_clarification`/`ready` и детерминированная валидация.
+  строгий `from_record()`, статусы `draft`/`needs_clarification`/`ready` и
+  детерминированная валидация.
+- `agent_runtime.py` — чистая компиляция готовой доменной спецификации в
+  версионированный `ExecutableAgentConfig`.
+- `agent_runner.py` — provider-neutral port запуска, preview, citations и
+  безопасная taxonomy runtime-ошибок.
+- `yandex_responses_runner.py` — Responses API adapter, provider model URI,
+  File Search preflight и нормализация ответа.
 - `context.py` — временный compatibility shim для стабильности старых импортов.
 - `ai_interaction_service.py` — application orchestration, uploads, delegation и
   transaction boundary.
@@ -58,7 +74,10 @@ Streamlit entrypoint остаётся `src/ui/app.py`, но детали раз�
 - `attachments.py` — безопасное отображение и скачивание файлов;
 - `result_view.py` — карточки типизированных результатов: vector index,
   AgentSpecification и JSON download;
-- `chat_flow.py` — history, submission и interaction flow.
+- `agent_test_panel.py` — stateless test form, fingerprinted preview, citations,
+  usage и runtime-config download;
+- `chat_flow.py` — history, submission, interaction flow и callback boundary,
+  через которую result view получает запуск без прямого доступа к credentials.
 
 ## Формальная спецификация создаваемого агента
 
@@ -74,6 +93,11 @@ sources, созданный `index_id`, ограничение TTL индекс�
 считается только при пустых `missing_fields` и `issues` и после явного вызова
 `finalize_agent_specification`.
 
+`AgentSpecification` остаётся доменным артефактом, а
+`ExecutableAgentConfig` — отдельным runtime-контрактом. Благодаря этому модель,
+temperature и output budget не смешиваются с подтверждёнными требованиями
+пользователя. Подробнее: [agent-runtime.md](agent-runtime.md).
+
 ## Осознанно отложено
 
 - полный перенос flat modules в единый installable package;
@@ -81,6 +105,8 @@ sources, созданный `index_id`, ограничение TTL индекс�
 - постоянное хранилище Telegram accounts и миграции;
 - интеграция OAuth Gateway в основной credential flow;
 - multi-replica coordination и distributed locks.
+- создание постоянной Agent Atelier entity и возврат `agent_id` до появления
+  подтверждённого публичного API.
 
 Эти изменения не нужны для текущего MVP и расширили бы blast radius перед
 релизом.

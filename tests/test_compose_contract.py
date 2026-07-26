@@ -42,6 +42,10 @@ def test_compose_services_keep_runtime_limits() -> None:
         assert service["mem_limit"] == "1g"
         assert service["pids_limit"] == 256
         assert service["security_opt"] == ["no-new-privileges:true"]
+        assert service["cap_drop"] == ["ALL"]
+        assert service["read_only"] is True
+        assert service["init"] is True
+        assert service["tmpfs"] == ["/tmp:size=64m,mode=1777"]
 
 
 def test_web_env_example_uses_project_local_runtime_paths() -> None:

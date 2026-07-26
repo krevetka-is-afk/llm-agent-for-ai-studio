@@ -12,8 +12,8 @@
 Спецификация закрывает требование практики: подготовить, уточнить, проверить и
 передать структуру создаваемого интеллектуального агента. Текущий MVP не
 создаёт отдельную постоянную remote agent entity в AI Studio; он формирует
-переносимое JSON-описание агента и, для RAG-сценария, создаёт связанный vector
-index.
+переносимое JSON-описание агента, позволяет выполнить его через Responses API
+и, для RAG-сценария, создаёт связанный vector index.
 
 ## Поля
 
@@ -64,6 +64,8 @@ index.
 - среди tools должен быть `knowledge_search`;
 - должен быть хотя бы один knowledge source;
 - `parameters.index_id` должен содержать ID фактически созданного индекса;
+- `knowledge_search.parameters.index_id` должен совпадать с
+  `parameters.index_id`;
 - неизвестные tool-компоненты отклоняются.
 
 Параметры с secret-like ключами (`api_key`, `token`, `secret`, `password`,
@@ -74,6 +76,25 @@ JSON-сериализации.
 артефакт появляется в результате только после успешного
 `finalize_agent_specification`; свободный markdown-текст модели не разбирается
 как источник структурированных полей.
+
+## Восстановление и исполнение
+
+Сохранённая запись считается недоверенным вводом. Перед тестовым запуском
+`AgentSpecification.from_record()`:
+
+- принимает только schema `1.0` и известные поля;
+- проверяет типы вложенных sources, tools и validation issues;
+- требует совпадения `agent_type` и `template`;
+- повторно вычисляет status/validation и сравнивает их с записью;
+- отклоняет неизвестные tools, несовпадающие RAG index IDs и runtime-поля с
+  `[REDACTED]`.
+
+После этого pure compiler создаёт отдельный `ExecutableAgentConfig`. Доменный
+`knowledge_search` становится нативным Responses API `file_search`, а
+`web_search` сохраняется как built-in tool. Runtime model и параметры генерации
+берутся из конфигурации приложения, а не из доменной спецификации.
+
+Полный контракт описан в [agent-runtime.md](agent-runtime.md).
 
 ## Пример one-prompt-спецификации с Web Search
 
@@ -156,3 +177,4 @@ JSON-сериализации.
   определяется валидатором приложения и function-tool финализацией.
 - Произвольные внешние function/MCP tools и marketplace компонентов находятся
   вне MVP; встроенный `web_search` поддерживается явно.
+- Тестовый Responses API запуск stateless и не создаёт постоянный `agent_id`.
