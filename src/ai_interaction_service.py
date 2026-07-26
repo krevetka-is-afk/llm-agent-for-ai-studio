@@ -1,12 +1,30 @@
 import asyncio
+import hashlib
 import logging
 import shutil
+import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from agents import OpenAIProvider, RunConfig
+from agent_runner import (
+    AgentCitation,
+    AgentProviderError,
+    AgentRunPreview,
+    AgentRunner,
+    AgentRunnerError,
+)
+from agent_runtime import (
+    AgentRuntimeCompilationError,
+    compile_agent_specification,
+)
+from agent_specification import (
+    AgentSpecification,
+    InvalidSpecificationRecordError,
+)
 from config import AIServiceConfig
 from context import (
     AIStudioCredentials,
@@ -36,6 +54,7 @@ from result_assembly import (
 )
 from routing import resolve_explicit_route
 from session import get_session
+from yandex_responses_runner import YandexResponsesAgentRunner
 
 
 logger = logging.getLogger(__name__)
@@ -70,6 +89,25 @@ class InteractionResult:
     next_state: ConversationOptions
 
 
+@dataclass(frozen=True)
+class AgentTestRequest:
+    user_id: str
+    credentials: AIStudioCredentials
+    specification_record: Mapping[str, Any]
+    user_input: str
+    request_id: str = field(default_factory=lambda: uuid4().hex)
+
+
+@dataclass(frozen=True)
+class AgentTestResult:
+    response_id: str
+    output_text: str
+    citations: tuple[AgentCitation, ...]
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
+
+
 class UnsupportedConversationStateError(RuntimeError):
     pass
 
@@ -78,8 +116,15 @@ class UploadValidationError(ValueError):
     pass
 
 
+class AgentTestInputError(ValueError):
+    pass
+
+
+AgentRunnerFactory = Callable[[Any, str], AgentRunner]
+
 MAX_ATTACHMENTS_PER_REQUEST = 5
 MAX_TOTAL_UPLOAD_BYTES = 25 * 1024 * 1024
+MAX_AGENT_TEST_INPUT_LENGTH = 10_000
 UPLOAD_RETENTION_POLICY = (
     "User upload directories are request-scoped for model access and are removed "
     "when the user resets the conversation."
@@ -94,6 +139,7 @@ class AIInteractionService:
         rag_agent: Any | None = None,
         one_prompt_agent: Any | None = None,
         coordinator_agent: Any | None = None,
+        agent_runner_factory: AgentRunnerFactory | None = None,
     ):
         self._config = config
         self._rag_agent = rag_agent or build_rag_agent(config.rag_model)
@@ -102,6 +148,9 @@ class AIInteractionService:
         )
         self._coordinator_agent = coordinator_agent or build_coordinator_agent(
             config.consultant
+        )
+        self._agent_runner_factory = (
+            agent_runner_factory or self._build_yandex_agent_runner
         )
         self._result_assembler = ResultAssembler()
 
@@ -140,6 +189,77 @@ class AIInteractionService:
             input="Ответьте ровно: OK",
             max_output_tokens=2,
         )
+
+    async def test_agent_specification(
+        self,
+        request: AgentTestRequest,
+    ) -> AgentTestResult:
+        user_input = request.user_input.strip()
+        if not user_input:
+            raise AgentTestInputError("Agent test input must not be empty")
+        if len(user_input) > MAX_AGENT_TEST_INPUT_LENGTH:
+            raise AgentTestInputError(
+                f"Agent test input exceeds {MAX_AGENT_TEST_INPUT_LENGTH} characters"
+            )
+
+        request_logger = bind_logger(
+            logger,
+            user_id=_pseudonymous_user_id(request.user_id),
+            request_id=request.request_id,
+        )
+        started_at = time.monotonic()
+        try:
+            specification = AgentSpecification.from_record(request.specification_record)
+            executable_config = compile_agent_specification(
+                specification,
+                runtime=self._config.generated_agent_runtime,
+            )
+            native_tool_types = tuple(
+                tool["type"]
+                for tool in executable_config.tools
+                if isinstance(tool.get("type"), str)
+            )
+            request_logger.info(
+                "Generated agent test started template=%s tools=%s",
+                specification.template.value,
+                native_tool_types,
+            )
+            client = get_api_key_client(
+                request.credentials,
+                self._config.connection,
+            )
+            runner = self._agent_runner_factory(
+                client,
+                request.credentials.folder_id,
+            )
+            preview = await asyncio.to_thread(
+                runner.run,
+                executable_config,
+                user_input,
+            )
+        except (
+            InvalidSpecificationRecordError,
+            AgentRuntimeCompilationError,
+            AgentRunnerError,
+        ) as exc:
+            request_logger.warning(
+                "Generated agent test failed category=%s duration_ms=%d",
+                type(exc).__name__,
+                _duration_ms(started_at),
+            )
+            raise
+        except Exception as exc:
+            request_logger.error(
+                "Generated agent test failed category=unexpected duration_ms=%d",
+                _duration_ms(started_at),
+            )
+            raise AgentProviderError() from exc
+        request_logger.info(
+            "Generated agent test completed response_id=%s duration_ms=%d",
+            preview.response_id,
+            _duration_ms(started_at),
+        )
+        return _agent_test_result(preview)
 
     async def interact(self, request: InteractionRequest) -> InteractionResult:
         request_logger = bind_logger(
@@ -402,3 +522,26 @@ class AIInteractionService:
         ):
             collector.consume(event)
         return collector.build()
+
+    @staticmethod
+    def _build_yandex_agent_runner(client: Any, folder_id: str) -> AgentRunner:
+        return YandexResponsesAgentRunner(client, folder_id=folder_id)
+
+
+def _agent_test_result(preview: AgentRunPreview) -> AgentTestResult:
+    return AgentTestResult(
+        response_id=preview.response_id,
+        output_text=preview.output_text,
+        citations=preview.citations,
+        input_tokens=preview.input_tokens,
+        output_tokens=preview.output_tokens,
+        total_tokens=preview.total_tokens,
+    )
+
+
+def _pseudonymous_user_id(user_id: str) -> str:
+    return hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:12]
+
+
+def _duration_ms(started_at: float) -> int:
+    return max(0, round((time.monotonic() - started_at) * 1000))

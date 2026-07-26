@@ -26,6 +26,23 @@ class ModelConfig:
 
 
 @dataclass(frozen=True)
+class AgentRuntimeConfig:
+    model_name: str
+    temperature: float
+    max_output_tokens: int
+
+    def __post_init__(self) -> None:
+        if not self.model_name.strip():
+            raise ValueError("generated agent model_name must not be empty")
+        if not 0 <= self.temperature <= 1:
+            raise ValueError("generated agent temperature must be between 0 and 1")
+        if not 1 <= self.max_output_tokens <= 4096:
+            raise ValueError(
+                "generated agent max_output_tokens must be between 1 and 4096"
+            )
+
+
+@dataclass(frozen=True)
 class PathConfig:
     uploaded_files_dir: Path
 
@@ -55,6 +72,7 @@ class AIServiceConfig:
     rag_model: ModelConfig
     one_prompt: ModelConfig
     consultant: ModelConfig
+    generated_agent_runtime: AgentRuntimeConfig
 
 
 @dataclass(frozen=True)
@@ -96,6 +114,9 @@ def load_config(path: str | Path = "config.yaml") -> AppConfig:
     )
 
     models = _parse_models(_safe_get(raw, "models"), session_db_path)
+    generated_agent_runtime = _parse_agent_runtime(
+        _safe_get(raw, "generated_agent_runtime")
+    )
 
     return AppConfig(
         bot=bot,
@@ -106,6 +127,7 @@ def load_config(path: str | Path = "config.yaml") -> AppConfig:
             rag_model=_safe_get(models, "rag_model"),
             one_prompt=_safe_get(models, "one_prompt"),
             consultant=_safe_get(models, "consultant"),
+            generated_agent_runtime=generated_agent_runtime,
         ),
     )
 
@@ -118,6 +140,9 @@ def load_web_ui_config(path: str | Path = "config.yaml") -> WebUIConfig:
         "CONVERSATION_DB_PATH", raw, "session_db", "path"
     )
     models = _parse_models(_safe_get(raw, "models"), session_db_path)
+    generated_agent_runtime = _parse_agent_runtime(
+        _safe_get(raw, "generated_agent_runtime")
+    )
     return WebUIConfig(
         ai_service=AIServiceConfig(
             paths=PathConfig(
@@ -133,6 +158,7 @@ def load_web_ui_config(path: str | Path = "config.yaml") -> WebUIConfig:
             rag_model=_safe_get(models, "rag_model"),
             one_prompt=_safe_get(models, "one_prompt"),
             consultant=_safe_get(models, "consultant"),
+            generated_agent_runtime=generated_agent_runtime,
         ),
         api_key_store=_load_api_key_store_config(),
     )
@@ -181,6 +207,14 @@ def _parse_models(
         )
 
     return parsed
+
+
+def _parse_agent_runtime(raw: Dict[str, Any]) -> AgentRuntimeConfig:
+    return AgentRuntimeConfig(
+        model_name=_safe_get(raw, "model_name"),
+        temperature=_safe_get(raw, "temperature"),
+        max_output_tokens=_safe_get(raw, "max_output_tokens"),
+    )
 
 
 def _required_env(name: str) -> str:

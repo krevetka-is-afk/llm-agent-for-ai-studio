@@ -8,11 +8,35 @@ from component_catalog import (
     TemplateId,
     component_descriptor,
     is_public_application_tool,
+    template_descriptor,
     template_required_fields,
 )
 
 
 SCHEMA_VERSION = "1.0"
+TOP_LEVEL_RECORD_FIELDS = frozenset(
+    {
+        "schema_version",
+        "agent_type",
+        "template",
+        "purpose",
+        "audience",
+        "inputs",
+        "instructions",
+        "constraints",
+        "knowledge_sources",
+        "tools",
+        "expected_result",
+        "parameters",
+        "status",
+        "validation",
+    }
+)
+KNOWLEDGE_SOURCE_RECORD_FIELDS = frozenset({"source_id", "title", "kind", "reference"})
+TOOL_RECORD_FIELDS = frozenset({"tool_id", "title", "description", "parameters"})
+VALIDATION_RECORD_FIELDS = frozenset({"status", "missing_fields", "issues"})
+VALIDATION_ISSUE_RECORD_FIELDS = frozenset({"field", "message"})
+WEB_SEARCH_CONTEXT_SIZES = frozenset({"low", "medium", "high"})
 SECRET_FIELD_FRAGMENTS = (
     "api_key",
     "apikey",
@@ -45,6 +69,10 @@ class AgentSpecificationStatus(StrEnum):
     DRAFT = "draft"
     NEEDS_CLARIFICATION = "needs_clarification"
     READY = "ready"
+
+
+class InvalidSpecificationRecordError(ValueError):
+    """Raised when serialized specification data violates the schema contract."""
 
 
 @dataclass(frozen=True)
@@ -174,6 +202,80 @@ class AgentSpecification:
     def to_dict(self) -> dict[str, Any]:
         return self.to_record()
 
+    @classmethod
+    def from_record(cls, record: Mapping[str, Any]) -> "AgentSpecification":
+        _require_record_fields(
+            record,
+            allowed=TOP_LEVEL_RECORD_FIELDS,
+            required=TOP_LEVEL_RECORD_FIELDS,
+            path="specification",
+        )
+        schema_version = _require_record_string(
+            record, "schema_version", path="specification"
+        )
+        if schema_version != SCHEMA_VERSION:
+            raise InvalidSpecificationRecordError(
+                f"Unsupported specification schema version: {schema_version!r}"
+            )
+
+        template_value = _require_record_string(
+            record, "template", path="specification"
+        )
+        try:
+            template = TemplateId(template_value)
+        except ValueError as exc:
+            raise InvalidSpecificationRecordError(
+                f"Unknown specification template: {template_value!r}"
+            ) from exc
+        agent_type = _require_record_string(record, "agent_type", path="specification")
+        if agent_type != template.value:
+            raise InvalidSpecificationRecordError(
+                "specification.agent_type must match specification.template"
+            )
+
+        status = _parse_status(
+            _require_record_string(record, "status", path="specification"),
+            path="specification.status",
+        )
+        serialized_validation = _parse_validation_record(
+            _require_record_mapping(record, "validation", path="specification")
+        )
+        specification = cls(
+            template=template,
+            purpose=_require_record_string(record, "purpose", path="specification"),
+            audience=_require_record_string(record, "audience", path="specification"),
+            inputs=_require_record_string_list(record, "inputs", path="specification"),
+            instructions=_require_record_string(
+                record, "instructions", path="specification"
+            ),
+            constraints=_require_record_string_list(
+                record, "constraints", path="specification"
+            ),
+            knowledge_sources=_parse_knowledge_sources(
+                _require_record_list(record, "knowledge_sources", path="specification")
+            ),
+            tools=_parse_tools(
+                _require_record_list(record, "tools", path="specification")
+            ),
+            expected_result=_require_record_string(
+                record, "expected_result", path="specification"
+            ),
+            parameters=_require_json_mapping(
+                record, "parameters", path="specification"
+            ),
+            schema_version=schema_version,
+            status=status,
+        )
+        recomputed_validation = specification.validate()
+        if (
+            status is not recomputed_validation.status
+            or serialized_validation != recomputed_validation
+        ):
+            raise InvalidSpecificationRecordError(
+                "Serialized status or validation does not match recomputed validation"
+            )
+        return specification
+
     def _has_required_value(self, field_name: str) -> bool:
         if field_name == "purpose":
             return _has_text(self.purpose)
@@ -184,7 +286,14 @@ class AgentSpecification:
         if field_name == "knowledge_sources":
             return bool(self.knowledge_sources)
         if field_name == "tools":
-            return any(is_public_application_tool(tool.tool_id) for tool in self.tools)
+            required_tool = (
+                "knowledge_search" if self.template is TemplateId.RAG else None
+            )
+            if required_tool is None:
+                return any(
+                    is_public_application_tool(tool.tool_id) for tool in self.tools
+                )
+            return any(tool.tool_id == required_tool for tool in self.tools)
         if field_name.startswith("parameters."):
             _, key = field_name.split(".", maxsplit=1)
             return _has_value(self.parameters.get(key))
@@ -192,6 +301,7 @@ class AgentSpecification:
 
     def _component_issues(self) -> tuple[ValidationIssue, ...]:
         issues: list[ValidationIssue] = []
+        allowed_components = set(template_descriptor(self.template).components)
         for tool in self.tools:
             if not is_public_application_tool(tool.tool_id):
                 issues.append(
@@ -200,6 +310,46 @@ class AgentSpecification:
                         message="Tool is not a public application tool",
                     )
                 )
+                continue
+            if tool.tool_id not in allowed_components:
+                issues.append(
+                    ValidationIssue(
+                        field=f"tools.{tool.tool_id}",
+                        message="Tool is not supported by the selected template",
+                    )
+                )
+                continue
+            if tool.tool_id == "web_search":
+                search_context_size = tool.parameters.get("search_context_size")
+                if search_context_size not in WEB_SEARCH_CONTEXT_SIZES:
+                    issues.append(
+                        ValidationIssue(
+                            field="tools.web_search.parameters.search_context_size",
+                            message=(
+                                "Web search context size must be low, medium, or high"
+                            ),
+                        )
+                    )
+            if tool.tool_id == "knowledge_search":
+                tool_index_id = tool.parameters.get("index_id")
+                specification_index_id = self.parameters.get("index_id")
+                if not _has_text_value(tool_index_id):
+                    issues.append(
+                        ValidationIssue(
+                            field="tools.knowledge_search.parameters.index_id",
+                            message="Knowledge search requires an index_id",
+                        )
+                    )
+                elif tool_index_id != specification_index_id:
+                    issues.append(
+                        ValidationIssue(
+                            field="tools.knowledge_search.parameters.index_id",
+                            message=(
+                                "Knowledge search index_id must match "
+                                "specification.parameters.index_id"
+                            ),
+                        )
+                    )
         if self.template is TemplateId.ONE_PROMPT and self.knowledge_sources:
             issues.append(
                 ValidationIssue(
@@ -331,6 +481,10 @@ def _has_text(value: str) -> bool:
     return bool(value.strip())
 
 
+def _has_text_value(value: Any) -> bool:
+    return isinstance(value, str) and _has_text(value)
+
+
 def _has_value(value: Any) -> bool:
     if value is None:
         return False
@@ -422,3 +576,186 @@ def _redact_secret_text(value: str) -> str:
 def _is_secret_key(key: str) -> bool:
     key_lower = str(key).lower()
     return any(fragment in key_lower for fragment in SECRET_FIELD_FRAGMENTS)
+
+
+def _require_record_fields(
+    record: Mapping[str, Any],
+    *,
+    allowed: frozenset[str],
+    required: frozenset[str],
+    path: str,
+) -> None:
+    if not isinstance(record, Mapping):
+        raise InvalidSpecificationRecordError(f"{path} must be an object")
+    actual = set(record)
+    non_string_keys = [key for key in actual if not isinstance(key, str)]
+    if non_string_keys:
+        raise InvalidSpecificationRecordError(f"{path} keys must be strings")
+    unknown = actual - allowed
+    if unknown:
+        raise InvalidSpecificationRecordError(
+            f"{path} contains unknown fields: {', '.join(sorted(unknown))}"
+        )
+    missing = required - actual
+    if missing:
+        raise InvalidSpecificationRecordError(
+            f"{path} is missing fields: {', '.join(sorted(missing))}"
+        )
+
+
+def _require_record_string(record: Mapping[str, Any], key: str, *, path: str) -> str:
+    value = record.get(key)
+    if not isinstance(value, str):
+        raise InvalidSpecificationRecordError(f"{path}.{key} must be a string")
+    return value
+
+
+def _require_record_list(
+    record: Mapping[str, Any], key: str, *, path: str
+) -> list[Any]:
+    value = record.get(key)
+    if not isinstance(value, list):
+        raise InvalidSpecificationRecordError(f"{path}.{key} must be an array")
+    return value
+
+
+def _require_record_mapping(
+    record: Mapping[str, Any], key: str, *, path: str
+) -> Mapping[str, Any]:
+    value = record.get(key)
+    if not isinstance(value, Mapping):
+        raise InvalidSpecificationRecordError(f"{path}.{key} must be an object")
+    return value
+
+
+def _require_record_string_list(
+    record: Mapping[str, Any], key: str, *, path: str
+) -> tuple[str, ...]:
+    values = _require_record_list(record, key, path=path)
+    if not all(isinstance(value, str) for value in values):
+        raise InvalidSpecificationRecordError(f"{path}.{key} must contain only strings")
+    return tuple(values)
+
+
+def _require_json_mapping(
+    record: Mapping[str, Any], key: str, *, path: str
+) -> dict[str, Any]:
+    value = _require_record_mapping(record, key, path=path)
+    _validate_json_value(value, path=f"{path}.{key}")
+    return dict(value)
+
+
+def _validate_json_value(value: Any, *, path: str) -> None:
+    if value is None or isinstance(value, str | int | float | bool):
+        return
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            _validate_json_value(item, path=f"{path}[{index}]")
+        return
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise InvalidSpecificationRecordError(
+                    f"{path} object keys must be strings"
+                )
+            _validate_json_value(item, path=f"{path}.{key}")
+        return
+    raise InvalidSpecificationRecordError(f"{path} must contain only JSON values")
+
+
+def _parse_knowledge_sources(values: list[Any]) -> tuple[KnowledgeSource, ...]:
+    sources: list[KnowledgeSource] = []
+    for index, value in enumerate(values):
+        path = f"specification.knowledge_sources[{index}]"
+        if not isinstance(value, Mapping):
+            raise InvalidSpecificationRecordError(f"{path} must be an object")
+        _require_record_fields(
+            value,
+            allowed=KNOWLEDGE_SOURCE_RECORD_FIELDS,
+            required=frozenset({"source_id", "title", "kind"}),
+            path=path,
+        )
+        reference = value.get("reference")
+        if reference is not None and not isinstance(reference, str):
+            raise InvalidSpecificationRecordError(
+                f"{path}.reference must be a string or null"
+            )
+        sources.append(
+            KnowledgeSource(
+                source_id=_require_record_string(value, "source_id", path=path),
+                title=_require_record_string(value, "title", path=path),
+                kind=_require_record_string(value, "kind", path=path),
+                reference=reference,
+            )
+        )
+    return tuple(sources)
+
+
+def _parse_tools(values: list[Any]) -> tuple[ToolDescriptor, ...]:
+    tools: list[ToolDescriptor] = []
+    for index, value in enumerate(values):
+        path = f"specification.tools[{index}]"
+        if not isinstance(value, Mapping):
+            raise InvalidSpecificationRecordError(f"{path} must be an object")
+        _require_record_fields(
+            value,
+            allowed=TOOL_RECORD_FIELDS,
+            required=TOOL_RECORD_FIELDS,
+            path=path,
+        )
+        tools.append(
+            ToolDescriptor(
+                tool_id=_require_record_string(value, "tool_id", path=path),
+                title=_require_record_string(value, "title", path=path),
+                description=_require_record_string(value, "description", path=path),
+                parameters=_require_json_mapping(value, "parameters", path=path),
+            )
+        )
+    return tuple(tools)
+
+
+def _parse_validation_record(record: Mapping[str, Any]) -> ValidationResult:
+    path = "specification.validation"
+    _require_record_fields(
+        record,
+        allowed=VALIDATION_RECORD_FIELDS,
+        required=VALIDATION_RECORD_FIELDS,
+        path=path,
+    )
+    status = _parse_status(
+        _require_record_string(record, "status", path=path),
+        path=f"{path}.status",
+    )
+    missing_fields = _require_record_string_list(record, "missing_fields", path=path)
+    issue_values = _require_record_list(record, "issues", path=path)
+    issues: list[ValidationIssue] = []
+    for index, value in enumerate(issue_values):
+        issue_path = f"{path}.issues[{index}]"
+        if not isinstance(value, Mapping):
+            raise InvalidSpecificationRecordError(f"{issue_path} must be an object")
+        _require_record_fields(
+            value,
+            allowed=VALIDATION_ISSUE_RECORD_FIELDS,
+            required=VALIDATION_ISSUE_RECORD_FIELDS,
+            path=issue_path,
+        )
+        issues.append(
+            ValidationIssue(
+                field=_require_record_string(value, "field", path=issue_path),
+                message=_require_record_string(value, "message", path=issue_path),
+            )
+        )
+    return ValidationResult(
+        status=status,
+        missing_fields=missing_fields,
+        issues=tuple(issues),
+    )
+
+
+def _parse_status(value: str, *, path: str) -> AgentSpecificationStatus:
+    try:
+        return AgentSpecificationStatus(value)
+    except ValueError as exc:
+        raise InvalidSpecificationRecordError(
+            f"{path} has unknown value: {value!r}"
+        ) from exc

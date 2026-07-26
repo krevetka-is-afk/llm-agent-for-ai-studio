@@ -5,16 +5,21 @@ from types import SimpleNamespace
 
 import pytest
 
+from agent_runner import AgentCitation, AgentProviderError, AgentRunPreview
+from agent_runtime import ExecutableAgentConfig
 from agent_specification import AgentSpecification, build_one_prompt_specification
 from component_catalog import TemplateId
 from ai_interaction_service import (
     AIInteractionService,
+    AgentTestInputError,
+    AgentTestRequest,
     Attachment,
     InteractionRequest,
     MAX_ATTACHMENTS_PER_REQUEST,
     UploadValidationError,
 )
 from config import (
+    AgentRuntimeConfig,
     AIServiceConfig,
     ConnectionConfig,
     ModelConfig,
@@ -127,6 +132,26 @@ class FailingFakeAgent(FakeAgent):
         yield
 
 
+class FakeGeneratedAgentRunner:
+    def __init__(
+        self,
+        preview: AgentRunPreview | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self.preview = preview or AgentRunPreview(
+            response_id="resp-1",
+            output_text="Generated answer",
+        )
+        self.error = error
+        self.calls: list[tuple[ExecutableAgentConfig, str]] = []
+
+    def run(self, config: ExecutableAgentConfig, user_input: str) -> AgentRunPreview:
+        self.calls.append((config, user_input))
+        if self.error is not None:
+            raise self.error
+        return self.preview
+
+
 def _service_config(tmp_path: Path) -> AIServiceConfig:
     model = ModelConfig(
         model_name="test-model",
@@ -142,6 +167,11 @@ def _service_config(tmp_path: Path) -> AIServiceConfig:
         rag_model=model,
         one_prompt=model,
         consultant=model,
+        generated_agent_runtime=AgentRuntimeConfig(
+            model_name="test-model",
+            temperature=0.0,
+            max_output_tokens=10,
+        ),
     )
 
 
@@ -711,3 +741,187 @@ def test_reset_conversation_removes_saved_uploads(tmp_path: Path) -> None:
     asyncio.run(service.reset_conversation("42"))
 
     assert not service.user_files_dir("42").exists()
+
+
+def test_service_runs_serialized_specification_without_mutating_builder_state(
+    tmp_path: Path,
+) -> None:
+    preview = AgentRunPreview(
+        response_id="resp-42",
+        output_text="Grounded answer",
+        citations=(
+            AgentCitation(
+                kind="url",
+                title="Source",
+                url="https://example.test/source",
+            ),
+        ),
+        input_tokens=10,
+        output_tokens=5,
+        total_tokens=15,
+    )
+    runner = FakeGeneratedAgentRunner(preview)
+    factory_calls: list[tuple[object, str]] = []
+
+    def runner_factory(client, folder_id: str):
+        factory_calls.append((client, folder_id))
+        return runner
+
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+        agent_runner_factory=runner_factory,
+    )
+    builder_state = ConversationState()
+    existing_specification = build_one_prompt_specification(
+        purpose="Existing builder result",
+        instructions="Keep unchanged.",
+        expected_result="Existing result",
+    )
+    builder_state.update_agent_specification(existing_specification)
+    state_before = builder_state.copy()
+    specification_record = build_one_prompt_specification(
+        purpose="Draft support replies",
+        instructions="Be concise.",
+        expected_result="Reply",
+        web_search=True,
+    ).to_record()
+
+    result = asyncio.run(
+        service.test_agent_specification(
+            AgentTestRequest(
+                user_id="user@example.test",
+                credentials=AIStudioCredentials(
+                    api_key="AQAAAA-secret", folder_id="folder-1"
+                ),
+                specification_record=specification_record,
+                user_input="  Test question  ",
+            )
+        )
+    )
+
+    assert result.response_id == "resp-42"
+    assert result.output_text == "Grounded answer"
+    assert result.citations == preview.citations
+    assert result.total_tokens == 15
+    assert len(factory_calls) == 1
+    assert factory_calls[0][1] == "folder-1"
+    assert len(runner.calls) == 1
+    executable_config, user_input = runner.calls[0]
+    assert user_input == "Test question"
+    assert executable_config.tools == (
+        {"type": "web_search", "search_context_size": "medium"},
+    )
+    assert builder_state.state is state_before.state
+    assert builder_state.agent_specification == state_before.agent_specification
+
+
+def test_service_strictly_parses_specification_before_creating_runner(
+    tmp_path: Path,
+) -> None:
+    factory_calls: list[tuple[object, str]] = []
+
+    def runner_factory(client, folder_id: str):
+        factory_calls.append((client, folder_id))
+        return FakeGeneratedAgentRunner()
+
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+        agent_runner_factory=runner_factory,
+    )
+    malformed_record = build_one_prompt_specification(
+        purpose="Draft replies",
+        instructions="Be concise.",
+        expected_result="Reply",
+    ).to_record()
+    malformed_record["unexpected"] = True
+
+    with pytest.raises(ValueError):
+        asyncio.run(
+            service.test_agent_specification(
+                AgentTestRequest(
+                    user_id="42",
+                    credentials=AIStudioCredentials(
+                        api_key="AQAAAA-secret", folder_id="folder-1"
+                    ),
+                    specification_record=malformed_record,
+                    user_input="Question",
+                )
+            )
+        )
+
+    assert factory_calls == []
+
+
+@pytest.mark.parametrize("user_input", ["", "   ", "x" * 10_001])
+def test_service_rejects_invalid_agent_test_input(
+    tmp_path: Path, user_input: str
+) -> None:
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+        agent_runner_factory=lambda client, folder_id: FakeGeneratedAgentRunner(),
+    )
+
+    with pytest.raises(AgentTestInputError):
+        asyncio.run(
+            service.test_agent_specification(
+                AgentTestRequest(
+                    user_id="42",
+                    credentials=AIStudioCredentials(
+                        api_key="AQAAAA-secret", folder_id="folder-1"
+                    ),
+                    specification_record=build_one_prompt_specification(
+                        purpose="Draft replies",
+                        instructions="Be concise.",
+                        expected_result="Reply",
+                    ).to_record(),
+                    user_input=user_input,
+                )
+            )
+        )
+
+
+def test_service_hides_unexpected_runner_error_details(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    runner = FakeGeneratedAgentRunner(
+        error=RuntimeError("api_key=AQAAAA-secret-provider-body")
+    )
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+        agent_runner_factory=lambda client, folder_id: runner,
+    )
+
+    with pytest.raises(AgentProviderError) as exc_info:
+        asyncio.run(
+            service.test_agent_specification(
+                AgentTestRequest(
+                    user_id="real-user-id",
+                    credentials=AIStudioCredentials(
+                        api_key="AQAAAA-secret", folder_id="folder-1"
+                    ),
+                    specification_record=build_one_prompt_specification(
+                        purpose="Draft replies",
+                        instructions="Be concise.",
+                        expected_result="Reply",
+                    ).to_record(),
+                    user_input="Question",
+                )
+            )
+        )
+
+    assert "secret" not in str(exc_info.value)
+    log_text = "\n".join(record.getMessage() for record in caplog.records)
+    assert "secret-provider-body" not in log_text
+    assert "real-user-id" not in log_text

@@ -1,8 +1,13 @@
 import json
+from copy import deepcopy
+from dataclasses import replace
+
+import pytest
 
 from agent_specification import (
     AgentSpecification,
     AgentSpecificationStatus,
+    InvalidSpecificationRecordError,
     KnowledgeSource,
     ToolDescriptor,
     build_one_prompt_specification,
@@ -130,6 +135,133 @@ def test_complete_rag_specification_contains_public_knowledge_search_tool() -> N
             "parameters": {"index_id": "vs-123", "index_name": "onboarding"},
         }
     ]
+
+
+def test_rag_requires_knowledge_search_instead_of_any_public_tool() -> None:
+    spec = AgentSpecification(
+        template=TemplateId.RAG,
+        purpose="Answer from documents",
+        instructions="Search before answering.",
+        expected_result="Grounded answer",
+        knowledge_sources=(
+            KnowledgeSource("file-1", "guide.pdf", "uploaded_file", "file-1"),
+        ),
+        tools=(
+            ToolDescriptor(
+                tool_id="web_search",
+                title="Web search",
+                description="Search the web",
+                parameters={"search_context_size": "medium"},
+            ),
+        ),
+        parameters={"index_id": "vs-123"},
+    )
+
+    result = spec.validate()
+
+    assert "tools" in result.missing_fields
+    assert any(
+        issue.field == "tools.web_search"
+        and issue.message == "Tool is not supported by the selected template"
+        for issue in result.issues
+    )
+
+
+def test_rag_requires_matching_tool_and_specification_index_ids() -> None:
+    spec = build_rag_specification(
+        purpose="Answer from documents",
+        instructions="Search before answering.",
+        expected_result="Grounded answer",
+        index_id="vs-123",
+        index_name="docs",
+        knowledge_sources=(
+            KnowledgeSource("file-1", "guide.pdf", "uploaded_file", "file-1"),
+        ),
+    )
+    mismatched = replace(
+        spec,
+        tools=(
+            ToolDescriptor(
+                tool_id="knowledge_search",
+                title="Knowledge search",
+                description="Searches the index",
+                parameters={"index_id": "vs-other"},
+            ),
+        ),
+    )
+
+    result = mismatched.validate()
+
+    assert not result.is_ready
+    assert result.issues[0].field == "tools.knowledge_search.parameters.index_id"
+
+
+def test_web_search_rejects_unknown_context_size() -> None:
+    spec = AgentSpecification(
+        template=TemplateId.ONE_PROMPT,
+        purpose="Summarize news",
+        instructions="Search first.",
+        expected_result="Briefing",
+        tools=(
+            ToolDescriptor(
+                tool_id="web_search",
+                title="Web search",
+                description="Search the web",
+                parameters={"search_context_size": "huge"},
+            ),
+        ),
+        status=AgentSpecificationStatus.READY,
+    )
+
+    result = spec.validate()
+
+    assert not result.is_ready
+    assert result.issues[0].field == "tools.web_search.parameters.search_context_size"
+
+
+def test_specification_record_round_trip_is_strict_and_lossless() -> None:
+    original = build_rag_specification(
+        purpose="Отвечать по внутренним документам",
+        instructions="Сначала выполни поиск.",
+        expected_result="Ответ со ссылками",
+        index_id="vs-123",
+        index_name="docs",
+        knowledge_sources=(
+            KnowledgeSource("file-1", "справочник.pdf", "uploaded_file", "file-1"),
+        ),
+        constraints=("Не выдумывай факты.",),
+    )
+    record = original.to_record()
+
+    restored = AgentSpecification.from_record(record)
+
+    assert restored == original
+    assert restored.to_record() == record
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda record: record.update({"unexpected": True}),
+        lambda record: record.update({"schema_version": "2.0"}),
+        lambda record: record.update({"agent_type": "rag"}),
+        lambda record: record.update({"status": "draft"}),
+        lambda record: record["validation"].update({"status": "draft"}),
+        lambda record: record["tools"][0].update({"unexpected": True}),
+    ],
+)
+def test_specification_record_rejects_malformed_data(mutation) -> None:
+    record = build_one_prompt_specification(
+        purpose="Summarize news",
+        instructions="Search first.",
+        expected_result="Briefing",
+        web_search=True,
+    ).to_record()
+    malformed = deepcopy(record)
+    mutation(malformed)
+
+    with pytest.raises(InvalidSpecificationRecordError):
+        AgentSpecification.from_record(malformed)
 
 
 def test_internal_tools_are_not_valid_created_agent_tools() -> None:

@@ -2,7 +2,7 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet
 
-from config import load_config, load_web_ui_config
+from config import AgentRuntimeConfig, load_config, load_web_ui_config
 from experimental.oauth.config import load_oauth_gateway_config
 
 
@@ -65,6 +65,11 @@ def test_web_ui_uses_gateway_without_requiring_telegram_token(monkeypatch) -> No
     assert config.ai_service.consultant.max_turns == 20
     assert config.ai_service.one_prompt.max_turns == 20
     assert config.ai_service.rag_model.max_turns == 20
+    assert config.ai_service.generated_agent_runtime == AgentRuntimeConfig(
+        model_name="gpt-oss-120b",
+        temperature=0.5,
+        max_output_tokens=1000,
+    )
 
 
 def test_runtime_paths_can_be_overridden_from_environment(
@@ -83,6 +88,32 @@ def test_runtime_paths_can_be_overridden_from_environment(
     assert config.ai_service.rag_model.sessions_db_path == conversation_db.resolve()
     assert config.ai_service.one_prompt.sessions_db_path == conversation_db.resolve()
     assert config.ai_service.consultant.sessions_db_path == conversation_db.resolve()
+
+
+def test_generated_agent_runtime_rejects_invalid_bounds() -> None:
+    for invalid_temperature in (-0.1, 1.1):
+        try:
+            AgentRuntimeConfig(
+                model_name="gpt-oss-120b",
+                temperature=invalid_temperature,
+                max_output_tokens=1000,
+            )
+        except ValueError as exc:
+            assert "temperature" in str(exc)
+        else:
+            raise AssertionError("invalid temperature must be rejected")
+
+    for invalid_limit in (0, 4097):
+        try:
+            AgentRuntimeConfig(
+                model_name="gpt-oss-120b",
+                temperature=0.5,
+                max_output_tokens=invalid_limit,
+            )
+        except ValueError as exc:
+            assert "max_output_tokens" in str(exc)
+        else:
+            raise AssertionError("invalid max_output_tokens must be rejected")
 
 
 def test_web_ui_runtime_paths_can_be_overridden_from_environment(

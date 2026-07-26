@@ -11,6 +11,7 @@ import pytest
 import ai_interaction_service as interaction_module
 from ai_interaction_service import AIInteractionService, InteractionRequest
 from config import (
+    AgentRuntimeConfig,
     AIServiceConfig,
     ConnectionConfig,
     ModelConfig,
@@ -65,6 +66,11 @@ def _service_config(tmp_path: Path) -> AIServiceConfig:
         rag_model=model,
         one_prompt=model,
         consultant=model,
+        generated_agent_runtime=AgentRuntimeConfig(
+            model_name=model.model_name,
+            temperature=0.0,
+            max_output_tokens=1000,
+        ),
     )
 
 
