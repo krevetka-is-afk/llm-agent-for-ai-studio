@@ -10,6 +10,8 @@ from streamlit.runtime.uploaded_file_manager import UploadedFile
 
 from ai_interaction_service import (
     AIInteractionService,
+    AgentTestRequest,
+    AgentTestResult,
     Attachment,
     InteractionRequest,
     InteractionResult,
@@ -21,6 +23,7 @@ from custom_agents.tools.vector_index import VectorIndexPollingError
 from logging_config import bind_logger
 from result_assembly import result_part_to_record
 from ui.api_key_store import ApiKeyConnection
+from ui.agent_test_panel import AgentSpecificationActions, AgentTestCallback
 from ui.attachments import render_attachment
 from ui.connection import credentials_from_connection
 from ui.result_view import render_result_parts
@@ -41,7 +44,12 @@ def render_chat(
     connection_id: str,
 ) -> None:
     _initialize_chat_state()
-    _render_history(ai_service, connection_id)
+    agent_actions = build_agent_specification_actions(
+        ai_service,
+        connection,
+        connection_id,
+    )
+    _render_history(ai_service, connection_id, agent_actions)
 
     submission = st.chat_input(
         "Введите сообщение или приложите файлы",
@@ -81,6 +89,7 @@ def render_chat(
         prompt,
         attachments,
         request_id,
+        agent_actions,
     )
 
 
@@ -132,7 +141,11 @@ def _initialize_chat_state() -> None:
         st.session_state.conversation_state = ConversationState()
 
 
-def _render_history(ai_service: AIInteractionService, connection_id: str) -> None:
+def _render_history(
+    ai_service: AIInteractionService,
+    connection_id: str,
+    agent_actions: AgentSpecificationActions,
+) -> None:
     for message_index, message in enumerate(st.session_state.messages):
         with st.chat_message(message["role"]):
             result_parts = message.get("result_parts")
@@ -143,7 +156,11 @@ def _render_history(ai_service: AIInteractionService, connection_id: str) -> Non
                     if isinstance(message_id, str)
                     else f"legacy-message-{message_index}"
                 )
-                render_result_parts(result_parts, key_prefix=key_prefix)
+                render_result_parts(
+                    result_parts,
+                    key_prefix=key_prefix,
+                    agent_actions=agent_actions,
+                )
             else:
                 st.markdown(message["content"])
             attachments = message.get("attachments")
@@ -224,6 +241,7 @@ def _append_and_render_assistant_message(
     prompt: str,
     attachments: tuple[Attachment, ...],
     request_id: str,
+    agent_actions: AgentSpecificationActions,
 ) -> None:
     assistant_message_id = f"{request_id}-assistant"
     with st.chat_message("assistant"):
@@ -245,6 +263,7 @@ def _append_and_render_assistant_message(
                 render_result_parts(
                     result_parts,
                     key_prefix=assistant_message_id,
+                    agent_actions=agent_actions,
                 )
             else:
                 st.markdown(answer_text)
@@ -300,3 +319,38 @@ def _request_answer(
 
 def _run_async(awaitable: Coroutine[Any, Any, T]) -> T:
     return asyncio.run(awaitable)
+
+
+def build_agent_specification_actions(
+    ai_service: AIInteractionService,
+    connection: ApiKeyConnection | None,
+    connection_id: str,
+) -> AgentSpecificationActions:
+    test_callback: AgentTestCallback | None = None
+    if connection is not None:
+
+        def run_agent_test(
+            specification: Mapping[str, Any],
+            user_input: str,
+            request_id: str,
+        ) -> AgentTestResult:
+            return _run_async(
+                ai_service.test_agent_specification(
+                    AgentTestRequest(
+                        user_id=connection_id,
+                        credentials=credentials_from_connection(connection),
+                        specification_record=specification,
+                        user_input=user_input,
+                        request_id=request_id,
+                    )
+                )
+            )
+
+        test_callback = run_agent_test
+
+    return AgentSpecificationActions(
+        runtime_config_json=lambda specification: ai_service.prepare_agent_runtime(
+            specification
+        ).to_json(),
+        test_agent=test_callback,
+    )

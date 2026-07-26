@@ -50,6 +50,120 @@ render_result_parts([specification], key_prefix="second-assistant")
     assert not app.exception
 
 
+def test_result_view_renders_independent_agent_test_panels_and_persists_preview() -> (
+    None
+):
+    app = AppTest.from_string(
+        """
+from ai_interaction_service import AgentTestResult
+from ui.agent_test_panel import AgentSpecificationActions
+from ui.result_view import render_result_parts
+
+def runtime_json(specification):
+    return '{"schema_version":"1.0","model_name":"test-model"}'
+
+def test_agent(specification, user_input, request_id):
+    return AgentTestResult(
+        response_id="resp-test",
+        output_text=f"Ответ: {user_input}",
+        citations=(),
+        total_tokens=7,
+    )
+
+actions = AgentSpecificationActions(
+    runtime_config_json=runtime_json,
+    test_agent=test_agent,
+)
+specification = {
+    "kind": "agent_specification",
+    "specification": {
+        "template": "one_prompt",
+        "status": "ready",
+    },
+}
+render_result_parts(
+    [specification],
+    key_prefix="first-assistant",
+    agent_actions=actions,
+)
+render_result_parts(
+    [specification],
+    key_prefix="second-assistant",
+    agent_actions=actions,
+)
+"""
+    ).run()
+
+    assert not app.exception
+    assert len(app.text_area) == 2
+    assert len(app.button) == 2
+
+    app.text_area[0].set_value("Проверочный запрос")
+    app.button[0].click()
+    app.run()
+
+    assert not app.exception
+    assert any("Ответ: Проверочный запрос" in element.value for element in app.markdown)
+    assert any("Токены — всего: 7" in element.value for element in app.caption)
+
+
+def test_result_view_hides_test_action_when_disconnected() -> None:
+    app = AppTest.from_string(
+        """
+from ui.agent_test_panel import AgentSpecificationActions
+from ui.result_view import render_result_parts
+
+actions = AgentSpecificationActions(
+    runtime_config_json=lambda specification: '{"schema_version":"1.0"}',
+)
+render_result_parts(
+    [{
+        "kind": "agent_specification",
+        "specification": {"template": "one_prompt", "status": "ready"},
+    }],
+    key_prefix="disconnected",
+    agent_actions=actions,
+)
+"""
+    ).run()
+
+    assert not app.exception
+    assert len(app.text_area) == 0
+    assert len(app.button) == 0
+    assert any("Подключитесь к AI Studio" in element.value for element in app.info)
+
+
+def test_result_view_keeps_json_card_but_hides_runtime_for_malformed_spec() -> None:
+    app = AppTest.from_string(
+        """
+from ui.agent_test_panel import AgentSpecificationActions
+from ui.result_view import render_result_parts
+
+def reject_runtime(specification):
+    raise ValueError("raw malformed details")
+
+render_result_parts(
+    [{
+        "kind": "agent_specification",
+        "specification": {"template": "rag", "status": "ready"},
+    }],
+    key_prefix="malformed",
+    agent_actions=AgentSpecificationActions(
+        runtime_config_json=reject_runtime,
+        test_agent=lambda specification, user_input, request_id: None,
+    ),
+)
+"""
+    ).run()
+
+    assert not app.exception
+    assert len(app.text_area) == 0
+    assert any(
+        "несовместима с текущим runtime" in element.value for element in app.warning
+    )
+    assert all("raw malformed details" not in element.value for element in app.warning)
+
+
 def _upload(name: str, size: int) -> SimpleNamespace:
     return SimpleNamespace(name=name, size=size)
 

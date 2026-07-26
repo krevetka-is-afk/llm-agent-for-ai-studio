@@ -814,6 +814,10 @@ def test_service_runs_serialized_specification_without_mutating_builder_state(
     assert executable_config.tools == (
         {"type": "web_search", "search_context_size": "medium"},
     )
+    exported_config = service.prepare_agent_runtime(specification_record)
+    assert exported_config == executable_config
+    assert "folder-1" not in exported_config.to_json()
+    assert "AQAAAA-secret" not in exported_config.to_json()
     assert builder_state.state is state_before.state
     assert builder_state.agent_specification == state_before.agent_specification
 

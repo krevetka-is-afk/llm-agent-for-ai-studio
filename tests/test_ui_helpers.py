@@ -1,9 +1,25 @@
 import json
 from types import SimpleNamespace
+from typing import Any, cast
 
-from ai_interaction_service import Attachment, UploadValidationError
+from agent_runner import AgentProviderError, VectorStoreUnavailableError
+from ai_interaction_service import (
+    AIInteractionService,
+    AgentTestInputError,
+    AgentTestRequest,
+    AgentTestResult,
+    Attachment,
+    UploadValidationError,
+)
+from ui.api_key_store import ApiKeyConnection
+from ui.agent_test_panel import (
+    agent_test_error_message,
+    preview_state_key,
+    specification_fingerprint,
+)
 from ui.attachments import preview_kind_for_mime
 from ui.chat_flow import build_user_content, interaction_error_message
+from ui.chat_flow import build_agent_specification_actions
 from ui.result_view import agent_specification_json
 from ui.uploads import attachment_record
 
@@ -52,3 +68,76 @@ def test_agent_specification_json_preserves_unicode_and_nested_fields() -> None:
 
     assert "Помощник службы поддержки" in payload
     assert json.loads(payload)["template"] == "one_prompt"
+
+
+def test_agent_specification_fingerprint_is_canonical_and_content_sensitive() -> None:
+    first = {"template": "one_prompt", "parameters": {"a": 1, "b": 2}}
+    reordered = {"parameters": {"b": 2, "a": 1}, "template": "one_prompt"}
+    changed = {"template": "one_prompt", "parameters": {"a": 1, "b": 3}}
+
+    assert specification_fingerprint(first) == specification_fingerprint(reordered)
+    assert specification_fingerprint(first) != specification_fingerprint(changed)
+    assert preview_state_key("message-1") != preview_state_key("message-2")
+
+
+def test_agent_test_errors_are_bounded_and_actionable() -> None:
+    unavailable = VectorStoreUnavailableError("vs-secret", "expired")
+
+    assert agent_test_error_message(unavailable) == (
+        "Индекс недоступен или истёк. Пересоздайте RAG-конфигурацию."
+    )
+    assert "vs-secret" not in agent_test_error_message(unavailable)
+    assert agent_test_error_message(AgentProviderError()) == (
+        "AI Studio отклонил запуск агента. Проверьте подключение и права."
+    )
+    assert agent_test_error_message(AgentTestInputError("Введите запрос")) == (
+        "Введите запрос"
+    )
+    assert "secret" not in agent_test_error_message(
+        RuntimeError("api_key=secret-provider-body")
+    )
+
+
+def test_chat_flow_builds_callbacks_without_exposing_connection_to_result_view() -> (
+    None
+):
+    class FakeService:
+        def __init__(self) -> None:
+            self.test_request: AgentTestRequest | None = None
+
+        def prepare_agent_runtime(self, specification):
+            return SimpleNamespace(to_json=lambda: '{"model_name":"test-model"}')
+
+        async def test_agent_specification(self, request):
+            self.test_request = request
+            return AgentTestResult(
+                response_id="resp-1",
+                output_text="Answer",
+                citations=(),
+            )
+
+    service = FakeService()
+    disconnected = build_agent_specification_actions(
+        cast(AIInteractionService, cast(Any, service)),
+        None,
+        "web-user",
+    )
+    assert disconnected.test_agent is None
+    assert json.loads(disconnected.runtime_config_json({})) == {
+        "model_name": "test-model"
+    }
+
+    connected = build_agent_specification_actions(
+        cast(AIInteractionService, cast(Any, service)),
+        ApiKeyConnection(api_key="AQAAAA-secret", folder_id="folder-1"),
+        "web-user",
+    )
+    assert connected.test_agent is not None
+
+    result = connected.test_agent({}, "Question", "request-1")
+
+    assert result.output_text == "Answer"
+    assert service.test_request is not None
+    assert service.test_request.user_id == "web-user"
+    assert service.test_request.request_id == "request-1"
+    assert service.test_request.credentials.folder_id == "folder-1"

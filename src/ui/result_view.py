@@ -4,8 +4,18 @@ from typing import Any, cast
 
 import streamlit as st
 
+from ui.agent_test_panel import (
+    AgentSpecificationActions,
+    render_agent_test_panel,
+)
 
-def render_result_parts(parts: Sequence[Any], *, key_prefix: str) -> None:
+
+def render_result_parts(
+    parts: Sequence[Any],
+    *,
+    key_prefix: str,
+    agent_actions: AgentSpecificationActions | None = None,
+) -> None:
     for part_index, raw_part in enumerate(parts):
         if not isinstance(raw_part, Mapping):
             continue
@@ -17,6 +27,8 @@ def render_result_parts(parts: Sequence[Any], *, key_prefix: str) -> None:
             render_agent_specification_result(
                 part,
                 download_key=f"{key_prefix}-agent-specification-{part_index}",
+                panel_key=f"{key_prefix}-agent-test-{part_index}",
+                actions=agent_actions,
             )
         elif kind == "markdown":
             text = part.get("text")
@@ -28,6 +40,8 @@ def render_agent_specification_result(
     part: Mapping[str, Any],
     *,
     download_key: str,
+    panel_key: str,
+    actions: AgentSpecificationActions | None,
 ) -> None:
     specification = part.get("specification")
     if not isinstance(specification, Mapping):
@@ -63,6 +77,12 @@ def render_agent_specification_result(
             mime="application/json",
             key=download_key,
         )
+        if actions is not None:
+            render_agent_test_panel(
+                spec,
+                key_prefix=panel_key,
+                actions=actions,
+            )
 
 
 def agent_specification_json(specification: Mapping[str, Any]) -> str:

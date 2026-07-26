@@ -8,6 +8,7 @@ from openai import OpenAIError
 from ai_interaction_service import AIInteractionService
 from context import AIStudioCredentials, ConversationState
 from ui.api_key_store import ApiKeyConnection, ApiKeyStoreError, EncryptedApiKeyStore
+from ui.agent_test_panel import clear_agent_test_previews
 
 
 AI_STUDIO_URL = "https://aistudio.yandex.ru/"
@@ -124,6 +125,7 @@ def _render_connection_guide() -> None:
 def reset_chat(ai_service: AIInteractionService, user_id: str) -> None:
     st.session_state.messages = []
     st.session_state.conversation_state = ConversationState()
+    clear_agent_test_previews()
     _run_async(ai_service.reset_conversation(user_id))
 
 

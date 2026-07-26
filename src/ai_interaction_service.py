@@ -19,6 +19,7 @@ from agent_runner import (
 )
 from agent_runtime import (
     AgentRuntimeCompilationError,
+    ExecutableAgentConfig,
     compile_agent_specification,
 )
 from agent_specification import (
@@ -210,9 +211,9 @@ class AIInteractionService:
         started_at = time.monotonic()
         try:
             specification = AgentSpecification.from_record(request.specification_record)
-            executable_config = compile_agent_specification(
-                specification,
-                runtime=self._config.generated_agent_runtime,
+            executable_config = self.prepare_agent_runtime(
+                request.specification_record,
+                specification=specification,
             )
             native_tool_types = tuple(
                 tool["type"]
@@ -260,6 +261,20 @@ class AIInteractionService:
             _duration_ms(started_at),
         )
         return _agent_test_result(preview)
+
+    def prepare_agent_runtime(
+        self,
+        specification_record: Mapping[str, Any],
+        *,
+        specification: AgentSpecification | None = None,
+    ) -> ExecutableAgentConfig:
+        trusted_specification = specification or AgentSpecification.from_record(
+            specification_record
+        )
+        return compile_agent_specification(
+            trusted_specification,
+            runtime=self._config.generated_agent_runtime,
+        )
 
     async def interact(self, request: InteractionRequest) -> InteractionResult:
         request_logger = bind_logger(

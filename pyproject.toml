@@ -31,4 +31,5 @@ testpaths = ["tests"]
 pythonpath = [".", "src"]
 markers = [
     "yandex_ai_studio_e2e: opt-in credentialed tests that call Yandex AI Studio",
+    "yandex_ai_studio_web_search_e2e: quota-sensitive Web Search E2E",
 ]
