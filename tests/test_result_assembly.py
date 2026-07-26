@@ -29,9 +29,7 @@ def test_collector_pairs_tool_call_with_its_authoritative_output() -> None:
                 raw_item={
                     "call_id": "call-1",
                     "name": "create_search_index",
-                    "arguments": (
-                        '{"file_ids":["file-1"],"vector_store_name":"knowledge"}'
-                    ),
+                    "arguments": '{"vector_store_name":"knowledge"}',
                 }
             ),
         )
@@ -53,10 +51,7 @@ def test_collector_pairs_tool_call_with_its_authoritative_output() -> None:
         ToolExecution(
             call_id="call-1",
             name="create_search_index",
-            arguments={
-                "file_ids": ["file-1"],
-                "vector_store_name": "knowledge",
-            },
+            arguments={"vector_store_name": "knowledge"},
             output="index-1",
         ),
     )
@@ -69,11 +64,15 @@ def test_rag_result_contains_typed_index_and_model_markdown() -> None:
             ToolExecution(
                 call_id="call-1",
                 name="create_search_index",
-                arguments={
-                    "file_ids": ["file-1", "file-2"],
-                    "vector_store_name": "knowledge",
-                },
-                output="index-1",
+                arguments={"vector_store_name": "knowledge"},
+                output=json.dumps(
+                    {
+                        "status": "created",
+                        "index_id": "index-1",
+                        "index_name": "knowledge",
+                        "file_ids": ["file-1", "file-2"],
+                    }
+                ),
             ),
         ),
     )
@@ -99,6 +98,31 @@ def test_rag_result_contains_typed_index_and_model_markdown() -> None:
     assert "ID индекса: index-1" in rendered
     assert "1. guide.pdf (file_id: file-1)" in rendered
     assert "Текст промпта" in rendered
+
+
+def test_rag_result_ignores_failed_tool_output_as_index_id() -> None:
+    run = AgentRunResult(
+        text="Загрузите файл ещё раз.",
+        tool_executions=(
+            ToolExecution(
+                call_id="call-1",
+                name="create_search_index",
+                arguments={"vector_store_name": "knowledge"},
+                output=(
+                    "An error occurred while running the tool. Please try again. "
+                    "Error: Vector index file IDs must come from the current request"
+                ),
+            ),
+        ),
+    )
+
+    parts = ResultAssembler().assemble(
+        run,
+        ConversationOptions.RAG,
+        {"file-1": "guide.pdf"},
+    )
+
+    assert parts == (MarkdownResultPart(text=run.text),)
 
 
 def test_ready_finalization_adds_typed_agent_specification() -> None:

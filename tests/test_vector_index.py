@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from typing import Any
 
@@ -143,21 +144,79 @@ def test_unknown_status_raises_bounded_typed_error() -> None:
     assert client.vector_stores.retrieve_calls == ["vs_unknown"]
 
 
-def test_file_ids_must_belong_to_current_request() -> None:
-    allowed = frozenset({"file_1", "file_2"})
+def test_tool_uses_only_server_managed_pending_files() -> None:
+    client = FakeClient(["completed"])
+    state = ConversationState(ConversationOptions.RAG)
+    state.register_pending_files(
+        {
+            "file_1": "guide.pdf",
+            "file_2": "faq.txt",
+        }
+    )
 
-    vector_index._validate_authorized_file_ids(["file_1"], allowed)
+    output = json.loads(
+        vector_index._create_search_index_for_context(
+            make_ctx(client, state),
+            "knowledge",
+        )
+    )
 
-    with pytest.raises(vector_index.VectorIndexAuthorizationError):
-        vector_index._validate_authorized_file_ids(["file_other"], allowed)
-    with pytest.raises(vector_index.VectorIndexAuthorizationError):
-        vector_index._validate_authorized_file_ids([], allowed)
-    with pytest.raises(vector_index.VectorIndexAuthorizationError):
-        vector_index._validate_authorized_file_ids(["file_1", "file_1"], allowed)
+    assert output == {
+        "status": "created",
+        "index_id": "vs_123",
+        "index_name": "knowledge",
+        "file_ids": ["file_1", "file_2"],
+    }
+    assert client.vector_stores.create_kwargs is not None
+    assert client.vector_stores.create_kwargs["file_ids"] == ["file_1", "file_2"]
+    assert state.pending_file_ids == ()
 
 
-def test_tool_schema_stays_compatible_for_agent() -> None:
+def test_tool_returns_controlled_status_when_no_files_are_available() -> None:
+    client = FakeClient()
+    state = ConversationState(ConversationOptions.RAG)
+
+    output = json.loads(
+        vector_index._create_search_index_for_context(
+            make_ctx(client, state),
+            "knowledge",
+        )
+    )
+
+    assert output["status"] == "needs_files"
+    assert client.vector_stores.create_kwargs is None
+
+
+def test_tool_reuses_attached_index_instead_of_recreating_it() -> None:
+    client = FakeClient()
+    state = ConversationState(ConversationOptions.RAG)
+    state.attach_vector_index(
+        index_id="vs_existing",
+        index_name="knowledge",
+        file_ids=("file_1",),
+    )
+
+    output = json.loads(
+        vector_index._create_search_index_for_context(
+            make_ctx(client, state),
+            "knowledge",
+        )
+    )
+
+    assert output == {
+        "status": "exists",
+        "index_id": "vs_existing",
+        "index_name": "knowledge",
+        "file_ids": ["file_1"],
+    }
+    assert client.vector_stores.create_kwargs is None
+
+
+def test_tool_schema_does_not_expose_server_managed_file_ids() -> None:
     assert vector_index.create_search_index.params_json_schema["required"] == [
-        "file_ids",
         "vector_store_name",
     ]
+    assert (
+        "file_ids"
+        not in vector_index.create_search_index.params_json_schema["properties"]
+    )

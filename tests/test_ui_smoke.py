@@ -11,6 +11,11 @@ from ai_interaction_service import (
     UploadValidationError,
 )
 from custom_agents.tools.upload_files import MAX_UPLOAD_BYTES
+from ui.agent_test_panel import (
+    RESPONSE_ID_HELP,
+    TEST_INPUT_HELP,
+    TOTAL_TOKENS_HELP,
+)
 from ui.app import _attachment_record, _validate_uploaded_files
 from ai_interaction_service import Attachment
 
@@ -28,6 +33,8 @@ def test_web_ui_starts_in_disconnected_state(tmp_path: Path, monkeypatch) -> Non
     assert app.chat_input[0].disabled
     assert app.text_input[0].label == "ID каталога"
     assert app.text_input[1].label == "API-ключ"
+    assert any(element.value == "После создания" for element in app.subheader)
+    assert any("Куда идти с результатом?" in element.label for element in app.expander)
 
 
 def test_result_view_renders_multiple_agent_downloads_without_id_collision() -> None:
@@ -97,6 +104,7 @@ render_result_parts(
     assert not app.exception
     assert len(app.text_area) == 2
     assert len(app.button) == 2
+    assert app.text_area[0].help == TEST_INPUT_HELP
 
     app.text_area[0].set_value("Проверочный запрос")
     app.button[0].click()
@@ -104,7 +112,23 @@ render_result_parts(
 
     assert not app.exception
     assert any("Ответ: Проверочный запрос" in element.value for element in app.markdown)
-    assert any("Токены — всего: 7" in element.value for element in app.caption)
+    assert any(
+        element.label == "Всего токенов"
+        and element.value == "7"
+        and element.help == TOTAL_TOKENS_HELP
+        for element in app.metric
+    )
+    assert any(
+        "Агент проверен. Что делать дальше?" in element.value
+        for element in app.markdown
+    )
+    assert any(
+        element.label == "Идентификатор тестового ответа" for element in app.expander
+    )
+    assert any(
+        element.value == "**Response ID**" and element.help == RESPONSE_ID_HELP
+        for element in app.markdown
+    )
 
 
 def test_result_view_hides_test_action_when_disconnected() -> None:

@@ -16,9 +16,36 @@ from agent_runner import (
 from agent_runtime import AgentRuntimeCompilationError
 from agent_specification import InvalidSpecificationRecordError
 from ai_interaction_service import AgentTestInputError, AgentTestResult
+from ui.user_guidance import render_agent_next_steps
 
 
 PREVIEW_STATE_PREFIX = "agent-test-preview:"
+TEST_INPUT_HELP = (
+    "Отдельный вопрос для проверки уже собранного агента. Он не изменяет "
+    "инструкцию или основной диалог Agent Builder."
+)
+SOURCES_HELP = (
+    "Ссылки или файлы, которые Web Search или File Search использовал при "
+    "подготовке ответа."
+)
+INPUT_TOKENS_HELP = (
+    "Объём инструкции, пользовательского вопроса и дополнительного контекста, "
+    "отправленных модели."
+)
+OUTPUT_TOKENS_HELP = "Объём ответа, сгенерированного моделью."
+TOTAL_TOKENS_HELP = (
+    "Суммарное потребление токенов за этот тестовый запрос. Оно помогает "
+    "оценивать лимиты и расходы."
+)
+RESPONSE_ID_HELP = (
+    "Уникальный ID одного тестового обращения к Responses API. Он нужен для "
+    "поиска запроса в логах и диагностики. Это не ID постоянного агента."
+)
+RUNTIME_CONFIG_HELP = (
+    "Точная конфигурация, использованная для теста: модель, инструкция, "
+    "инструменты и параметры генерации. API-ключ, folder ID и тестовый вопрос "
+    "в файл не входят."
+)
 
 RuntimeConfigCallback = Callable[[Mapping[str, Any]], str]
 AgentTestCallback = Callable[
@@ -86,10 +113,15 @@ def render_agent_test_panel(
                 "Тестовый запрос к агенту",
                 key=f"{key_prefix}-agent-test-input",
                 max_chars=10_000,
+                help=TEST_INPUT_HELP,
             )
             submitted = st.form_submit_button(
                 "Протестировать агента",
                 type="primary",
+                help=(
+                    "Выполняет один stateless-запрос к Responses API с текущими "
+                    "настройками агента."
+                ),
             )
         if submitted:
             if not user_input.strip():
@@ -113,15 +145,28 @@ def render_agent_test_panel(
 
     if isinstance(cached_preview, AgentPreviewState):
         render_agent_preview(cached_preview.result)
+        render_agent_next_steps(
+            specification,
+            runtime_json,
+            key_prefix=key_prefix,
+        )
 
-    with st.expander("Расширенные настройки", expanded=False):
-        st.caption("Поле input задаётся приложением отдельно при каждом запуске.")
+    with st.expander("Технический экспорт", expanded=False):
+        st.markdown(
+            "**Конфигурация Responses API**",
+            help=RUNTIME_CONFIG_HELP,
+        )
+        st.caption(
+            "Поле `input` задаётся отдельно при каждом запуске. "
+            "Секреты и ID каталога не экспортируются."
+        )
         st.download_button(
-            "Скачать Responses API config",
+            "Скачать Responses API config (.json)",
             data=runtime_json,
             file_name="responses-agent-config.json",
             mime="application/json",
             key=f"{key_prefix}-runtime-config-download",
+            help=RUNTIME_CONFIG_HELP,
         )
 
 
@@ -133,7 +178,7 @@ def render_agent_preview(result: AgentTestResult | AgentRunPreview) -> None:
         st.info("Агент завершил запрос без текстового ответа.")
 
     if result.citations:
-        st.markdown("**Источники**")
+        st.markdown("**Источники ответа**", help=SOURCES_HELP)
         for number, citation in enumerate(result.citations, start=1):
             title = (
                 citation.title or citation.filename or citation.file_id or "Источник"
@@ -144,17 +189,43 @@ def render_agent_preview(result: AgentTestResult | AgentRunPreview) -> None:
                 + (f" — {reference}" if reference and reference != title else "")
             )
 
-    token_parts = [
-        f"вход: {result.input_tokens}" if result.input_tokens is not None else None,
-        f"выход: {result.output_tokens}" if result.output_tokens is not None else None,
-        f"всего: {result.total_tokens}" if result.total_tokens is not None else None,
+    token_metrics = [
+        ("Входные токены", result.input_tokens, INPUT_TOKENS_HELP),
+        ("Токены ответа", result.output_tokens, OUTPUT_TOKENS_HELP),
+        ("Всего токенов", result.total_tokens, TOTAL_TOKENS_HELP),
     ]
-    visible_token_parts = [part for part in token_parts if part is not None]
-    if visible_token_parts:
-        st.caption("Токены — " + ", ".join(visible_token_parts))
+    visible_token_metrics = [
+        metric for metric in token_metrics if metric[1] is not None
+    ]
+    if visible_token_metrics:
+        st.markdown(
+            "**Использование токенов**",
+            help=(
+                "Токены — условные части текста, по которым считаются лимиты "
+                "модели и потребление API."
+            ),
+        )
+        columns = st.columns(len(visible_token_metrics))
+        for column, (label, value, help_text) in zip(
+            columns,
+            visible_token_metrics,
+            strict=True,
+        ):
+            with column:
+                st.metric(
+                    label,
+                    value,
+                    help=help_text,
+                    border=True,
+                )
 
-    with st.expander("Технические детали", expanded=False):
+    with st.expander("Идентификатор тестового ответа", expanded=False):
+        st.markdown("**Response ID**", help=RESPONSE_ID_HELP)
         st.code(result.response_id or "не предоставлен", language=None)
+        st.caption(
+            "Идентификатор нужен для логов и диагностики. "
+            "Это не `agent_id` и не постоянный диалог."
+        )
 
 
 def agent_test_error_message(exc: Exception) -> str:

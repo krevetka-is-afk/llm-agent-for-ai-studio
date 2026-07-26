@@ -187,8 +187,8 @@ async def _run_yandex_ai_studio_rag_e2e(
                     user_id=user_id,
                     text=(
                         f"Create a vector index named {index_name} from the uploaded "
-                        "file and generate the system prompt. Use the file_id that "
-                        "the service provides; do not ask for another upload."
+                        "file and generate the system prompt. Use the files managed "
+                        "by the service; do not ask for another upload or file IDs."
                     ),
                     credentials=credentials,
                     conversation_state=state,

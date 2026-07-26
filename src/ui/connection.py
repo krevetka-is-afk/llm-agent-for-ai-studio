@@ -9,9 +9,9 @@ from ai_interaction_service import AIInteractionService
 from context import AIStudioCredentials, ConversationState
 from ui.api_key_store import ApiKeyConnection, ApiKeyStoreError, EncryptedApiKeyStore
 from ui.agent_test_panel import clear_agent_test_previews
+from ui.user_guidance import AI_STUDIO_URL
 
 
-AI_STUDIO_URL = "https://aistudio.yandex.ru/"
 API_KEY_GUIDE_URL = (
     "https://aistudio.yandex.ru/docs/ru/ai-studio/operations/get-api-key.html"
 )
@@ -46,6 +46,13 @@ def render_connection(
             return None
 
     st.sidebar.success("Подключение настроено")
+    st.sidebar.caption(
+        "ID рабочего каталога",
+        help=(
+            "Каталог Yandex Cloud, в котором выполняются запросы и создаются "
+            "векторные индексы."
+        ),
+    )
     st.sidebar.code(connection.folder_id, language=None)
     if st.sidebar.button("Отключить ключ"):
         store.delete(connection_id)

@@ -57,10 +57,22 @@ def render_agent_specification_result(
         st.markdown("#### 📦 Спецификация агента")
         template_column, status_column = st.columns(2)
         with template_column:
-            st.markdown("**Шаблон**")
+            st.markdown(
+                "**Шаблон агента**",
+                help=(
+                    "`one_prompt` отвечает только по инструкции или использует "
+                    "Web Search; `rag` дополнительно ищет по вашим файлам."
+                ),
+            )
             st.code(template, language=None)
         with status_column:
-            st.markdown("**Статус**")
+            st.markdown(
+                "**Готовность**",
+                help=(
+                    "`ready` означает, что обязательные настройки заполнены и "
+                    "агента можно тестировать."
+                ),
+            )
             st.code(status, language=None)
 
         validation = spec.get("validation")
@@ -76,6 +88,10 @@ def render_agent_specification_result(
             file_name="agent-specification.json",
             mime="application/json",
             key=download_key,
+            help=(
+                "Переносимое описание назначения, инструкции, ограничений, "
+                "источников и инструментов агента. Это не готовый agent_id."
+            ),
         )
         if actions is not None:
             render_agent_test_panel(
@@ -103,10 +119,19 @@ def render_vector_index_result(part: Mapping[str, Any]) -> None:
         st.markdown("#### 🤖 Созданный векторный индекс")
         name_column, id_column = st.columns(2)
         with name_column:
-            st.markdown("**Имя индекса**")
+            st.markdown(
+                "**Имя индекса**",
+                help="Понятное название базы знаний, созданной из ваших файлов.",
+            )
             st.code(index_name, language=None)
         with id_column:
-            st.markdown("**ID индекса**")
+            st.markdown(
+                "**ID индекса**",
+                help=(
+                    "Идентификатор Vector Store в Yandex AI Studio. File Search "
+                    "использует его для поиска по загруженным файлам."
+                ),
+            )
             st.code(index_id, language=None)
 
         files = part.get("files")

@@ -197,9 +197,17 @@ class ResultAssembler:
         for execution in tool_executions:
             if execution.name != "create_search_index":
                 continue
-            index_id = execution.output
-            index_name = execution.arguments.get("vector_store_name")
-            file_ids = execution.arguments.get("file_ids")
+            output = execution.output
+            if isinstance(output, str):
+                try:
+                    output = json.loads(output)
+                except json.JSONDecodeError:
+                    continue
+            if not isinstance(output, Mapping) or output.get("status") != "created":
+                continue
+            index_id = output.get("index_id")
+            index_name = output.get("index_name")
+            file_ids = output.get("file_ids")
             if (
                 not isinstance(index_id, str)
                 or not index_id

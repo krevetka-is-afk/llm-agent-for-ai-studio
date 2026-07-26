@@ -62,9 +62,7 @@ class IndexCreatingFakeAgent(FakeAgent):
                 raw_item={
                     "call_id": "call-index",
                     "name": "create_search_index",
-                    "arguments": (
-                        '{"file_ids":["file-first"],"vector_store_name":"knowledge"}'
-                    ),
+                    "arguments": '{"vector_store_name":"knowledge"}',
                 }
             ),
         )
@@ -73,7 +71,14 @@ class IndexCreatingFakeAgent(FakeAgent):
             name="tool_output",
             item=SimpleNamespace(
                 raw_item={"call_id": "call-index"},
-                output="index-1",
+                output=json.dumps(
+                    {
+                        "status": "created",
+                        "index_id": "index-1",
+                        "index_name": "knowledge",
+                        "file_ids": ["file-first"],
+                    }
+                ),
             ),
         )
 
@@ -346,6 +351,59 @@ def test_service_returns_an_authoritative_vector_index_part(tmp_path: Path) -> N
     assert rag.calls[0]["context"].allowed_file_ids == frozenset({"file-first"})
 
 
+def test_service_keeps_uploaded_files_available_for_next_rag_turn(
+    tmp_path: Path,
+) -> None:
+    rag = FakeAgent()
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=rag,
+        one_prompt_agent=FakeAgent(),
+    )
+    state = ConversationState(ConversationOptions.RAG)
+
+    asyncio.run(
+        service.interact(
+            InteractionRequest(
+                user_id="42",
+                text="Use this document",
+                credentials=AIStudioCredentials(
+                    api_key="AQAAAA-key", folder_id="folder"
+                ),
+                conversation_state=state,
+                user_files_dir=service.user_files_dir("42"),
+                attachments=(
+                    Attachment(
+                        filename="internal-first.pdf",
+                        display_name="first.pdf",
+                        file_id="file-first",
+                    ),
+                ),
+            )
+        )
+    )
+    asyncio.run(
+        service.interact(
+            InteractionRequest(
+                user_id="42",
+                text="Call it faq_index",
+                credentials=AIStudioCredentials(
+                    api_key="AQAAAA-key", folder_id="folder"
+                ),
+                conversation_state=state,
+                user_files_dir=service.user_files_dir("42"),
+            )
+        )
+    )
+
+    second_context = rag.calls[1]["context"]
+    assert second_context.allowed_file_ids == frozenset({"file-first"})
+    assert second_context.filenames_by_file_id == {"file-first": "first.pdf"}
+    assert "first.pdf" in rag.calls[1]["message"]
+    assert "file-first" not in rag.calls[1]["message"]
+
+
 def test_service_commits_and_exports_only_finalized_specification(
     tmp_path: Path,
 ) -> None:
@@ -470,9 +528,9 @@ def test_service_reuses_uploaded_files_after_coordinator_delegates_to_rag(
 
     assert len(coordinator.calls) == 1
     assert rag.calls[0]["message"] == (
-        "Files are already uploaded to AI Studio: first.pdf (file_id: file-first); "
-        "second.pdf (file_id: file-second). Create the requested vector index using "
-        "these file_ids now. Do not ask the user to upload the files again. "
+        "Files are securely available for this RAG workflow: first.pdf, second.pdf. "
+        "Create the requested vector index using the server-managed files; do not "
+        "ask the user to upload them again and do not request file IDs. "
         "User request: Create an index\n"
     )
     assert rag.calls[0]["context"].allowed_file_ids == frozenset(
@@ -618,8 +676,9 @@ def test_service_uploads_files_before_running_rag_after_delegation(
     )
 
     assert uploaded == ["first.pdf", "second.pdf"]
-    assert "file_id: file-first.pdf" in rag.calls[0]["message"]
-    assert "file_id: file-second.pdf" in rag.calls[0]["message"]
+    assert "first.pdf, second.pdf" in rag.calls[0]["message"]
+    assert "file-first.pdf" not in rag.calls[0]["message"]
+    assert "file-second.pdf" not in rag.calls[0]["message"]
     assert rag.calls[0]["context"].allowed_file_ids == frozenset(
         {"file-first.pdf", "file-second.pdf"}
     )

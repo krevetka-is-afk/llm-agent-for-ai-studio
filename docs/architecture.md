@@ -6,7 +6,8 @@
    `request_id`.
 2. `AIInteractionService` создаёт clients Yandex AI Studio на границе сервиса.
 3. Агент получает `RequestContext` без API-ключа: только client, folder ID,
-   директорию файлов, разрешённые file IDs и рабочую копию состояния.
+   директорию файлов, серверный реестр разрешённых файлов и рабочую копию
+   состояния. Модель не выбирает и не передаёт `file_id` в RAG tool.
 4. `routing.py` до model call применяет только высокоуверенные явные решения:
    отказ от RAG и запрос web-search без vector knowledge направляются в
    one-prompt, а явный запрос RAG/vector index — в RAG. Неоднозначные запросы
@@ -21,8 +22,11 @@
 7. One-prompt agent при подтверждённой потребности в актуальных данных добавляет
    публичный descriptor `web_search`; это не создаёт vector index и не заполняет
    `knowledge_sources`.
-8. RAG tool после создания vector index авторитетно привязывает `index_id`,
-   загруженные файлы и публичный `knowledge_search` к черновику.
+8. RAG flow сохраняет ещё не проиндексированные файлы в транзакционном состоянии
+   между сообщениями. `create_search_index` получает от модели только имя,
+   использует серверный реестр файлов и после создания авторитетно привязывает
+   `index_id`, файлы и публичный `knowledge_search` к черновику. Повторный вызов
+   возвращает уже привязанный индекс.
 9. `finalize_agent_specification` публикует только структурно готовую
    спецификацию; обычный markdown модели не интерпретируется как готовый артефакт.
 10. `ResultAssembler` собирает текст, vector index и подтверждённую
@@ -42,8 +46,8 @@
 ## Границы модулей
 
 - `credentials.py` — модели credentials и фабрики sync/async OpenAI clients.
-- `conversation_state.py` — mutable route, draft/latest specification и
-  транзакционные `copy()`/`commit_from()`.
+- `conversation_state.py` — mutable route, draft/latest specification,
+  ожидающие RAG-файлы и транзакционные `copy()`/`commit_from()`.
 - `routing.py` — детерминированное распознавание только явного выбора между
   one-prompt и vector RAG; ambiguous intent не классифицирует.
 - `user_store.py` — экспериментальное in-memory хранилище Telegram-пользователей.

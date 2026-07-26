@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 from collections.abc import Callable
@@ -35,10 +36,6 @@ DEFAULT_CHUNKING_STRATEGY = StaticFileChunkingStrategyObjectParam(
 
 class VectorIndexPollingError(RuntimeError):
     """Base class for bounded vector store polling failures."""
-
-
-class VectorIndexAuthorizationError(PermissionError):
-    """Raised when the model references files outside the current request."""
 
 
 class VectorIndexTerminalStatusError(VectorIndexPollingError):
@@ -181,38 +178,95 @@ def _create_search_index_impl(
     return vector_store_id
 
 
-def _validate_authorized_file_ids(
-    file_ids: list[str], allowed_file_ids: frozenset[str]
-) -> None:
-    if not file_ids:
-        raise VectorIndexAuthorizationError(
-            "A vector index requires files from the current request"
+def _tool_result(
+    *,
+    status: str,
+    index_id: str | None = None,
+    index_name: str | None = None,
+    file_ids: tuple[str, ...] = (),
+    message: str | None = None,
+) -> str:
+    result: dict[str, Any] = {"status": status}
+    if index_id is not None:
+        result["index_id"] = index_id
+    if index_name is not None:
+        result["index_name"] = index_name
+    if file_ids:
+        result["file_ids"] = list(file_ids)
+    if message is not None:
+        result["message"] = message
+    return json.dumps(result, ensure_ascii=False)
+
+
+def _existing_vector_index(ctx: Any) -> tuple[str, str, tuple[str, ...]] | None:
+    state = getattr(ctx.context, "state", None)
+    specification = getattr(state, "agent_specification", None)
+    if specification is None:
+        return None
+    index_id = specification.parameters.get("index_id")
+    index_name = specification.parameters.get("index_name")
+    if not isinstance(index_id, str) or not index_id:
+        return None
+    if not isinstance(index_name, str) or not index_name:
+        return None
+    file_ids = tuple(
+        source.source_id
+        for source in specification.knowledge_sources
+        if source.kind == "uploaded_file"
+    )
+    return index_id, index_name, file_ids
+
+
+def _create_search_index_for_context(ctx: Any, vector_store_name: str) -> str:
+    state = getattr(ctx.context, "state", None)
+    pending_file_ids = tuple(getattr(state, "pending_file_ids", ()))
+    if not pending_file_ids:
+        existing = _existing_vector_index(ctx)
+        if existing is not None:
+            index_id, index_name, file_ids = existing
+            _tool_logger(ctx).info(
+                "Vector Store already attached; reusing %s", index_id
+            )
+            return _tool_result(
+                status="exists",
+                index_id=index_id,
+                index_name=index_name,
+                file_ids=file_ids,
+            )
+        return _tool_result(
+            status="needs_files",
+            message=(
+                "No uploaded files are available for this RAG workflow. "
+                "Ask the user to attach the files."
+            ),
         )
-    if len(file_ids) != len(set(file_ids)):
-        raise VectorIndexAuthorizationError("Duplicate file IDs are not allowed")
-    unauthorized = set(file_ids) - allowed_file_ids
-    if unauthorized:
-        raise VectorIndexAuthorizationError(
-            "Vector index file IDs must come from the current request"
-        )
+
+    index_id = _create_search_index_impl(
+        ctx,
+        list(pending_file_ids),
+        vector_store_name,
+    )
+    return _tool_result(
+        status="created",
+        index_id=index_id,
+        index_name=vector_store_name,
+        file_ids=pending_file_ids,
+    )
 
 
 @function_tool
 def create_search_index(
-    ctx: RunContextWrapper[RequestContext], file_ids: list[str], vector_store_name: str
+    ctx: RunContextWrapper[RequestContext], vector_store_name: str
 ) -> str:
     """
-    Build a vector store from the provided files.
+    Build a vector store from the files managed by the current RAG workflow.
 
     Args:
         vector_store_name: Human-readable name for the vector store.
-        file_ids: List of file ids to include in the vector store.
 
     Returns:
-        The ID of the created vector store.
+        A structured status with the created or existing vector store.
         :param vector_store_name:
-        :param file_ids:
         :param ctx:
     """
-    _validate_authorized_file_ids(file_ids, ctx.context.allowed_file_ids)
-    return _create_search_index_impl(ctx, file_ids, vector_store_name)
+    return _create_search_index_for_context(ctx, vector_store_name)

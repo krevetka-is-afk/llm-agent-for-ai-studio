@@ -107,8 +107,8 @@ UI показывает typed result parts: vector index, agent specification и
 | --- | --- | --- |
 | FR-01 | Система должна принимать текстовый запрос пользователя и вложения через Web UI. | Запрос преобразуется в `InteractionRequest`; ограничения количества и размера файлов проверяются до обращения к AI Studio. |
 | FR-02 | Система должна маршрутизировать запрос в coordinator, RAG или one-prompt agent по состоянию диалога и последнему явному выбору пользователя. | Явный отказ от vector RAG переключает sticky RAG route в `ONE_PROMPT`; web search без vector knowledge не считается RAG; ambiguous intent остаётся coordinator. |
-| FR-03 | Система должна создавать RAG vector index только из файлов текущего запроса. | `create_search_index` отклоняет пустые, дублирующиеся и неразрешённые `file_id`. |
-| FR-04 | Система должна собирать authoritative typed result из tool calls, а не только из текста модели. | `ResultAssembler` создаёт `VectorIndexResultPart` из `create_search_index` call/output. |
+| FR-03 | Система должна создавать RAG vector index только из файлов, зарегистрированных сервисом для текущего RAG-сценария. | `file_id` отсутствует в tool schema; ожидающие файлы сохраняются между сообщениями в `ConversationState`, потребляются после создания индекса, а вызов без файлов возвращает контролируемый `needs_files`. |
+| FR-04 | Система должна собирать authoritative typed result из tool calls, а не только из текста модели. | `ResultAssembler` создаёт `VectorIndexResultPart` только из структурированного успешного `create_search_index` output и не принимает текст ошибки за `index_id`. |
 | FR-05 | Система должна формировать `AgentSpecification` для завершённого результата пользователя. | `AgentSpecificationResultPart` появляется только после успешного вызова `finalize_agent_specification` и готовой валидации. |
 | FR-06 | `AgentSpecification` должна содержать назначение, входы, инструкции, ограничения, источники знаний, tools и expected result. | JSON-экспорт содержит поля `purpose`, `inputs`, `instructions`, `constraints`, `knowledge_sources`, `tools`, `expected_result`. |
 | FR-07 | Система должна валидировать обязательные поля спецификации детерминированно. | Пустая/неполная spec получает `needs_clarification`; валидатор возвращает все `missing_fields`. |
@@ -121,6 +121,7 @@ UI показывает typed result parts: vector index, agent specification и
 | FR-14 | Пользователь должен иметь возможность stateless-проверки готового агента. | UI принимает отдельный test prompt, выполняет один Responses API call и показывает output text, citations, usage и `response_id`. |
 | FR-15 | Система должна экспортировать без секретов именно ту runtime-конфигурацию, которая используется для теста. | Test callback и runtime JSON callback используют общий `prepare_agent_runtime()`; экспорт не содержит API key и folder URI. |
 | FR-16 | RAG-runtime должен проверять доступность vector store до генерации ответа. | Для каждого `file_search.vector_store_id` выполняется retrieve; отсутствующий, недоступный или неготовый ресурс возвращает безопасную прикладную ошибку. |
+| FR-17 | Система должна объяснять дальнейший путь нетехническому пользователю. | Sidebar и готовая карточка содержат no-code шаги и официальные ссылки Agent Atelier; после теста UI показывает готовые настройки для ручного переноса и отдельный ZIP-пакет для разработчика. |
 
 ## Нефункциональные требования
 
@@ -138,6 +139,8 @@ UI показывает typed result parts: vector index, agent specification и
 | NFR-10 | Тест готового агента не должен изменять основной диалог или черновик спецификации. | Preview выполняется отдельным application-service method без `ConversationState.commit_from()`. |
 | NFR-11 | Runtime-ошибки и credentials должны оставаться внутри доверенной границы сервиса. | Result view получает callbacks без API key; provider exceptions преобразуются в bounded сообщения без stack trace и secret details. |
 | NFR-12 | Preview должен сохраняться между rerun UI только для неизменённой спецификации. | Результат хранится под ключом карточки и сбрасывается при изменении canonical fingerprint спецификации. |
+| NFR-13 | Технические данные должны быть понятны без знания API. | UI использует человеческие подписи и hover-help для citations, token usage, `response_id`, runtime config, template и Vector Store ID; developer ZIP явно отделён от основного no-code пути. |
+| NFR-14 | Многошаговый RAG flow не должен зависеть от повторной передачи файла пользователем или выбора `file_id` моделью. | Загруженный файл остаётся доступен после уточнения имени индекса; повторное создание переиспользует существующий индекс; внутренние идентификаторы не включаются в prompt агента. |
 
 ## Трассировка
 
@@ -145,8 +148,8 @@ UI показывает typed result parts: vector index, agent specification и
 | --- | --- | --- |
 | FR-01 | `src/ui/chat_flow.py`, `src/ui/uploads.py`, `src/ai_interaction_service.py` | `tests/test_ui_helpers.py`, `tests/test_ui_smoke.py`, `tests/test_ai_interaction_service.py` |
 | FR-02 | `src/routing.py`, `src/ai_interaction_service.py`, `src/conversation_state.py`, `src/custom_agents/coordinator_agent.py` | `tests/test_routing.py`, `tests/test_ai_interaction_service.py`, `tests/test_prompt_quality.py` |
-| FR-03 | `src/custom_agents/tools/vector_index.py` | `tests/test_vector_index.py` |
-| FR-04 | `src/result_assembly.py` | `tests/test_result_assembly.py` |
+| FR-03 | `src/conversation_state.py`, `src/ai_interaction_service.py`, `src/custom_agents/tools/vector_index.py` | `tests/test_context_compat.py`, `tests/test_ai_interaction_service.py`, `tests/test_vector_index.py` |
+| FR-04 | `src/result_assembly.py` | `tests/test_result_assembly.py`, `tests/test_ai_interaction_service.py` |
 | FR-05 | `src/custom_agents/tools/agent_specification.py`, `src/result_assembly.py`, `src/agent_specification.py` | `tests/test_agent_specification_tools.py`, `tests/test_result_assembly.py`, `tests/test_ai_interaction_service.py` |
 | FR-06 | `src/agent_specification.py` | `tests/test_agent_specification.py` |
 | FR-07 | `src/agent_specification.py`, `src/component_catalog.py` | `tests/test_agent_specification.py` |
@@ -159,6 +162,7 @@ UI показывает typed result parts: vector index, agent specification и
 | FR-14 | `src/ai_interaction_service.py`, `src/agent_runner.py`, `src/yandex_responses_runner.py`, `src/ui/agent_test_panel.py` | `tests/test_ai_interaction_service.py`, `tests/test_yandex_responses_runner.py`, `tests/test_ui_helpers.py`, `tests/test_ui_smoke.py` |
 | FR-15 | `src/ai_interaction_service.py`, `src/agent_runtime.py`, `src/ui/agent_test_panel.py` | `tests/test_ai_interaction_service.py`, `tests/test_agent_runtime.py`, `tests/test_ui_smoke.py` |
 | FR-16 | `src/yandex_responses_runner.py` | `tests/test_yandex_responses_runner.py`, `tests/e2e/test_yandex_ai_studio_agent_runtime_e2e.py` |
+| FR-17 | `src/ui/user_guidance.py`, `src/ui/developer_bundle.py`, `src/ui/agent_test_panel.py` | `tests/test_ui_smoke.py`, `tests/test_developer_bundle.py`; Playwright visual smoke |
 | NFR-01 | `src/request_context.py`, `src/agent_specification.py` | `tests/test_context.py`, `tests/test_agent_specification.py` |
 | NFR-02 | `src/ui/chat_flow.py`, `src/ui/agent_test_panel.py`, `src/yandex_responses_runner.py` | `tests/test_ui_helpers.py`, `tests/test_yandex_responses_runner.py` |
 | NFR-03 | `src/conversation_state.py`, `src/ai_interaction_service.py` | `tests/test_context_compat.py`, `tests/test_ai_interaction_service.py` |
@@ -171,3 +175,5 @@ UI показывает typed result parts: vector index, agent specification и
 | NFR-10 | `src/ai_interaction_service.py`, `src/ui/chat_flow.py` | `tests/test_ai_interaction_service.py`, `tests/test_ui_smoke.py` |
 | NFR-11 | `src/ui/chat_flow.py`, `src/ui/agent_test_panel.py`, `src/yandex_responses_runner.py` | `tests/test_ui_helpers.py`, `tests/test_yandex_responses_runner.py` |
 | NFR-12 | `src/ui/agent_test_panel.py` | `tests/test_ui_helpers.py`, `tests/test_ui_smoke.py` |
+| NFR-13 | `src/ui/agent_test_panel.py`, `src/ui/result_view.py`, `src/ui/user_guidance.py` | `tests/test_ui_smoke.py`; Playwright tooltip/visual smoke |
+| NFR-14 | `src/conversation_state.py`, `src/ai_interaction_service.py`, `src/custom_agents/tools/vector_index.py`, `src/result_assembly.py` | `tests/test_context_compat.py`, `tests/test_ai_interaction_service.py`, `tests/test_vector_index.py`, `tests/test_result_assembly.py` |

@@ -42,3 +42,31 @@ def test_finish_dialog_keeps_specification_but_reset_clears_it() -> None:
 
     assert state.state is ConversationOptions.COORDINATOR
     assert state.agent_specification is None
+
+
+def test_pending_rag_files_survive_copy_commit_and_clear_after_attachment() -> None:
+    source = ConversationState(ConversationOptions.RAG)
+    source.register_pending_files(
+        {
+            "file_1": "guide.pdf",
+            "file_2": "faq.txt",
+        }
+    )
+    copy = source.copy()
+    target = ConversationState()
+
+    target.commit_from(copy)
+
+    assert target.pending_file_ids == ("file_1", "file_2")
+    assert target.pending_filenames_by_file_id == {
+        "file_1": "guide.pdf",
+        "file_2": "faq.txt",
+    }
+
+    target.attach_vector_index(
+        index_id="vs_123",
+        index_name="knowledge",
+        file_ids=target.pending_file_ids,
+    )
+
+    assert target.pending_file_ids == ()

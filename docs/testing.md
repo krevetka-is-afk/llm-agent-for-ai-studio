@@ -14,7 +14,11 @@ uv run pre-commit run --all-files
 imports, transactional conversation state, явные routing overrides и различие
 между web search и vector RAG, добавление/сохранение/удаление публичного
 `web_search` в one-prompt-спецификации, передачу `max_turns`, Telegram
-serialization/secret TTL, UI helpers и отсутствие API-ключа в tool context.
+serialization/secret TTL, UI helpers, tooltip contracts, developer ZIP без
+секретов и отсутствие API-ключа в tool context. RAG-регрессии отдельно
+проверяют сохранение доверенных файлов между сообщениями, отсутствие `file_id`
+в tool schema, идемпотентное повторное создание и отбрасывание ошибочного
+tool-output вместо отображения его как ID индекса.
 
 ## Credentialed Yandex AI Studio E2E
 

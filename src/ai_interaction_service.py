@@ -344,7 +344,11 @@ class AIInteractionService:
             self._authorize_attachment_ids(context, attachments)
         first_run = await self._collect_run(
             agent,
-            self._build_input(request, attachments),
+            self._build_input(
+                request,
+                attachments,
+                trusted_filenames_by_file_id=context.filenames_by_file_id,
+            ),
             context,
             run_config,
         )
@@ -362,7 +366,11 @@ class AIInteractionService:
             runs.append(
                 await self._collect_run(
                     self._agent_for(responded_by),
-                    self._build_input(request, attachments),
+                    self._build_input(
+                        request,
+                        attachments,
+                        trusted_filenames_by_file_id=context.filenames_by_file_id,
+                    ),
                     context,
                     run_config,
                 )
@@ -371,11 +379,7 @@ class AIInteractionService:
         parts = self._result_assembler.assemble(
             combined_run,
             responded_by,
-            {
-                attachment.file_id: attachment.display_name or attachment.filename
-                for attachment in attachments
-                if attachment.file_id is not None
-            },
+            context.filenames_by_file_id,
             specification=working_state.latest_agent_specification,
         )
         result = InteractionResult(
@@ -469,50 +473,43 @@ class AIInteractionService:
     def _authorize_attachment_ids(
         context: RequestContext, attachments: tuple[Attachment, ...]
     ) -> None:
-        context.allowed_file_ids = frozenset(
-            attachment.file_id
-            for attachment in attachments
-            if attachment.file_id is not None
-        )
-        context.filenames_by_file_id = {
+        current_filenames_by_file_id = {
             attachment.file_id: attachment.display_name or attachment.filename
             for attachment in attachments
             if attachment.file_id is not None
         }
+        context.state.register_pending_files(current_filenames_by_file_id)
+        context.allowed_file_ids = frozenset(context.state.pending_file_ids)
+        context.filenames_by_file_id = context.state.pending_filenames_by_file_id
 
     @staticmethod
     def _build_input(
-        request: InteractionRequest, attachments: tuple[Attachment, ...] | None = None
+        request: InteractionRequest,
+        attachments: tuple[Attachment, ...] | None = None,
+        *,
+        trusted_filenames_by_file_id: Mapping[str, str] | None = None,
     ) -> str:
         if attachments is None:
             attachments = AIInteractionService._attachments(request)
+        caption = next(
+            (attachment.caption for attachment in attachments if attachment.caption),
+            None,
+        )
+        if trusted_filenames_by_file_id:
+            filenames = ", ".join(trusted_filenames_by_file_id.values())
+            return (
+                "Files are securely available for this RAG workflow: "
+                f"{filenames}. Create the requested vector index using the "
+                "server-managed files; do not ask the user to upload them again "
+                "and do not request file IDs. "
+                f"User request: {caption or request.text or ''}\n"
+            )
         if attachments:
             filenames = ", ".join(
                 attachment.display_name or attachment.filename
                 for attachment in attachments
             )
-            caption = next(
-                (
-                    attachment.caption
-                    for attachment in attachments
-                    if attachment.caption
-                ),
-                None,
-            )
             noun = "file" if len(attachments) == 1 else "files"
-            file_ids = [attachment.file_id for attachment in attachments]
-            if all(file_ids):
-                available_files = "; ".join(
-                    f"{attachment.display_name or attachment.filename} "
-                    f"(file_id: {attachment.file_id})"
-                    for attachment in attachments
-                )
-                return (
-                    f"Files are already uploaded to AI Studio: {available_files}. "
-                    "Create the requested vector index using these file_ids now. "
-                    "Do not ask the user to upload the files again. "
-                    f"User request: {caption or request.text or ''}\n"
-                )
             if caption:
                 return f"Uploaded {noun} by user: {filenames} with request: {caption}\n"
             return f"Uploaded {noun} by user: {filenames}\n"

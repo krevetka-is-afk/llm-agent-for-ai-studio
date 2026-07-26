@@ -93,6 +93,18 @@ Responses API запрос, если индекс отсутствует, ист
 Streamlit хранит preview по fingerprint конкретной spec-card; изменение
 спецификации инвалидирует старый результат.
 
+Технические поля снабжены tooltip-справкой: отдельно объясняются citations,
+input/output/total tokens, `response_id`, runtime config, template и Vector
+Store ID. После успешного теста UI предлагает два явно разделённых пути:
+
+1. no-code перенос модели, инструкции, tools и параметров в Agent Atelier;
+2. ZIP-пакет для разработчика с обоими JSON, `example.py`, `.env.example` и
+   README.
+
+ZIP создаётся в памяти и не содержит API-ключ или folder ID. Ссылки на
+официальную инструкцию Agent Atelier доступны как в карточке результата, так и
+в sidebar.
+
 ## Безопасные ошибки
 
 UI различает:

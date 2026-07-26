@@ -8,6 +8,7 @@ from logging_config import configure_console_logging
 from ui.api_key_store import EncryptedApiKeyStore
 from ui.chat_flow import render_chat
 from ui.connection import render_connection
+from ui.user_guidance import render_next_steps_sidebar
 from ui.uploads import (
     attachment_record as _attachment_record,
     validate_uploaded_files as _validate_uploaded_files,
@@ -47,6 +48,7 @@ def main() -> None:
     store, ai_service = _load_services()
     connection_id = _connection_id()
     connection = render_connection(store, ai_service, connection_id)
+    render_next_steps_sidebar()
     render_chat(ai_service, connection, connection_id)
 
 
