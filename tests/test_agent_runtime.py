@@ -44,6 +44,19 @@ def test_compile_one_prompt_without_tools() -> None:
     assert config.temperature == 0.3
     assert config.max_output_tokens == 900
     assert config.instructions == (
+        "Agent identity and capabilities:\n"
+        "- You are an AI agent configured for this purpose: Draft support replies\n"
+        "- Treat this purpose, these system instructions, and the capabilities "
+        "listed here as authoritative context about your role.\n"
+        "- When the user asks who you are, what you can do, or how you work, "
+        "answer directly from this context in the user's language. Do not search "
+        "external sources merely to explain your own role.\n"
+        "- Questions about your own role or capabilities are a special case: "
+        "answer them from this identity context even when agent-specific "
+        "instructions require grounding other answers in a tool or data source.\n"
+        "- Never claim capabilities or data sources that are not listed here.\n"
+        "- You have no external search tools. Work from the user's request and "
+        "the supplied conversation context.\n\n"
         "Answer concisely.\n\n"
         "Constraints:\n"
         "- Do not invent facts.\n"
@@ -64,6 +77,11 @@ def test_compile_web_search_to_native_tool() -> None:
     config = compile_agent_specification(specification, runtime=RUNTIME)
 
     assert config.tools == ({"type": "web_search", "search_context_size": "medium"},)
+    assert (
+        "You can search the public web for current information using web_search."
+        in config.instructions
+    )
+    assert "Summarize current news" in config.instructions
 
 
 def test_compile_rag_to_file_search() -> None:
@@ -81,6 +99,13 @@ def test_compile_rag_to_file_search() -> None:
     config = compile_agent_specification(specification, runtime=RUNTIME)
 
     assert config.tools == ({"type": "file_search", "vector_store_ids": ["vs-123"]},)
+    assert "You are a RAG agent" in config.instructions
+    assert "connected user-provided knowledge base" in config.instructions
+    assert (
+        "The connected files are domain knowledge, not the source of truth about "
+        "your identity or capabilities." in config.instructions
+    )
+    assert "Answer from the handbook" in config.instructions
 
 
 def test_compile_rejects_non_ready_specification() -> None:

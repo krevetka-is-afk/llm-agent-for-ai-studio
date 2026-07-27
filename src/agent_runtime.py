@@ -128,7 +128,10 @@ def _compile_tool(tool: Any) -> Mapping[str, Any]:
 
 
 def _compile_instructions(specification: AgentSpecification) -> str:
-    sections = [specification.instructions.strip()]
+    sections = [
+        _compile_identity_and_capabilities(specification),
+        specification.instructions.strip(),
+    ]
     if specification.constraints:
         constraints = "\n".join(
             f"- {constraint.strip()}" for constraint in specification.constraints
@@ -136,6 +139,59 @@ def _compile_instructions(specification: AgentSpecification) -> str:
         sections.append(f"Constraints:\n{constraints}")
     sections.append(f"Expected result:\n{specification.expected_result.strip()}")
     return "\n\n".join(sections)
+
+
+def _compile_identity_and_capabilities(
+    specification: AgentSpecification,
+) -> str:
+    lines = [
+        "Agent identity and capabilities:",
+        (
+            "- You are an AI agent configured for this purpose: "
+            f"{specification.purpose.strip()}"
+        ),
+        (
+            "- Treat this purpose, these system instructions, and the capabilities "
+            "listed here as authoritative context about your role."
+        ),
+        (
+            "- When the user asks who you are, what you can do, or how you work, "
+            "answer directly from this context in the user's language. Do not search "
+            "external sources merely to explain your own role."
+        ),
+        (
+            "- Questions about your own role or capabilities are a special case: "
+            "answer them from this identity context even when agent-specific "
+            "instructions require grounding other answers in a tool or data source."
+        ),
+        "- Never claim capabilities or data sources that are not listed here.",
+    ]
+
+    tool_ids = {tool.tool_id for tool in specification.tools}
+    if specification.template is TemplateId.RAG:
+        lines.extend(
+            (
+                (
+                    "- You are a RAG agent with file_search access to the connected "
+                    "user-provided knowledge base. Use it for questions about the "
+                    "connected files."
+                ),
+                (
+                    "- The connected files are domain knowledge, not the source of "
+                    "truth about your identity or capabilities."
+                ),
+            )
+        )
+    if "web_search" in tool_ids:
+        lines.append(
+            "- You can search the public web for current information using web_search."
+        )
+    if not tool_ids:
+        lines.append(
+            "- You have no external search tools. Work from the user's request and "
+            "the supplied conversation context."
+        )
+    return "\n".join(lines)
 
 
 def _contains_redacted_value(value: Any) -> bool:

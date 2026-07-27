@@ -19,11 +19,58 @@ DEVELOPER_README = """# Generated agent integration package
 
 ## Запуск примера
 
-1. Установите Python 3.11 или новее.
-2. Выполните `python -m pip install openai python-dotenv`.
-3. Скопируйте `.env.example` в `.env`.
-4. Укажите API-ключ и ID того же каталога Yandex Cloud.
-5. Выполните `python example.py`.
+Установите Python 3.11 или новее. Затем выполните команды для своей системы.
+
+### Bash (Linux, macOS, Git Bash)
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install openai python-dotenv
+cp .env.example .env
+```
+
+### Windows PowerShell
+
+```powershell
+py -3 -m venv .venv
+.\\.venv\\Scripts\\python.exe -m pip install openai python-dotenv
+Copy-Item .env.example .env
+```
+
+### Windows Command Prompt (CMD)
+
+```bat
+py -3 -m venv .venv
+.venv\\Scripts\\python.exe -m pip install openai python-dotenv
+copy /Y .env.example .env
+```
+
+Откройте созданный `.env` в текстовом редакторе и замените оба значения:
+
+```dotenv
+YC_AI_STUDIO_API_KEY=replace_with_api_key
+YC_AI_STUDIO_FOLDER_ID=replace_with_folder_id
+```
+
+После сохранения `.env` запустите пример.
+
+В Bash:
+
+```bash
+.venv/bin/python example.py
+```
+
+В Windows PowerShell:
+
+```powershell
+.\\.venv\\Scripts\\python.exe example.py
+```
+
+В Windows CMD:
+
+```bat
+.venv\\Scripts\\python.exe example.py
+```
 
 API-ключ и folder ID намеренно не включены в архив. Для RAG существующий
 Vector Store должен быть доступен в выбранном каталоге и не должен быть удалён

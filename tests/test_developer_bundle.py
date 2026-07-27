@@ -43,6 +43,14 @@ def test_developer_bundle_contains_runnable_secret_free_handoff() -> None:
         compile(example, "example.py", "exec")
         assert "client.responses.create" in example
 
+        readme = archive.read("README.md").decode()
+        assert "### Bash (Linux, macOS, Git Bash)" in readme
+        assert "### Windows PowerShell" in readme
+        assert "### Windows Command Prompt (CMD)" in readme
+        assert ".venv/bin/python example.py" in readme
+        assert r".\.venv\Scripts\python.exe example.py" in readme
+        assert r".venv\Scripts\python.exe example.py" in readme
+
         env_example = archive.read(".env.example").decode()
         assert "replace_with_api_key" in env_example
         assert "replace_with_folder_id" in env_example
