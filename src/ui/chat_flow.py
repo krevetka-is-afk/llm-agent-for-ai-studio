@@ -10,6 +10,7 @@ from streamlit.runtime.uploaded_file_manager import UploadedFile
 
 from ai_interaction_service import (
     AIInteractionService,
+    AgentSpecificationImportError,
     AgentTestRequest,
     AgentTestResult,
     Attachment,
@@ -105,6 +106,8 @@ def build_user_content(prompt: str, uploaded_files: Sequence[NamedUpload]) -> st
 def interaction_error_message(exc: Exception) -> str:
     if isinstance(exc, OpenAIError):
         return "AI Studio отклонил запрос. Проверьте ключ, каталог и права."
+    if isinstance(exc, AgentSpecificationImportError):
+        return str(exc)
     if isinstance(exc, UploadValidationError):
         return str(exc)
     if isinstance(exc, VectorIndexPollingError):
@@ -305,7 +308,9 @@ def _request_answer(
             user_id=connection_id,
             request_id=request_id,
         )
-        if isinstance(exc, (OpenAIError, UploadValidationError)):
+        if isinstance(
+            exc, (AgentSpecificationImportError, OpenAIError, UploadValidationError)
+        ):
             request_logger.warning(
                 "AI interaction rejected error_type=%s", type(exc).__name__
             )

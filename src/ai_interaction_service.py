@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import json
 import logging
 import shutil
 import time
@@ -47,7 +48,9 @@ from file_security import sanitize_filename
 from logging_config import bind_logger
 from result_assembly import (
     AgentRunResult,
+    AgentSpecificationResultPart,
     AgentRunCollector,
+    MarkdownResultPart,
     ResultAssembler,
     ResultPart,
     merge_agent_runs,
@@ -119,6 +122,10 @@ class UploadValidationError(ValueError):
 
 class AgentTestInputError(ValueError):
     pass
+
+
+class AgentSpecificationImportError(ValueError):
+    """Raised when an uploaded AgentSpecification cannot be imported."""
 
 
 AgentRunnerFactory = Callable[[Any, str], AgentRunner]
@@ -301,6 +308,13 @@ class AIInteractionService:
 
     async def _interact(self, request: InteractionRequest) -> InteractionResult:
         working_state = request.conversation_state.copy()
+        imported_specification = self._imported_specification(request, working_state)
+        if imported_specification is not None:
+            return self._import_result(
+                request,
+                working_state,
+                imported_specification,
+            )
         routing_decision = resolve_explicit_route(request.text)
         if routing_decision is not None:
             previous_state = working_state.state
@@ -391,6 +405,116 @@ class AIInteractionService:
         )
         request.conversation_state.commit_from(working_state)
         return result
+
+    def _imported_specification(
+        self,
+        request: InteractionRequest,
+        state: ConversationState,
+    ) -> AgentSpecification | None:
+        attachments = self._attachments(request)
+        json_attachments = tuple(
+            attachment
+            for attachment in attachments
+            if self._is_json_attachment(attachment)
+        )
+        if not json_attachments or not self._requests_specification_import(
+            request.text, json_attachments
+        ):
+            return None
+        if len(json_attachments) > 1:
+            raise AgentSpecificationImportError(
+                "Прикрепите только один файл AgentSpecification JSON за запрос."
+            )
+
+        attachment = json_attachments[0]
+        path = resolve_upload_path(request.user_files_dir, attachment.filename)
+        try:
+            content = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise AgentSpecificationImportError(
+                "Файл спецификации должен быть валидным UTF-8 JSON."
+            ) from exc
+        except OSError as exc:
+            raise AgentSpecificationImportError(
+                "Не удалось прочитать прикреплённый файл спецификации."
+            ) from exc
+
+        try:
+            record = json.loads(content)
+        except json.JSONDecodeError as exc:
+            raise AgentSpecificationImportError(
+                "Файл спецификации содержит некорректный JSON: "
+                f"строка {exc.lineno}, столбец {exc.colno}."
+            ) from exc
+        if not isinstance(record, Mapping):
+            raise AgentSpecificationImportError(
+                "Корень файла спецификации должен быть JSON-объектом."
+            )
+        try:
+            specification = AgentSpecification.from_record(record)
+        except InvalidSpecificationRecordError as exc:
+            raise AgentSpecificationImportError(
+                f"Файл не соответствует схеме AgentSpecification 1.0: {exc}"
+            ) from exc
+
+        state.import_agent_specification(specification)
+        return specification
+
+    @staticmethod
+    def _is_json_attachment(attachment: Attachment) -> bool:
+        filename = attachment.display_name or attachment.filename
+        return filename.lower().endswith(".json")
+
+    @staticmethod
+    def _requests_specification_import(
+        text: str | None,
+        attachments: tuple[Attachment, ...],
+    ) -> bool:
+        normalized = (text or "").lower()
+        if "спецификац" in normalized or "agent-specification" in normalized:
+            return True
+        return any(
+            "agent-specification"
+            in (attachment.display_name or attachment.filename).lower()
+            for attachment in attachments
+        )
+
+    @staticmethod
+    def _import_result(
+        request: InteractionRequest,
+        state: ConversationState,
+        specification: AgentSpecification,
+    ) -> InteractionResult:
+        index_note = ""
+        if specification.template.value == "rag":
+            index_id = specification.parameters.get("index_id")
+            index_name = specification.parameters.get("index_name")
+            if isinstance(index_id, str) and isinstance(index_name, str):
+                index_note = (
+                    f"\nИндекс: {index_name} (id: {index_id})"
+                    "\nPDF повторно загружать не требуется: он нужен только "
+                    "для пересоздания индекса."
+                    "\nДоступность индекса будет проверена при тестовом запуске."
+                )
+        text = (
+            "Спецификация агента распознана и прошла локальную проверку."
+            f"\nШаблон: {specification.template.value}"
+            f"\nСтатус: {specification.status.value}"
+            f"{index_note}"
+            "\nОткройте блок спецификации и запустите тестовый запрос."
+        )
+        parts: tuple[ResultPart, ...] = (
+            AgentSpecificationResultPart(specification=specification),
+            MarkdownResultPart(text=text),
+        )
+        request.conversation_state.commit_from(state)
+        return InteractionResult(
+            text=render_result_text(parts),
+            parts=parts,
+            selected_agent=state.state,
+            responded_by=state.state,
+            next_state=state.state,
+        )
 
     async def reset_conversation(self, user_id: str) -> None:
         db_paths = {

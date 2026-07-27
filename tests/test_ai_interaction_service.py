@@ -7,10 +7,16 @@ import pytest
 
 from agent_runner import AgentCitation, AgentProviderError, AgentRunPreview
 from agent_runtime import ExecutableAgentConfig
-from agent_specification import AgentSpecification, build_one_prompt_specification
+from agent_specification import (
+    AgentSpecification,
+    KnowledgeSource,
+    build_one_prompt_specification,
+    build_rag_specification,
+)
 from component_catalog import TemplateId
 from ai_interaction_service import (
     AIInteractionService,
+    AgentSpecificationImportError,
     AgentTestInputError,
     AgentTestRequest,
     Attachment,
@@ -214,6 +220,101 @@ def test_service_routes_to_agent_selected_by_conversation_state(tmp_path: Path) 
     assert one_prompt.calls == []
     assert rag.calls[0]["message"] == "User request: find this document\n"
     assert rag.calls[0]["context"].folder_id == "folder"
+
+
+def test_service_imports_ready_agent_specification_without_calling_an_agent(
+    tmp_path: Path,
+) -> None:
+    coordinator = FakeAgent()
+    rag = FakeAgent()
+    one_prompt = FakeAgent()
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=coordinator,
+        rag_agent=rag,
+        one_prompt_agent=one_prompt,
+    )
+    # The source ID is intentionally distinct from the index ID. Import must
+    # preserve that distinction and must not ask for a PDF.
+    specification = AgentSpecification.from_record(
+        build_rag_specification(
+            purpose="Answer questions from the uploaded PDF",
+            instructions="Search the connected index before answering.",
+            expected_result="A concise answer with a source excerpt.",
+            index_id="index-1",
+            index_name="uploaded_pdf_index",
+            knowledge_sources=(
+                KnowledgeSource("file-1", "guide.pdf", "uploaded_file", "file-1"),
+            ),
+        ).to_record()
+    )
+    saved = service.save_attachment(
+        "42",
+        "agent-specification.json",
+        json.dumps(specification.to_record(), ensure_ascii=False).encode(),
+        caption="Создай агента из этой спецификации",
+    )
+    state = ConversationState()
+
+    result = asyncio.run(
+        service.interact(
+            InteractionRequest(
+                user_id="42",
+                text="Создай агента из этой спецификации",
+                credentials=AIStudioCredentials(
+                    api_key="AQAAAA-key", folder_id="folder"
+                ),
+                conversation_state=state,
+                user_files_dir=service.user_files_dir("42"),
+                attachments=(saved,),
+            )
+        )
+    )
+
+    assert coordinator.calls == []
+    assert rag.calls == []
+    assert one_prompt.calls == []
+    assert isinstance(result.parts[0], AgentSpecificationResultPart)
+    assert result.parts[0].specification == specification
+    assert state.latest_agent_specification == specification
+    assert result.next_state is ConversationOptions.RAG
+    assert "PDF повторно загружать не требуется" in result.text
+
+
+def test_service_reports_invalid_agent_specification_json_without_calling_agent(
+    tmp_path: Path,
+) -> None:
+    coordinator = FakeAgent()
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=coordinator,
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+    )
+    saved = service.save_attachment(
+        "42",
+        "agent-specification.json",
+        b'{"template": "rag",',
+        caption="Создай агента из этой спецификации",
+    )
+
+    with pytest.raises(AgentSpecificationImportError, match="некорректный JSON"):
+        asyncio.run(
+            service.interact(
+                InteractionRequest(
+                    user_id="42",
+                    text="Создай агента из этой спецификации",
+                    credentials=AIStudioCredentials(
+                        api_key="AQAAAA-key", folder_id="folder"
+                    ),
+                    conversation_state=ConversationState(),
+                    user_files_dir=service.user_files_dir("42"),
+                    attachments=(saved,),
+                )
+            )
+        )
+
+    assert coordinator.calls == []
 
 
 def test_service_switches_sticky_rag_state_when_user_rejects_vector_search(

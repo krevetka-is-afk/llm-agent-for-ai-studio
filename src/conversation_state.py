@@ -102,6 +102,23 @@ class ConversationState:
         self.draft_agent_specification = specification
         self.latest_agent_specification = None
 
+    def import_agent_specification(self, specification: AgentSpecification) -> None:
+        """Adopt a serialized specification without treating it as a draft."""
+        target_state = (
+            ConversationOptions.RAG
+            if specification.template.value == "rag"
+            else ConversationOptions.ONE_PROMPT
+        )
+        self.update_state(target_state)
+        imported = specification.with_validation_status()
+        self._pending_filenames_by_file_id.clear()
+        if imported.validate().is_ready:
+            self.draft_agent_specification = None
+            self.latest_agent_specification = imported
+        else:
+            self.draft_agent_specification = imported
+            self.latest_agent_specification = None
+
     def finalize_agent_specification(self) -> AgentSpecification:
         specification = self.current_or_new_specification().with_validation_status()
         if specification.validate().is_ready:
