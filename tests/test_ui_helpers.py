@@ -14,6 +14,7 @@ from ai_interaction_service import (
 from ui.api_key_store import ApiKeyConnection
 from ui.agent_test_panel import (
     agent_test_error_message,
+    citation_markdown,
     preview_state_key,
     specification_fingerprint,
 )
@@ -96,6 +97,37 @@ def test_agent_test_errors_are_bounded_and_actionable() -> None:
     assert "secret" not in agent_test_error_message(
         RuntimeError("api_key=secret-provider-body")
     )
+
+
+def test_citation_markdown_uses_compact_domain_but_keeps_full_url() -> None:
+    url = (
+        "https://ru.wikipedia.org/wiki/"
+        "%D0%A4%D0%B8%D0%BD%D0%B0%D0%BB_%D1%87%D0%B5%D0%BC%D0%BF%D0%B8%D0%BE"
+        "%D0%BD%D0%B0%D1%82%D0%B0_%D0%BC%D0%B8%D1%80%D0%B0"
+    )
+
+    markdown = citation_markdown(
+        1,
+        "Финал чемпионата мира по футболу 2026 — Википедия",
+        url,
+    )
+
+    assert "ru.wikipedia.org ↗" in markdown
+    assert url in markdown
+    assert markdown.count(url) == 1
+    assert markdown.startswith(
+        "1. Финал чемпионата мира по футболу 2026 — Википедия — "
+    )
+
+
+def test_citation_markdown_shortens_long_non_url_reference() -> None:
+    reference = "file-" + ("a" * 100)
+
+    markdown = citation_markdown(2, "Внутренний документ", reference)
+
+    assert reference not in markdown
+    assert "…" in markdown
+    assert len(markdown) < len(reference)
 
 
 def test_chat_flow_builds_callbacks_without_exposing_connection_to_result_view() -> (

@@ -3,6 +3,7 @@ import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote, urlsplit
 from uuid import uuid4
 
 import streamlit as st
@@ -46,6 +47,7 @@ RUNTIME_CONFIG_HELP = (
     "инструменты и параметры генерации. API-ключ, folder ID и тестовый вопрос "
     "в файл не входят."
 )
+MAX_REFERENCE_LABEL_LENGTH = 48
 
 RuntimeConfigCallback = Callable[[Mapping[str, Any]], str]
 AgentTestCallback = Callable[
@@ -64,6 +66,56 @@ class AgentSpecificationActions:
 class AgentPreviewState:
     specification_fingerprint: str
     result: AgentTestResult
+
+
+def citation_markdown(number: int, title: str, reference: str | None) -> str:
+    safe_title = _escape_markdown_text(_compact_unbroken_text(title, 96))
+    if not reference:
+        return f"{number}. {safe_title}"
+
+    normalized_reference = reference.strip()
+    parsed = urlsplit(normalized_reference)
+    if parsed.scheme in {"http", "https"} and parsed.hostname:
+        hostname = parsed.hostname.removeprefix("www.")
+        label = _compact_text(hostname, MAX_REFERENCE_LABEL_LENGTH) + " ↗"
+        href = quote(
+            normalized_reference,
+            safe=":/?#[]@!$&'()*+,;=%",
+        )
+        link = f"[{_escape_markdown_text(label)}](<{href}>)"
+        if normalized_reference == title:
+            return f"{number}. {link}"
+        return f"{number}. {safe_title} — {link}"
+
+    if normalized_reference == title:
+        return (
+            f"{number}. "
+            f"{_escape_markdown_text(_compact_text(title, MAX_REFERENCE_LABEL_LENGTH))}"
+        )
+    compact_reference = _escape_markdown_text(
+        _compact_text(normalized_reference, MAX_REFERENCE_LABEL_LENGTH)
+    )
+    return f"{number}. {safe_title} — {compact_reference}"
+
+
+def _compact_text(value: str, max_length: int) -> str:
+    if len(value) <= max_length:
+        return value
+    return value[: max_length - 1].rstrip() + "…"
+
+
+def _compact_unbroken_text(value: str, max_length: int) -> str:
+    if any(character.isspace() for character in value):
+        return value
+    return _compact_text(value, max_length)
+
+
+def _escape_markdown_text(value: str) -> str:
+    escaped_characters = frozenset("\\`*_[]()<>")
+    return "".join(
+        f"\\{character}" if character in escaped_characters else character
+        for character in value
+    )
 
 
 def render_agent_test_panel(
@@ -184,9 +236,12 @@ def render_agent_preview(result: AgentTestResult | AgentRunPreview) -> None:
                 citation.title or citation.filename or citation.file_id or "Источник"
             )
             reference = citation.url or citation.filename or citation.file_id
-            st.write(
-                f"{number}. {title}"
-                + (f" — {reference}" if reference and reference != title else "")
+            st.markdown(
+                citation_markdown(
+                    number,
+                    title,
+                    reference,
+                )
             )
 
     token_metrics = [
