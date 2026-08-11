@@ -7,7 +7,9 @@ from ai_studio_agent_builder.config import (
     load_config,
     load_web_ui_config,
 )
-from experimental.oauth.config import load_oauth_gateway_config
+from ai_studio_agent_builder.experimental.oauth.config import (
+    load_oauth_gateway_config,
+)
 
 
 def test_oauth_is_optional_and_shared_yandex_credentials_are_not_required(

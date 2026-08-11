@@ -1,10 +1,12 @@
 # OAuth Gateway (experimental)
 
-Прототип находится в `src/experimental/oauth/`, не подключён к Web UI или
+Прототип находится в
+`src/ai_studio_agent_builder/experimental/oauth/`, не подключён к Web UI или
 Telegram и включается только отдельным Compose profile.
 
 ```bash
-PYTHONPATH=src uv run --env-file .env.gateway python -m experimental.oauth.app
+uv run --env-file .env.gateway \
+  python -m ai_studio_agent_builder.experimental.oauth.app
 ```
 
 Минимальная конфигурация:

@@ -4,8 +4,9 @@ from urllib.parse import quote
 
 from aiohttp import ClientSession
 
+from ai_studio_agent_builder.application.dto import UserCredentials
+
 from .config import OAuthGatewayClientConfig
-from context import UserCredentials
 
 
 class OAuthGatewayClientError(Exception):

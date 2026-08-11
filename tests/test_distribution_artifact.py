@@ -13,6 +13,7 @@ REQUIRED_PACKAGE_FILES = {
     f"{PACKAGE_ROOT}application/interaction_facade.py",
     f"{PACKAGE_ROOT}entrypoints/telegram.py",
     f"{PACKAGE_ROOT}entrypoints/web.py",
+    f"{PACKAGE_ROOT}experimental/oauth/app.py",
 }
 LEGACY_WHEEL_PATHS = {
     "ai_interaction_service.py",
@@ -78,8 +79,11 @@ def test_distribution_contains_the_package_and_imports_without_checkout(
                 "from ai_studio_agent_builder.application.interaction_facade "
                 "import AIInteractionService; "
                 "from ai_studio_agent_builder.entrypoints.telegram import main; "
+                "from ai_studio_agent_builder.experimental.oauth.app "
+                "import create_gateway_app; "
                 "assert ai_studio_agent_builder.AgentSpecification; "
                 "assert AIInteractionService; "
+                "assert callable(create_gateway_app); "
                 "assert callable(main)"
             ),
         ],

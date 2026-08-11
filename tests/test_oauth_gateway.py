@@ -6,9 +6,11 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from cryptography.fernet import Fernet
 
-from experimental.oauth.config import OAuthGatewayConfig
-from experimental.oauth.credential_store import EncryptedCredentialStore
-from experimental.oauth.gateway import (
+from ai_studio_agent_builder.experimental.oauth.config import OAuthGatewayConfig
+from ai_studio_agent_builder.experimental.oauth.credential_store import (
+    EncryptedCredentialStore,
+)
+from ai_studio_agent_builder.experimental.oauth.gateway import (
     GatewayInvalidState,
     OAuthFolder,
     OAuthGateway,

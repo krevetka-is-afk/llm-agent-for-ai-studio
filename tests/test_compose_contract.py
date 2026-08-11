@@ -35,7 +35,7 @@ def test_compose_keeps_mvp_entrypoints_and_experimental_profiles() -> None:
     assert services["oauth-gateway"]["command"] == [
         "python",
         "-m",
-        "experimental.oauth.app",
+        "ai_studio_agent_builder.experimental.oauth.app",
     ]
     assert services["telegram-bot"]["profiles"] == ["telegram-experimental"]
     assert services["oauth-gateway"]["profiles"] == ["oauth-experimental"]

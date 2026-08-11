@@ -63,8 +63,8 @@ src/
 │   │   ├── streamlit/         # Web UI
 │   │   └── telegram/          # экспериментальный Telegram adapter
 │   ├── entrypoints/           # тонкие Web/Telegram bootstraps
+│   ├── experimental/oauth/    # изолированный OAuth-прототип
 │   └── composition.py         # composition root
-└── experimental/oauth/        # временно изолированный OAuth-прототип
 ```
 
 Подробности и границы модулей: [docs/architecture.md](docs/architecture.md).

@@ -25,7 +25,6 @@ RUN addgroup --system app \
 
 COPY --chown=app:app config.yaml config.yaml
 COPY --chown=app:app .streamlit .streamlit
-COPY --chown=app:app src/experimental experimental
 
 USER app
 

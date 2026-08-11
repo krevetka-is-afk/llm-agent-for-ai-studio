@@ -2,7 +2,7 @@ services:
   oauth-gateway:
     profiles: ["oauth-experimental"]
     build: .
-    command: ["python", "-m", "experimental.oauth.app"]
+    command: ["python", "-m", "ai_studio_agent_builder.experimental.oauth.app"]
     env_file: .env.gateway
     restart: unless-stopped
     mem_limit: 1g

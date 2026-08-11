@@ -3,8 +3,8 @@ from typing import cast
 
 from aiohttp.test_utils import TestClient, TestServer
 
-from experimental.oauth.app import create_gateway_app
-from experimental.oauth.gateway import OAuthFolder, OAuthGateway
+from ai_studio_agent_builder.experimental.oauth.app import create_gateway_app
+from ai_studio_agent_builder.experimental.oauth.gateway import OAuthFolder, OAuthGateway
 
 
 class StubGateway:
