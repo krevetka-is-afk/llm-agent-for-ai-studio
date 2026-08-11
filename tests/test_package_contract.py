@@ -3,6 +3,7 @@ import agent_runtime as legacy_runtime
 import agent_specification as legacy_specification
 import component_catalog as legacy_catalog
 import conversation_state as legacy_builder_state
+import config as legacy_config
 import credentials as legacy_credentials
 import custom_agents.tools.upload_files as legacy_upload_files
 import file_security as legacy_file_security
@@ -10,6 +11,7 @@ import routing as legacy_routing
 import yandex_responses_runner as legacy_yandex_runner
 
 import ai_studio_agent_builder as public_api
+from ai_studio_agent_builder import config
 from ai_studio_agent_builder.application import builder_state, dto, file_policy
 from ai_studio_agent_builder.application.ports import agent_runner
 from ai_studio_agent_builder.domain import catalog, routing, runtime, specification
@@ -31,6 +33,12 @@ def test_public_api_reexports_stable_domain_contracts() -> None:
 
 
 def test_legacy_flat_imports_reference_packaged_contracts() -> None:
+    assert legacy_config.AgentRuntimeConfig is config.AgentRuntimeConfig
+    assert legacy_config.AIServiceConfig is config.AIServiceConfig
+    assert legacy_config.ConnectionConfig is config.ConnectionConfig
+    assert legacy_config.ModelConfig is config.ModelConfig
+    assert legacy_config.load_config is config.load_config
+    assert legacy_config.load_web_ui_config is config.load_web_ui_config
     assert legacy_builder_state.ConversationState is builder_state.ConversationState
     assert legacy_builder_state.ConversationOptions is builder_state.ConversationOptions
     assert legacy_file_security.sanitize_filename is file_policy.sanitize_filename

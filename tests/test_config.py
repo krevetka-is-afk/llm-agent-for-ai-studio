@@ -2,7 +2,11 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet
 
-from config import AgentRuntimeConfig, load_config, load_web_ui_config
+from ai_studio_agent_builder.config import (
+    AgentRuntimeConfig,
+    load_config,
+    load_web_ui_config,
+)
 from experimental.oauth.config import load_oauth_gateway_config
 
 

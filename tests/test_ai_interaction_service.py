@@ -10,6 +10,14 @@ from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentProviderError,
     AgentRunPreview,
 )
+from ai_studio_agent_builder.config import (
+    AIServiceConfig,
+    AgentRuntimeConfig,
+    ConnectionConfig,
+    ModelConfig,
+    PathConfig,
+    SessionDBConfig,
+)
 from agent_runtime import ExecutableAgentConfig
 from agent_specification import (
     AgentSpecification,
@@ -27,14 +35,6 @@ from ai_interaction_service import (
     InteractionRequest,
     MAX_ATTACHMENTS_PER_REQUEST,
     UploadValidationError,
-)
-from config import (
-    AgentRuntimeConfig,
-    AIServiceConfig,
-    ConnectionConfig,
-    ModelConfig,
-    PathConfig,
-    SessionDBConfig,
 )
 from context import AIStudioCredentials, ConversationOptions, ConversationState
 from result_assembly import (

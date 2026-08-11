@@ -2,8 +2,8 @@ from uuid import uuid4
 
 import streamlit as st
 
+from ai_studio_agent_builder.config import load_web_ui_config
 from ai_interaction_service import AIInteractionService
-from config import load_web_ui_config
 from logging_config import configure_console_logging
 from ui.api_key_store import EncryptedApiKeyStore
 from ui.chat_flow import render_chat

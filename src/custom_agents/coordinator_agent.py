@@ -2,7 +2,7 @@ import logging
 
 from agents.tool import Tool
 
-from config import ModelConfig
+from ai_studio_agent_builder.config import ModelConfig
 from custom_agents.tools.delegate_tools import (
     delegate_rag,
     delegate_one_prompt,

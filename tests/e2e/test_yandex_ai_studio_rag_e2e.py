@@ -10,7 +10,7 @@ import pytest
 
 import ai_interaction_service as interaction_module
 from ai_interaction_service import AIInteractionService, InteractionRequest
-from config import (
+from ai_studio_agent_builder.config import (
     AgentRuntimeConfig,
     AIServiceConfig,
     ConnectionConfig,

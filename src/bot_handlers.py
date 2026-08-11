@@ -6,9 +6,9 @@ from aiogram import Bot
 from aiogram import Router, types
 from aiogram.filters import Command
 
+from ai_studio_agent_builder.config import PathConfig
 from ai_interaction_service import AIInteractionService, Attachment, InteractionRequest
 from bot_utils import classify_message, download_media
-from config import PathConfig
 from context import AIStudioCredentials, UserStore
 from message_service import MessageService
 from telegram_flow import PerUserRequestGate

@@ -4,8 +4,8 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
+from ai_studio_agent_builder.config import AppConfig, load_config
 from ai_interaction_service import AIInteractionService
-from config import load_config, AppConfig
 from bot_handlers import create_router
 from context import UserStore
 from logging_config import configure_console_logging

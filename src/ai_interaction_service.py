@@ -24,6 +24,7 @@ from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentRunner,
     AgentRunnerError,
 )
+from ai_studio_agent_builder.config import AIServiceConfig
 from ai_studio_agent_builder.domain.routing import resolve_explicit_route
 from ai_studio_agent_builder.infrastructure.yandex_ai_studio.client_factory import (
     get_api_key_client,
@@ -44,7 +45,6 @@ from agent_specification import (
     AgentSpecification,
     InvalidSpecificationRecordError,
 )
-from config import AIServiceConfig
 from context import (
     ConversationOptions,
     ConversationState,

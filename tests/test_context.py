@@ -1,5 +1,5 @@
-from config import ConnectionConfig
 from ai_studio_agent_builder.application.dto import AIStudioCredentials
+from ai_studio_agent_builder.config import ConnectionConfig
 from ai_studio_agent_builder.infrastructure.yandex_ai_studio.client_factory import (
     get_api_key_client,
 )

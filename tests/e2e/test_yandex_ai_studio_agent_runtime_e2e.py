@@ -17,7 +17,7 @@ from ai_interaction_service import (
     AgentTestRequest,
     AgentTestResult,
 )
-from config import (
+from ai_studio_agent_builder.config import (
     AIServiceConfig,
     AgentRuntimeConfig,
     ConnectionConfig,

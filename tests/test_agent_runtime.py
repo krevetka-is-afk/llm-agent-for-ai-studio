@@ -3,6 +3,7 @@ from dataclasses import replace
 
 import pytest
 
+from ai_studio_agent_builder.config import AgentRuntimeConfig
 from ai_studio_agent_builder.domain.runtime import (
     MissingRuntimeParameterError,
     SpecificationNotReadyError,
@@ -19,7 +20,6 @@ from ai_studio_agent_builder.domain.specification import (
     build_rag_specification,
 )
 from ai_studio_agent_builder.domain.catalog import TemplateId
-from config import AgentRuntimeConfig
 
 
 RUNTIME = AgentRuntimeConfig(

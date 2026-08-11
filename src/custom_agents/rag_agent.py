@@ -2,7 +2,7 @@ import logging
 
 from agents.tool import Tool
 
-from config import ModelConfig
+from ai_studio_agent_builder.config import ModelConfig
 from custom_agents.base_agent import CustomAgent
 from custom_agents.tools.agent_specification import (
     finalize_agent_specification,

@@ -5,8 +5,8 @@ from typing import cast
 from agents import RunConfig
 from openai import OpenAI
 
-from config import ModelConfig
 from ai_studio_agent_builder.application.builder_state import ConversationState
+from ai_studio_agent_builder.config import ModelConfig
 from custom_agents.base_agent import CustomAgent
 from request_context import RequestContext
 
