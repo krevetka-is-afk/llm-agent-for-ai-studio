@@ -5,6 +5,7 @@ from agents import RunContextWrapper, function_tool
 
 from ai_studio_agent_builder.builder.context import RequestContext
 from ai_studio_agent_builder.domain.specification import (
+    build_code_interpreter_tool_descriptor,
     build_web_search_tool_descriptor,
 )
 from ai_studio_agent_builder.domain.specification_codec import (
@@ -39,6 +40,7 @@ def _update_agent_specification_impl(
     constraints: list[str] | None = None,
     expected_result: str | None = None,
     web_search: bool | None = None,
+    code_interpreter: bool | None = None,
 ) -> str:
     specification = state.current_or_new_specification()
     updates: dict[str, Any] = {}
@@ -60,12 +62,20 @@ def _update_agent_specification_impl(
     if cleaned_constraints is not None:
         updates["constraints"] = cleaned_constraints
 
-    if web_search is not None:
+    if web_search is not None or code_interpreter is not None:
         tools_by_id = {tool.tool_id: tool for tool in specification.tools}
-        if web_search:
-            tools_by_id["web_search"] = build_web_search_tool_descriptor()
-        else:
-            tools_by_id.pop("web_search", None)
+        if web_search is not None:
+            if web_search:
+                tools_by_id["web_search"] = build_web_search_tool_descriptor()
+            else:
+                tools_by_id.pop("web_search", None)
+        if code_interpreter is not None:
+            if code_interpreter:
+                tools_by_id["code_interpreter"] = (
+                    build_code_interpreter_tool_descriptor()
+                )
+            else:
+                tools_by_id.pop("code_interpreter", None)
         updates["tools"] = tuple(tools_by_id.values())
 
     updated = replace(specification, **updates).with_validation_status()
@@ -87,6 +97,7 @@ def update_agent_specification(
     constraints: list[str] | None = None,
     expected_result: str | None = None,
     web_search: bool | None = None,
+    code_interpreter: bool | None = None,
 ) -> str:
     """
     Deterministically update the draft AgentSpecification from confirmed user
@@ -101,6 +112,7 @@ def update_agent_specification(
         constraints=constraints,
         expected_result=expected_result,
         web_search=web_search,
+        code_interpreter=code_interpreter,
     )
 
 

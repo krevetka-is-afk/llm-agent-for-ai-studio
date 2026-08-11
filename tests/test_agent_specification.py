@@ -10,6 +10,7 @@ from ai_studio_agent_builder.domain.specification import (
     InvalidSpecificationRecordError,
     KnowledgeSource,
     ToolDescriptor,
+    build_code_interpreter_tool_descriptor,
     build_one_prompt_specification,
     build_rag_specification,
 )
@@ -84,6 +85,115 @@ def test_ordinary_one_prompt_specification_has_no_tools() -> None:
 
     assert spec.tools == ()
     assert spec.to_record()["tools"] == []
+
+
+def test_code_interpreter_descriptor_is_portable_and_uses_safe_defaults() -> None:
+    descriptor = build_code_interpreter_tool_descriptor()
+
+    assert descriptor.to_record() == {
+        "tool_id": "code_interpreter",
+        "title": "Code Interpreter",
+        "description": "Runs Python in an isolated Yandex AI Studio container.",
+        "parameters": {
+            "memory_limit": "1g",
+            "network_policy": "disabled",
+        },
+    }
+
+
+def test_code_interpreter_is_supported_by_one_prompt_and_rag_templates() -> None:
+    one_prompt = build_one_prompt_specification(
+        purpose="Analyze uploaded data",
+        instructions="Use Python for calculations.",
+        expected_result="A calculated answer",
+        code_interpreter=True,
+    )
+    rag = build_rag_specification(
+        purpose="Search documents and calculate metrics",
+        instructions="Search before calculating.",
+        expected_result="A grounded calculation",
+        index_id="vs-123",
+        index_name="reports",
+        knowledge_sources=(
+            KnowledgeSource("file-1", "report.pdf", "uploaded_file", "file-1"),
+        ),
+        code_interpreter=True,
+    )
+
+    assert one_prompt.validate().is_ready
+    assert [tool.tool_id for tool in one_prompt.tools] == ["code_interpreter"]
+    assert rag.validate().is_ready
+    assert [tool.tool_id for tool in rag.tools] == [
+        "knowledge_search",
+        "code_interpreter",
+    ]
+
+
+@pytest.mark.parametrize(
+    "parameters, invalid_fields",
+    [
+        (
+            {
+                "memory_limit": "1g",
+                "network_policy": "disabled",
+                "file_ids": ["file-provider-owned"],
+            },
+            {"tools.code_interpreter.parameters.file_ids"},
+        ),
+        (
+            {
+                "memory_limit": "1g",
+                "network_policy": "disabled",
+                "container_id": "container-provider-owned",
+            },
+            {"tools.code_interpreter.parameters.container_id"},
+        ),
+        (
+            {
+                "memory_limit": "64g",
+                "network_policy": "disabled",
+            },
+            {"tools.code_interpreter.parameters.memory_limit"},
+        ),
+        (
+            {
+                "memory_limit": "1g",
+                "network_policy": {
+                    "type": "allowlist",
+                    "allowed_domains": ["example.com"],
+                    "domain_secrets": [{"name": "TOKEN", "value": "secret"}],
+                },
+            },
+            {
+                "tools.code_interpreter.parameters.network_policy",
+                "tools[0].parameters.network_policy.domain_secrets",
+            },
+        ),
+    ],
+)
+def test_code_interpreter_rejects_provider_state_and_unsafe_parameters(
+    parameters: dict,
+    invalid_fields: set[str],
+) -> None:
+    spec = AgentSpecification(
+        template=TemplateId.ONE_PROMPT,
+        purpose="Analyze data",
+        instructions="Use Python.",
+        expected_result="Calculated answer",
+        tools=(
+            ToolDescriptor(
+                tool_id="code_interpreter",
+                title="Code Interpreter",
+                description="Runs Python in a container.",
+                parameters=parameters,
+            ),
+        ),
+    )
+
+    result = spec.validate()
+
+    assert not result.is_ready
+    assert invalid_fields <= {issue.field for issue in result.issues}
 
 
 def test_incomplete_rag_specification_requires_sources_tool_and_index() -> None:
@@ -399,6 +509,7 @@ def test_catalog_separates_public_application_tools_from_internal_tools() -> Non
     rag_template = template_descriptor(TemplateId.RAG)
     knowledge_search = component_descriptor("knowledge_search")
     web_search = component_descriptor("web_search")
+    code_interpreter = component_descriptor("code_interpreter")
     finish_dialog = component_descriptor("finish_dialog")
 
     assert rag_template.required_fields == (
@@ -411,16 +522,25 @@ def test_catalog_separates_public_application_tools_from_internal_tools() -> Non
     )
     assert "tools" in one_prompt_template.optional_fields
     assert "web_search" in one_prompt_template.components
+    assert "code_interpreter" in one_prompt_template.components
+    assert "code_interpreter" in rag_template.components
     assert knowledge_search.kind is ComponentKind.APPLICATION_TOOL
     assert web_search.kind is ComponentKind.APPLICATION_TOOL
     assert web_search.parameters == {"search_context_size": "medium"}
+    assert code_interpreter.kind is ComponentKind.APPLICATION_TOOL
+    assert code_interpreter.parameters == {
+        "memory_limit": "1g",
+        "network_policy": "disabled",
+    }
     assert finish_dialog.kind is ComponentKind.INTERNAL_TOOL
     assert is_public_application_tool("knowledge_search")
     assert is_public_application_tool("web_search")
+    assert is_public_application_tool("code_interpreter")
     assert not is_public_application_tool("finish_dialog")
     public_ids = {
         component["component_id"] for component in catalog_record()["components"]
     }
     assert "knowledge_search" in public_ids
     assert "web_search" in public_ids
+    assert "code_interpreter" in public_ids
     assert "finish_dialog" not in public_ids

@@ -74,7 +74,7 @@ TEMPLATES: dict[TemplateId, TemplateDescriptor] = {
         ),
         required_fields=BASE_REQUIRED_FIELDS,
         optional_fields=("audience", "inputs", "constraints", "parameters", "tools"),
-        components=("system_prompt", "web_search"),
+        components=("system_prompt", "web_search", "code_interpreter"),
     ),
     TemplateId.RAG: TemplateDescriptor(
         template_id=TemplateId.RAG,
@@ -90,7 +90,12 @@ TEMPLATES: dict[TemplateId, TemplateDescriptor] = {
             "parameters.index_id",
         ),
         optional_fields=("audience", "inputs", "constraints", "parameters.ttl_days"),
-        components=("system_prompt", "vector_index", "knowledge_search"),
+        components=(
+            "system_prompt",
+            "vector_index",
+            "knowledge_search",
+            "code_interpreter",
+        ),
     ),
 }
 
@@ -124,6 +129,16 @@ COMPONENTS: dict[str, ComponentDescriptor] = {
         title="Web search",
         description="Searches the public web for current information.",
         parameters={"search_context_size": "medium"},
+    ),
+    "code_interpreter": ComponentDescriptor(
+        component_id="code_interpreter",
+        kind=ComponentKind.APPLICATION_TOOL,
+        title="Code Interpreter",
+        description="Runs Python in an isolated Yandex AI Studio container.",
+        parameters={
+            "memory_limit": "1g",
+            "network_policy": "disabled",
+        },
     ),
     "delegate_rag": ComponentDescriptor(
         component_id="delegate_rag",

@@ -1,6 +1,11 @@
 from collections.abc import Mapping
 from dataclasses import replace
 
+from ..domain.catalog import (
+    TemplateId,
+    is_public_application_tool,
+    template_descriptor,
+)
 from ..domain.routing import ConversationOptions
 from ..domain.specification import (
     AgentSpecification,
@@ -60,15 +65,12 @@ class ConversationState:
             self._pending_filenames_by_file_id.clear()
         if new_state is not ConversationOptions.COORDINATOR:
             target_template = specification_template_for(new_state)
-            if (
-                self.draft_agent_specification is not None
-                and self.draft_agent_specification.template is not target_template
-            ):
-                self.draft_agent_specification = None
-            if (
-                self.latest_agent_specification is not None
-                and self.latest_agent_specification.template is not target_template
-            ):
+            current = self.agent_specification
+            if current is not None and current.template is not target_template:
+                self.draft_agent_specification = _retarget_compatible_tools(
+                    current,
+                    target_template,
+                )
                 self.latest_agent_specification = None
         self.state = new_state
 
@@ -172,6 +174,25 @@ class ConversationState:
         ).with_validation_status()
         self.update_agent_specification(updated)
         return updated
+
+
+def _retarget_compatible_tools(
+    specification: AgentSpecification,
+    target_template: TemplateId,
+) -> AgentSpecification | None:
+    allowed_components = set(template_descriptor(target_template).components)
+    compatible_tools = tuple(
+        tool
+        for tool in specification.tools
+        if tool.tool_id in allowed_components
+        and is_public_application_tool(tool.tool_id)
+    )
+    if not compatible_tools:
+        return None
+    return AgentSpecification(
+        template=target_template,
+        tools=compatible_tools,
+    ).with_validation_status()
 
 
 __all__ = ["ConversationOptions", "ConversationState"]

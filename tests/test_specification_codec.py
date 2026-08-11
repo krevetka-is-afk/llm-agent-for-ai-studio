@@ -30,6 +30,88 @@ def test_codec_round_trips_canonical_strict_json() -> None:
     assert json.loads(payload) == specification.to_record()
 
 
+@pytest.mark.parametrize(
+    "legacy_record",
+    [
+        {
+            "schema_version": "1.0",
+            "agent_type": "one_prompt",
+            "template": "one_prompt",
+            "purpose": "Summarize support requests",
+            "audience": "",
+            "inputs": [],
+            "instructions": "Return a concise summary.",
+            "constraints": [],
+            "knowledge_sources": [],
+            "tools": [],
+            "expected_result": "A short summary",
+            "parameters": {},
+            "status": "ready",
+            "validation": {
+                "status": "ready",
+                "missing_fields": [],
+                "issues": [],
+            },
+        },
+        {
+            "schema_version": "1.0",
+            "agent_type": "rag",
+            "template": "rag",
+            "purpose": "Answer from documents",
+            "audience": "",
+            "inputs": [],
+            "instructions": "Search before answering.",
+            "constraints": [],
+            "knowledge_sources": [
+                {
+                    "source_id": "file-1",
+                    "title": "guide.pdf",
+                    "kind": "uploaded_file",
+                    "reference": "file-1",
+                }
+            ],
+            "tools": [
+                {
+                    "tool_id": "knowledge_search",
+                    "title": "Knowledge search",
+                    "description": "Searches the connected AI Studio vector index.",
+                    "parameters": {
+                        "index_id": "vs-123",
+                        "index_name": "docs",
+                    },
+                }
+            ],
+            "expected_result": "A grounded answer",
+            "parameters": {
+                "index_id": "vs-123",
+                "index_name": "docs",
+                "ttl_days": 1,
+            },
+            "status": "ready",
+            "validation": {
+                "status": "ready",
+                "missing_fields": [],
+                "issues": [],
+            },
+        },
+    ],
+)
+def test_pre_code_interpreter_schema_1_0_records_remain_byte_compatible(
+    legacy_record: dict,
+) -> None:
+    payload = json.dumps(
+        legacy_record,
+        allow_nan=False,
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+    )
+
+    restored = loads_agent_specification(payload)
+
+    assert dumps_agent_specification(restored) == payload
+
+
 def test_record_loader_requires_json_object_root() -> None:
     with pytest.raises(InvalidSpecificationRootError, match="root must be an object"):
         load_agent_specification([])

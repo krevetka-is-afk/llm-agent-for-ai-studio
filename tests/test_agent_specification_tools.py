@@ -93,6 +93,44 @@ def test_one_prompt_update_omitting_web_search_preserves_existing_choice() -> No
     assert [tool["tool_id"] for tool in result["tools"]] == ["web_search"]
 
 
+def test_update_adds_code_interpreter_idempotently_and_removes_only_that_tool() -> None:
+    state = ConversationState(ConversationOptions.ONE_PROMPT)
+
+    _update_agent_specification_impl(
+        state,
+        web_search=True,
+        code_interpreter=True,
+    )
+    repeated = json.loads(
+        _update_agent_specification_impl(state, code_interpreter=True)
+    )
+
+    assert [tool["tool_id"] for tool in repeated["tools"]] == [
+        "web_search",
+        "code_interpreter",
+    ]
+    assert repeated["tools"][1]["parameters"] == {
+        "memory_limit": "1g",
+        "network_policy": "disabled",
+    }
+
+    removed = json.loads(
+        _update_agent_specification_impl(state, code_interpreter=False)
+    )
+    assert [tool["tool_id"] for tool in removed["tools"]] == ["web_search"]
+
+
+def test_update_omitting_code_interpreter_preserves_existing_choice() -> None:
+    state = ConversationState(ConversationOptions.RAG)
+    _update_agent_specification_impl(state, code_interpreter=True)
+
+    result = json.loads(
+        _update_agent_specification_impl(state, purpose="Analyze reports")
+    )
+
+    assert [tool["tool_id"] for tool in result["tools"]] == ["code_interpreter"]
+
+
 def test_updating_finalized_specification_invalidates_previous_export() -> None:
     state = ConversationState(ConversationOptions.ONE_PROMPT)
     _update_agent_specification_impl(

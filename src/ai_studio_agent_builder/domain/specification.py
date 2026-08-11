@@ -37,6 +37,9 @@ TOOL_RECORD_FIELDS = frozenset({"tool_id", "title", "description", "parameters"}
 VALIDATION_RECORD_FIELDS = frozenset({"status", "missing_fields", "issues"})
 VALIDATION_ISSUE_RECORD_FIELDS = frozenset({"field", "message"})
 WEB_SEARCH_CONTEXT_SIZES = frozenset({"low", "medium", "high"})
+CODE_INTERPRETER_PARAMETERS = frozenset({"memory_limit", "network_policy"})
+CODE_INTERPRETER_MEMORY_LIMIT = "1g"
+CODE_INTERPRETER_NETWORK_POLICY = "disabled"
 SECRET_FIELD_FRAGMENTS = (
     "api_key",
     "apikey",
@@ -350,6 +353,8 @@ class AgentSpecification:
                             ),
                         )
                     )
+            if tool.tool_id == "code_interpreter":
+                issues.extend(_code_interpreter_issues(tool))
         if self.template is TemplateId.ONE_PROMPT and self.knowledge_sources:
             issues.append(
                 ValidationIssue(
@@ -408,7 +413,13 @@ def build_one_prompt_specification(
     constraints: Sequence[str] = (),
     parameters: Mapping[str, Any] | None = None,
     web_search: bool = False,
+    code_interpreter: bool = False,
 ) -> AgentSpecification:
+    tools: list[ToolDescriptor] = []
+    if web_search:
+        tools.append(build_web_search_tool_descriptor())
+    if code_interpreter:
+        tools.append(build_code_interpreter_tool_descriptor())
     return AgentSpecification(
         template=TemplateId.ONE_PROMPT,
         purpose=purpose,
@@ -416,7 +427,7 @@ def build_one_prompt_specification(
         inputs=tuple(inputs),
         instructions=instructions,
         constraints=tuple(constraints),
-        tools=(build_web_search_tool_descriptor(),) if web_search else (),
+        tools=tuple(tools),
         expected_result=expected_result,
         parameters=parameters or {},
     ).with_validation_status()
@@ -424,6 +435,16 @@ def build_one_prompt_specification(
 
 def build_web_search_tool_descriptor() -> ToolDescriptor:
     component = component_descriptor("web_search")
+    return ToolDescriptor(
+        tool_id=component.component_id,
+        title=component.title,
+        description=component.description,
+        parameters=dict(component.parameters or {}),
+    )
+
+
+def build_code_interpreter_tool_descriptor() -> ToolDescriptor:
+    component = component_descriptor("code_interpreter")
     return ToolDescriptor(
         tool_id=component.component_id,
         title=component.title,
@@ -444,7 +465,18 @@ def build_rag_specification(
     inputs: Sequence[str] = (),
     constraints: Sequence[str] = (),
     ttl_days: int = 1,
+    code_interpreter: bool = False,
 ) -> AgentSpecification:
+    tools = [
+        ToolDescriptor(
+            tool_id="knowledge_search",
+            title="Knowledge search",
+            description="Searches the connected AI Studio vector index.",
+            parameters={"index_id": index_id, "index_name": index_name},
+        )
+    ]
+    if code_interpreter:
+        tools.append(build_code_interpreter_tool_descriptor())
     return AgentSpecification(
         template=TemplateId.RAG,
         purpose=purpose,
@@ -453,14 +485,7 @@ def build_rag_specification(
         instructions=instructions,
         constraints=tuple(constraints),
         knowledge_sources=tuple(knowledge_sources),
-        tools=(
-            ToolDescriptor(
-                tool_id="knowledge_search",
-                title="Knowledge search",
-                description="Searches the connected AI Studio vector index.",
-                parameters={"index_id": index_id, "index_name": index_name},
-            ),
-        ),
+        tools=tuple(tools),
         expected_result=expected_result,
         parameters={
             "index_id": index_id,
@@ -475,6 +500,40 @@ def specification_template_for(state: Any) -> TemplateId:
     if state_name == "RAG":
         return TemplateId.RAG
     return TemplateId.ONE_PROMPT
+
+
+def _code_interpreter_issues(tool: ToolDescriptor) -> tuple[ValidationIssue, ...]:
+    issues: list[ValidationIssue] = []
+    for parameter_name in sorted(set(tool.parameters) - CODE_INTERPRETER_PARAMETERS):
+        if parameter_name in {"file_ids", "container_id"}:
+            message = (
+                "Provider file and container IDs are request-scoped and must not "
+                "be stored in AgentSpecification"
+            )
+        else:
+            message = "Code Interpreter parameter is not supported"
+        issues.append(
+            ValidationIssue(
+                field=f"tools.code_interpreter.parameters.{parameter_name}",
+                message=message,
+            )
+        )
+
+    if tool.parameters.get("memory_limit") != CODE_INTERPRETER_MEMORY_LIMIT:
+        issues.append(
+            ValidationIssue(
+                field="tools.code_interpreter.parameters.memory_limit",
+                message="Code Interpreter memory limit must be 1g in v0.1.0",
+            )
+        )
+    if tool.parameters.get("network_policy") != CODE_INTERPRETER_NETWORK_POLICY:
+        issues.append(
+            ValidationIssue(
+                field="tools.code_interpreter.parameters.network_policy",
+                message="Code Interpreter network policy must be disabled in v0.1.0",
+            )
+        )
+    return tuple(issues)
 
 
 def _has_text(value: str) -> bool:
