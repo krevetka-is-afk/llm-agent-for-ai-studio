@@ -23,7 +23,12 @@ __pycache__
 app.log
 logs/
 output/
+outputs/
 tmp/
+dist/
+docs/report/
+docs/*.local.md
+docs/test-results.md
 graphify-out/
 r/
 conversation_db/

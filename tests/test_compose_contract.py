@@ -99,3 +99,10 @@ def test_docker_build_context_excludes_credentials_and_local_agent_state() -> No
     assert "*credentials*.json" in patterns
     assert ".omx" in patterns
     assert "graphify-out/" in patterns
+    assert {
+        "dist/",
+        "docs/report/",
+        "docs/*.local.md",
+        "docs/test-results.md",
+        "outputs/",
+    } <= patterns

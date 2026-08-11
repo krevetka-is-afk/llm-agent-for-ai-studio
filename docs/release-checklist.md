@@ -2,6 +2,8 @@
 
 Публикация разрешена только после закрытия всех блокирующих пунктов. Локальная
 готовность не заменяет согласование бренда, прав и внешних настроек GitHub.
+Последний технический снимок и принятые риски зафиксированы в
+[`release-readiness.md`](release-readiness.md).
 
 ## 1. Идентичность и права — блокирует публикацию
 
@@ -19,19 +21,28 @@
 
 - [x] Реальные `.env`, credentials, локальные базы и пользовательские файлы
   исключены из Git.
-- [x] CI настроен на gitleaks-скан полной истории.
+- [x] CI настроен на gitleaks-скан каждого push/PR, а ручной release workflow —
+  на скан всей достижимой истории.
 - [x] Production lock проверяется `pip-audit`; на 2026-08-11 известных
   уязвимостей не найдено.
 - [x] Credentialed E2E запускается только вручную и не запускается автоматически
   из внешнего pull request.
 - [ ] Создан и защищён GitHub Environment `yandex-ai-studio-e2e`; credentials
   сохранены как environment secrets, назначены reviewers и deployment branches.
-- [ ] Запущен gitleaks по всей финальной истории на публикуемом commit, результат
-  сохранён в CI.
+- [x] Локальный Gitleaks `v8.30.1` проверил всю достижимую историю во всех refs;
+  четыре совпадения с тестовым `ApiKey123456` классифицированы и ограничены
+  точными fingerprints в `.gitleaksignore`, повторный scan не нашёл утечек.
+- [x] Sdist ограничен installable package allowlist; fresh artifact и Docker
+  build context не включают локальные отчёты, credentials, outputs и `dist/`.
+- [x] Upload/storage lifecycle закрывает metadata/stream size limits, traversal,
+  partial provider cleanup, TTL fallback и минимальные POSIX-права.
+- [ ] Ручной full-history workflow запущен на финальном `main`, результат
+  сохранён в GitHub Actions.
 - [ ] Если секрет когда-либо попадал в историю, он отозван, история очищена, а
   повторный full-history scan успешен.
 - [ ] После переключения visibility включён **Private vulnerability reporting**.
 - [ ] Включены Dependabot alerts и security updates.
+- [ ] Включены GitHub secret scanning, push protection и CodeQL default setup.
 
 ## 3. Репозиторий и review — блокирует публикацию
 

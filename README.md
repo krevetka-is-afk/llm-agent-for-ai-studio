@@ -39,6 +39,10 @@ uv run --env-file .env.web streamlit run src/ai_studio_agent_builder/entrypoints
 
 Локальные базы и загруженные файлы сохраняются в `.local/`; этот каталог
 исключён из Git. В Docker Compose те же данные сохраняются в volume `web-data`.
+На POSIX-системах файлы ключей и истории создаются с правами `0600`, каталоги
+вложений — `0700`. Неиспользуемые Web-подключения автоматически удаляются из
+зашифрованной базы через 30 дней. Локальные файлы ограничены 100 MiB и 100
+объектами на user scope, а общий storage root — 512 MiB.
 
 Пользователь вводит API-ключ Yandex AI Studio и ID каталога. Ключ проверяется
 минимальным запросом и хранится локально в зашифрованном виде; в model/tool
@@ -57,8 +61,9 @@ context он не передаётся.
 Builder-чата. Каждый запуск имеет собственный upload/download lifecycle:
 входы проходят лимиты, временные remote IDs добавляются только в копию запроса,
 выходы потоково сохраняются в `.local/`, а известные remote resources удаляются
-best effort. API-ключи, folder ID, пользовательские bytes и временные
-file/container IDs в экспорт и ZIP не попадают.
+best effort. Defense-in-depth TTL ограничивает жизнь provider input files 48
+часами, а RAG vector stores — одним днём. API-ключи, folder ID, пользовательские
+bytes и временные file/container IDs в экспорт и ZIP не попадают.
 
 Готовую `agent-specification.json` также можно приложить в чат с запросом
 «создай агента из этой спецификации». Приложение строго проверит JSON и схему,
@@ -97,6 +102,7 @@ src/
 - [Docker и deployment](docs/deployment.md)
 - [Бренд и внешняя атрибуция](docs/branding.md)
 - [Чек-лист публичного релиза](docs/release-checklist.md)
+- [Отчёт о готовности к публичному релизу](docs/release-readiness.md)
 - [Экспериментальный Telegram-бот](docs/telegram-experimental.md)
 - [Экспериментальный OAuth Gateway](docs/oauth-gateway-experimental.md)
 

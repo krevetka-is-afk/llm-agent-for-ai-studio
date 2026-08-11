@@ -61,6 +61,9 @@ exclude = ["uv.lock"]
 [tool.hatch.build.targets.wheel]
 packages = ["src/ai_studio_agent_builder"]
 
+[tool.hatch.build.targets.sdist]
+only-include = ["src/ai_studio_agent_builder"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [

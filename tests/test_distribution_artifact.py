@@ -2,6 +2,7 @@ import os
 import subprocess
 import sys
 import tarfile
+import tomllib
 import zipfile
 from pathlib import Path
 
@@ -43,6 +44,15 @@ def _build_distribution(output_dir: Path) -> tuple[Path, Path]:
     return wheel, source_distribution
 
 
+def test_distribution_manifest_only_traverses_the_installable_package() -> None:
+    build_config = tomllib.loads(
+        (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    )["tool"]["hatch"]["build"]["targets"]
+
+    assert build_config["wheel"]["packages"] == ["src/ai_studio_agent_builder"]
+    assert build_config["sdist"]["only-include"] == ["src/ai_studio_agent_builder"]
+
+
 def test_distribution_contains_the_package_and_imports_without_checkout(
     tmp_path: Path,
 ) -> None:
@@ -69,6 +79,8 @@ def test_distribution_contains_the_package_and_imports_without_checkout(
         for path in source_files
         for legacy_path in LEGACY_SOURCE_PATHS
     )
+    assert not any(path.startswith("docs/report/") for path in source_files)
+    assert not any(path.startswith((".env", ".local/")) for path in source_files)
 
     environment = os.environ.copy()
     environment.pop("PYTHONPATH", None)

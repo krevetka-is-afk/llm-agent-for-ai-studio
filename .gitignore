@@ -246,5 +246,11 @@ output/
 tmp/
 r/
 
+# Local review, study, and release evidence
+/docs/*.local.md
+/docs/report/
+/docs/test-results.md
+/outputs/
+
 # Operating system metadata
 .DS_Store
