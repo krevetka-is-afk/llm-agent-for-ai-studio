@@ -3,10 +3,12 @@ import agent_runtime as legacy_runtime
 import agent_specification as legacy_specification
 import component_catalog as legacy_catalog
 import routing as legacy_routing
+import yandex_responses_runner as legacy_yandex_runner
 
 import ai_studio_agent_builder as public_api
 from ai_studio_agent_builder.application.ports import agent_runner
 from ai_studio_agent_builder.domain import catalog, routing, runtime, specification
+from ai_studio_agent_builder.infrastructure.yandex_ai_studio import responses_runner
 
 
 def test_public_api_reexports_stable_domain_contracts() -> None:
@@ -32,3 +34,7 @@ def test_legacy_flat_imports_reference_packaged_contracts() -> None:
     assert legacy_catalog.TemplateId is catalog.TemplateId
     assert legacy_routing.ConversationOptions is routing.ConversationOptions
     assert legacy_routing.resolve_explicit_route is routing.resolve_explicit_route
+    assert (
+        legacy_yandex_runner.YandexResponsesAgentRunner
+        is responses_runner.YandexResponsesAgentRunner
+    )

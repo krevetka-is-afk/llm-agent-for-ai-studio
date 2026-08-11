@@ -19,6 +19,9 @@ from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentRunnerError,
 )
 from ai_studio_agent_builder.domain.routing import resolve_explicit_route
+from ai_studio_agent_builder.infrastructure.yandex_ai_studio.responses_runner import (
+    YandexResponsesAgentRunner,
+)
 from agent_runtime import (
     AgentRuntimeCompilationError,
     ExecutableAgentConfig,
@@ -58,7 +61,6 @@ from result_assembly import (
     render_result_text,
 )
 from session import get_session
-from yandex_responses_runner import YandexResponsesAgentRunner
 
 
 logger = logging.getLogger(__name__)

@@ -10,7 +10,9 @@ from ai_studio_agent_builder.application.ports.agent_runner import (
     VectorStoreUnavailableError,
 )
 from ai_studio_agent_builder.domain.runtime import ExecutableAgentConfig
-from yandex_responses_runner import YandexResponsesAgentRunner
+from ai_studio_agent_builder.infrastructure.yandex_ai_studio.responses_runner import (
+    YandexResponsesAgentRunner,
+)
 
 
 class FakeResponses:
