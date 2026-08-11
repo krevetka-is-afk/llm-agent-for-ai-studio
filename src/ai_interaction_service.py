@@ -4,12 +4,10 @@ import logging
 import shutil
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from agents import OpenAIProvider, RunConfig
 from openai import OpenAIError
 
 from ai_studio_agent_builder.application import interaction as interaction_contract
@@ -23,8 +21,6 @@ from ai_studio_agent_builder.application.interaction import (
     InteractionRequest,
     InteractionResult,
     MAX_AGENT_TEST_INPUT_LENGTH,
-    MAX_ATTACHMENTS_PER_REQUEST,
-    MAX_TOTAL_UPLOAD_BYTES,
     UploadValidationError,
 )
 from ai_studio_agent_builder.application.errors import AIStudioRequestError
@@ -40,7 +36,11 @@ from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentRunnerError,
 )
 from ai_studio_agent_builder.application.builder_state import ConversationState
-from ai_studio_agent_builder.builder.agents.sdk_event_adapter import AgentRunCollector
+from ai_studio_agent_builder.application.ports.builder_run import (
+    BuilderRunPort,
+    BuilderRunRequest,
+)
+from ai_studio_agent_builder.builder.agents.run_adapter import BuilderAgentsRunAdapter
 from ai_studio_agent_builder.builder.agents.coordinator_agent import (
     build_coordinator_agent,
 )
@@ -48,22 +48,15 @@ from ai_studio_agent_builder.builder.agents.one_prompt_agent import (
     build_one_prompt_agent,
 )
 from ai_studio_agent_builder.builder.agents.rag_agent import build_rag_agent
-from ai_studio_agent_builder.builder.context import RequestContext
 from ai_studio_agent_builder.builder.result_assembly import (
-    AgentRunResult,
     AgentSpecificationResultPart,
     MarkdownResultPart,
-    ResultAssembler,
     ResultPart,
-    merge_agent_runs,
     render_result_text,
     result_part_to_record,
 )
 from ai_studio_agent_builder.application.settings import AIServiceConfig
-from ai_studio_agent_builder.domain.routing import (
-    ConversationOptions,
-    resolve_explicit_route,
-)
+from ai_studio_agent_builder.domain.routing import resolve_explicit_route
 from ai_studio_agent_builder.domain.specification import (
     AgentSpecification,
     InvalidSpecificationRecordError,
@@ -97,10 +90,8 @@ from agent_runtime import (
 
 logger = logging.getLogger(__name__)
 UPLOAD_RETENTION_POLICY = interaction_contract.UPLOAD_RETENTION_POLICY
-
-
-class UnsupportedConversationStateError(RuntimeError):
-    pass
+MAX_ATTACHMENTS_PER_REQUEST = interaction_contract.MAX_ATTACHMENTS_PER_REQUEST
+MAX_TOTAL_UPLOAD_BYTES = interaction_contract.MAX_TOTAL_UPLOAD_BYTES
 
 
 AgentRunnerFactory = Callable[[Any, str], AgentRunner]
@@ -115,21 +106,34 @@ class AIInteractionService:
         one_prompt_agent: Any | None = None,
         coordinator_agent: Any | None = None,
         agent_runner_factory: AgentRunnerFactory | None = None,
+        builder_run_port: BuilderRunPort | None = None,
     ):
         self._config = config
-        self._rag_agent = rag_agent or build_rag_agent(config.rag_model, get_session)
-        self._one_prompt_agent = one_prompt_agent or build_one_prompt_agent(
-            config.one_prompt,
-            get_session,
-        )
-        self._coordinator_agent = coordinator_agent or build_coordinator_agent(
-            config.consultant,
-            get_session,
-        )
+        if builder_run_port is None:
+            builder_run_port = BuilderAgentsRunAdapter(
+                rag_agent=rag_agent or build_rag_agent(config.rag_model, get_session),
+                one_prompt_agent=one_prompt_agent
+                or build_one_prompt_agent(config.one_prompt, get_session),
+                coordinator_agent=coordinator_agent
+                or build_coordinator_agent(config.consultant, get_session),
+                sync_client_factory=lambda credentials: get_api_key_client(
+                    credentials,
+                    config.connection,
+                ),
+                async_client_factory=lambda credentials: get_async_api_key_client(
+                    credentials,
+                    config.connection,
+                ),
+                file_uploader=lambda client, base_dir, filename: upload_local_file(
+                    client,
+                    base_dir,
+                    filename,
+                ),
+            )
+        self._builder_run_port = builder_run_port
         self._agent_runner_factory = (
             agent_runner_factory or self._build_yandex_agent_runner
         )
-        self._result_assembler = ResultAssembler()
 
     def user_files_dir(self, user_id: str) -> Path:
         return self._config.paths.uploaded_files_dir / user_id
@@ -305,78 +309,23 @@ class AIInteractionService:
                     routing_decision.target.name,
                     routing_decision.reason.value,
                 )
-        selected_agent = working_state.state
-        agent = self._agent_for(selected_agent)
-        context = RequestContext(
-            user_id=request.user_id,
-            request_id=request.request_id,
-            user_files_dir=request.user_files_dir,
-            client=get_api_key_client(request.credentials, self._config.connection),
-            state=working_state,
-            folder_id=request.credentials.folder_id,
-        )
-        run_config = RunConfig(
-            model_provider=OpenAIProvider(
-                openai_client=get_async_api_key_client(
-                    request.credentials, self._config.connection
-                ),
-                use_responses=True,
-            ),
-            tracing_disabled=True,
-            trace_include_sensitive_data=False,
-        )
-        attachments = self._attachments(request)
-        if selected_agent is ConversationOptions.RAG:
-            attachments = await self._ensure_uploaded_files(
-                attachments, context.client, request.user_files_dir
+        outcome = await self._builder_run_port.run(
+            BuilderRunRequest(
+                user_id=request.user_id,
+                request_id=request.request_id,
+                text=request.text,
+                credentials=request.credentials,
+                conversation_state=working_state,
+                user_files_dir=request.user_files_dir,
+                attachments=self._attachments(request),
             )
-            self._authorize_attachment_ids(context, attachments)
-        first_run = await self._collect_run(
-            agent,
-            self._build_input(
-                request,
-                attachments,
-                trusted_filenames_by_file_id=context.filenames_by_file_id,
-            ),
-            context,
-            run_config,
-        )
-        runs = [first_run]
-        responded_by = selected_agent
-        if (
-            selected_agent is ConversationOptions.COORDINATOR
-            and working_state.state is not selected_agent
-        ):
-            responded_by = working_state.state
-            attachments = await self._ensure_uploaded_files(
-                attachments, context.client, request.user_files_dir
-            )
-            self._authorize_attachment_ids(context, attachments)
-            runs.append(
-                await self._collect_run(
-                    self._agent_for(responded_by),
-                    self._build_input(
-                        request,
-                        attachments,
-                        trusted_filenames_by_file_id=context.filenames_by_file_id,
-                    ),
-                    context,
-                    run_config,
-                )
-            )
-        combined_run = merge_agent_runs(*runs)
-        parts = self._result_assembler.assemble(
-            combined_run,
-            responded_by,
-            context.filenames_by_file_id,
-            specification=working_state.latest_agent_specification,
         )
         result = InteractionResult(
-            text=render_result_text(parts),
-            parts=tuple(result_part_to_record(part) for part in parts),
-            selected_agent=selected_agent,
-            responded_by=responded_by,
-            next_state=working_state.state,
+            text=outcome.text,
+            parts=outcome.parts,
+            selected_agent=outcome.selected_agent,
+            responded_by=outcome.responded_by,
+            next_state=outcome.next_state,
         )
         request.conversation_state.commit_from(working_state)
         return result
@@ -503,17 +452,6 @@ class AIInteractionService:
             await get_session(user_id, db_path).clear_session()
         await asyncio.to_thread(shutil.rmtree, self.user_files_dir(user_id), True)
 
-    def _agent_for(self, state: ConversationOptions):
-        if state is ConversationOptions.COORDINATOR:
-            return self._coordinator_agent
-        if state is ConversationOptions.RAG:
-            return self._rag_agent
-        if state is ConversationOptions.ONE_PROMPT:
-            return self._one_prompt_agent
-        raise UnsupportedConversationStateError(
-            f"Unsupported conversation state: {state}"
-        )
-
     @staticmethod
     def _attachments(request: InteractionRequest) -> tuple[Attachment, ...]:
         attachments = request.attachments
@@ -522,119 +460,8 @@ class AIInteractionService:
         return attachments
 
     @staticmethod
-    async def _ensure_uploaded_files(
-        attachments: tuple[Attachment, ...], client: Any, base_dir: Path
-    ) -> tuple[Attachment, ...]:
-        AIInteractionService._validate_attachment_registry(attachments)
-        total_upload_bytes = sum(
-            resolve_upload_path(base_dir, attachment.filename).stat().st_size
-            for attachment in attachments
-            if attachment.file_id is None
-        )
-        if total_upload_bytes > MAX_TOTAL_UPLOAD_BYTES:
-            raise UploadValidationError(
-                "Attachments exceed the total request limit: "
-                f"{total_upload_bytes} > {MAX_TOTAL_UPLOAD_BYTES} bytes"
-            )
-        uploaded_attachments: list[Attachment] = []
-        for attachment in attachments:
-            if attachment.file_id is not None:
-                uploaded_attachments.append(attachment)
-                continue
-            file_id = await asyncio.to_thread(
-                upload_local_file, client, base_dir, attachment.filename
-            )
-            uploaded_attachments.append(replace(attachment, file_id=file_id))
-        return tuple(uploaded_attachments)
-
-    @staticmethod
-    def _validate_attachment_registry(attachments: tuple[Attachment, ...]) -> None:
-        if len(attachments) > MAX_ATTACHMENTS_PER_REQUEST:
-            raise UploadValidationError(
-                "Too many attachments in one request: "
-                f"{len(attachments)} > {MAX_ATTACHMENTS_PER_REQUEST}"
-            )
-        seen: set[str] = set()
-        for attachment in attachments:
-            filename = attachment.filename
-            if filename in seen:
-                raise UploadValidationError(
-                    f"Duplicate attachment filename: {filename}"
-                )
-            seen.add(filename)
-            requested = Path(filename)
-            if requested.is_absolute() or ".." in requested.parts:
-                raise UploadValidationError(
-                    "Attachment filename must be a current-request relative path"
-                )
-            if ".previews" in requested.parts:
-                raise UploadValidationError("Preview artifacts cannot be uploaded")
-
-    @staticmethod
-    def _authorize_attachment_ids(
-        context: RequestContext, attachments: tuple[Attachment, ...]
-    ) -> None:
-        current_filenames_by_file_id = {
-            attachment.file_id: attachment.display_name or attachment.filename
-            for attachment in attachments
-            if attachment.file_id is not None
-        }
-        context.state.register_pending_files(current_filenames_by_file_id)
-        context.allowed_file_ids = frozenset(context.state.pending_file_ids)
-        context.filenames_by_file_id = context.state.pending_filenames_by_file_id
-
-    @staticmethod
-    def _build_input(
-        request: InteractionRequest,
-        attachments: tuple[Attachment, ...] | None = None,
-        *,
-        trusted_filenames_by_file_id: Mapping[str, str] | None = None,
-    ) -> str:
-        if attachments is None:
-            attachments = AIInteractionService._attachments(request)
-        caption = next(
-            (attachment.caption for attachment in attachments if attachment.caption),
-            None,
-        )
-        if trusted_filenames_by_file_id:
-            filenames = ", ".join(trusted_filenames_by_file_id.values())
-            return (
-                "Files are securely available for this RAG workflow: "
-                f"{filenames}. Create the requested vector index using the "
-                "server-managed files; do not ask the user to upload them again "
-                "and do not request file IDs. "
-                f"User request: {caption or request.text or ''}\n"
-            )
-        if attachments:
-            filenames = ", ".join(
-                attachment.display_name or attachment.filename
-                for attachment in attachments
-            )
-            noun = "file" if len(attachments) == 1 else "files"
-            if caption:
-                return f"Uploaded {noun} by user: {filenames} with request: {caption}\n"
-            return f"Uploaded {noun} by user: {filenames}\n"
-        return f"User request: {request.text or ''}\n"
-
-    @staticmethod
     def _sanitize_display_filename(original_filename: str) -> str:
         return sanitize_filename(original_filename, fallback="upload.bin")
-
-    @staticmethod
-    async def _collect_run(
-        agent: Any,
-        message: str,
-        context: RequestContext,
-        run_config: RunConfig,
-    ) -> AgentRunResult:
-        collector = AgentRunCollector()
-        async for event in agent.respond(
-            message=message,
-            context=context,
-            run_config=run_config,
-        ):
-            collector.consume(event)
-        return collector.build()
 
     @staticmethod
     def _build_yandex_agent_runner(client: Any, folder_id: str) -> AgentRunner:

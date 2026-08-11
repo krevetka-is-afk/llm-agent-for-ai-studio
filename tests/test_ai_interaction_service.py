@@ -12,6 +12,7 @@ from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentProviderError,
     AgentRunPreview,
 )
+from ai_studio_agent_builder.application.ports.builder_run import BuilderRunOutcome
 from ai_studio_agent_builder.config import (
     AIServiceConfig,
     AgentRuntimeConfig,
@@ -171,6 +172,22 @@ class FakeGeneratedAgentRunner:
         return self.preview
 
 
+class FakeBuilderRunPort:
+    def __init__(self) -> None:
+        self.requests = []
+
+    async def run(self, request):
+        self.requests.append(request)
+        selected_agent = request.conversation_state.state
+        return BuilderRunOutcome(
+            text="Builder response",
+            parts=({"kind": "markdown", "text": "Builder response"},),
+            selected_agent=selected_agent,
+            responded_by=selected_agent,
+            next_state=selected_agent,
+        )
+
+
 def _service_config(tmp_path: Path) -> AIServiceConfig:
     model = ModelConfig(
         model_name="test-model",
@@ -228,6 +245,39 @@ def test_service_routes_to_agent_selected_by_conversation_state(tmp_path: Path) 
     assert one_prompt.calls == []
     assert rag.calls[0]["message"] == "User request: find this document\n"
     assert rag.calls[0]["context"].folder_id == "folder"
+
+
+def test_service_routes_through_application_owned_builder_port(tmp_path: Path) -> None:
+    builder_run_port = FakeBuilderRunPort()
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        builder_run_port=builder_run_port,
+    )
+    state = ConversationState(ConversationOptions.RAG)
+
+    result = asyncio.run(
+        service.interact(
+            InteractionRequest(
+                user_id="42",
+                text="Мне не нужен векторный поиск!",
+                credentials=AIStudioCredentials(
+                    api_key="AQAAAA-key",
+                    folder_id="folder",
+                ),
+                conversation_state=state,
+                user_files_dir=service.user_files_dir("42"),
+            )
+        )
+    )
+
+    assert len(builder_run_port.requests) == 1
+    assert builder_run_port.requests[0].conversation_state is not state
+    assert builder_run_port.requests[0].conversation_state.state is (
+        ConversationOptions.ONE_PROMPT
+    )
+    assert state.state is ConversationOptions.ONE_PROMPT
+    assert result.text == "Builder response"
+    assert result.parts == ({"kind": "markdown", "text": "Builder response"},)
 
 
 def test_service_imports_ready_agent_specification_without_calling_an_agent(
@@ -632,6 +682,13 @@ def test_service_sanitizes_unsafe_display_filename(tmp_path: Path) -> None:
 def test_service_builds_a_single_request_for_multiple_uploaded_files(
     tmp_path: Path,
 ) -> None:
+    coordinator = FakeAgent()
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=coordinator,
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+    )
     request = InteractionRequest(
         user_id="42",
         text="Create an index",
@@ -644,7 +701,9 @@ def test_service_builds_a_single_request_for_multiple_uploaded_files(
         ),
     )
 
-    assert AIInteractionService._build_input(request) == (
+    asyncio.run(service.interact(request))
+
+    assert coordinator.calls[0]["message"] == (
         "Uploaded files by user: first.pdf, second.pdf with request: Create an index\n"
     )
 
@@ -948,6 +1007,13 @@ def test_service_rejects_preview_artifacts_before_upload(tmp_path: Path) -> None
 
 
 def test_service_limits_attachments_per_request(tmp_path: Path) -> None:
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+    )
+    state = ConversationState(ConversationOptions.RAG)
     attachments = tuple(
         Attachment(filename=f"file-{index}.txt")
         for index in range(MAX_ATTACHMENTS_PER_REQUEST + 1)
@@ -955,10 +1021,18 @@ def test_service_limits_attachments_per_request(tmp_path: Path) -> None:
 
     with pytest.raises(UploadValidationError):
         asyncio.run(
-            AIInteractionService._ensure_uploaded_files(
-                attachments,
-                client=object(),
-                base_dir=tmp_path,
+            service.interact(
+                InteractionRequest(
+                    user_id="42",
+                    text="Create an index",
+                    credentials=AIStudioCredentials(
+                        api_key="AQAAAA-key",
+                        folder_id="folder",
+                    ),
+                    conversation_state=state,
+                    user_files_dir=service.user_files_dir("42"),
+                    attachments=attachments,
+                )
             )
         )
 
