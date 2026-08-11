@@ -6,7 +6,7 @@ from aiogram import Bot
 from aiogram import Router, types
 from aiogram.filters import Command
 
-from ai_studio_agent_builder.config import PathConfig
+from ai_studio_agent_builder.application.settings import PathConfig
 from ai_studio_agent_builder.infrastructure.persistence.telegram_user_store import (
     UserStore,
 )

@@ -33,6 +33,7 @@ from ai_studio_agent_builder.application import (
     errors,
     file_policy,
     interaction,
+    settings,
 )
 from ai_studio_agent_builder.application.ports import (
     agent_runner,
@@ -103,6 +104,16 @@ def test_public_api_reexports_stable_domain_contracts() -> None:
 
 
 def test_legacy_flat_imports_reference_packaged_contracts() -> None:
+    assert config.AIServiceConfig is settings.AIServiceConfig
+    assert config.AgentRuntimeConfig is settings.AgentRuntimeConfig
+    assert config.ApiKeyStoreConfig is settings.ApiKeyStoreConfig
+    assert config.AppConfig is settings.AppConfig
+    assert config.BotConfig is settings.BotConfig
+    assert config.ConnectionConfig is settings.ConnectionConfig
+    assert config.ModelConfig is settings.ModelConfig
+    assert config.PathConfig is settings.PathConfig
+    assert config.SessionDBConfig is settings.SessionDBConfig
+    assert config.WebUIConfig is settings.WebUIConfig
     assert legacy_interaction.Attachment is interaction.Attachment
     assert legacy_interaction.InteractionRequest is interaction.InteractionRequest
     assert legacy_interaction.InteractionResult is interaction.InteractionResult

@@ -52,7 +52,7 @@ from ai_studio_agent_builder.builder.result_assembly import (
     render_result_text,
     result_part_to_record,
 )
-from ai_studio_agent_builder.config import AIServiceConfig
+from ai_studio_agent_builder.application.settings import AIServiceConfig
 from ai_studio_agent_builder.domain.routing import (
     ConversationOptions,
     resolve_explicit_route,

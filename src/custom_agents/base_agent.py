@@ -5,7 +5,7 @@ from agents.memory import SQLiteSession
 from agents.tool import Tool
 
 from ai_studio_agent_builder.builder.context import RequestContext
-from ai_studio_agent_builder.config import ModelConfig
+from ai_studio_agent_builder.application.settings import ModelConfig
 from ai_studio_agent_builder.infrastructure.persistence.agent_sessions import (
     get_session,
 )
