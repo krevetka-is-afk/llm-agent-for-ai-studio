@@ -1,0 +1,58 @@
+name: Сообщить об ошибке
+description: Воспроизводимая проблема в коде или документации
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Не публикуйте API-ключи, folder ID, пользовательские файлы и персональные данные.
+        Для уязвимостей используйте SECURITY.md, а не публичный issue.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Что произошло?
+      description: Опишите фактическое и ожидаемое поведение.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Как воспроизвести?
+      description: Приведите минимальную последовательность действий и безопасные входные данные.
+      placeholder: |
+        1. Запустить ...
+        2. Выбрать ...
+        3. Увидеть ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Версия или commit
+      placeholder: v0.1.0 или полный commit SHA
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Окружение
+      placeholder: macOS 15, Python 3.13, uv 0.x
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Очищенные логи
+      description: Удалите секреты, IDs и пользовательские данные. Прикладывайте только необходимый фрагмент.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Проверки перед отправкой
+      options:
+        - label: Я проверил(а) существующие issues и не нашёл(ла) дубликат.
+          required: true
+        - label: Этот отчёт не содержит секретов или персональных данных.
+          required: true
+        - label: Это не отчёт об уязвимости безопасности.
+          required: true

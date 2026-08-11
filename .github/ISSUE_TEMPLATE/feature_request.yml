@@ -1,0 +1,41 @@
+name: Предложить улучшение
+description: Новый пользовательский сценарий или изменение поведения
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Какой результат нужен?
+      description: Опишите задачу пользователя, а не только желаемую реализацию.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Контекст и ограничения
+      description: Для кого это важно, как часто возникает и какие ограничения нужно сохранить?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Предлагаемое решение
+      description: Если есть идея реализации, опишите её и рассмотренные альтернативы.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Критерии готовности
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Проверки перед отправкой
+      options:
+        - label: Я проверил(а) существующие issues и не нашёл(ла) дубликат.
+          required: true
+        - label: Предложение не раскрывает секреты или персональные данные.
+          required: true
