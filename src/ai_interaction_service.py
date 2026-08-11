@@ -63,6 +63,7 @@ from ai_studio_agent_builder.infrastructure.yandex_ai_studio.responses_runner im
 from ai_studio_agent_builder.infrastructure.persistence.agent_sessions import (
     get_session,
 )
+from ai_studio_agent_builder.infrastructure.observability.logging import bind_logger
 from agent_runtime import (
     AgentRuntimeCompilationError,
     ExecutableAgentConfig,
@@ -71,7 +72,6 @@ from agent_runtime import (
 from custom_agents.coordinator_agent import build_coordinator_agent
 from custom_agents.one_prompt_agent import build_one_prompt_agent
 from custom_agents.rag_agent import build_rag_agent
-from logging_config import bind_logger
 
 
 logger = logging.getLogger(__name__)

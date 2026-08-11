@@ -9,10 +9,10 @@ from ai_studio_agent_builder.config import ModelConfig
 from ai_studio_agent_builder.infrastructure.persistence.agent_sessions import (
     get_session,
 )
+from ai_studio_agent_builder.infrastructure.observability.logging import bind_logger
 
 from typing import Any, AsyncIterator
 
-from logging_config import bind_logger
 
 logger = logging.getLogger(__name__)
 

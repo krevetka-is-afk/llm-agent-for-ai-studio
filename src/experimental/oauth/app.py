@@ -4,7 +4,9 @@ from html import escape
 
 from aiohttp import web
 
-from logging_config import configure_console_logging
+from ai_studio_agent_builder.infrastructure.observability.logging import (
+    configure_console_logging,
+)
 
 from .config import load_oauth_gateway_config
 from .credential_store import EncryptedCredentialStore

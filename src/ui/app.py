@@ -6,8 +6,10 @@ from ai_studio_agent_builder.config import load_web_ui_config
 from ai_studio_agent_builder.infrastructure.persistence.api_key_store import (
     EncryptedApiKeyStore,
 )
+from ai_studio_agent_builder.infrastructure.observability.logging import (
+    configure_console_logging,
+)
 from ai_interaction_service import AIInteractionService
-from logging_config import configure_console_logging
 from ui.chat_flow import render_chat
 from ui.connection import render_connection
 from ui.user_guidance import render_next_steps_sidebar

@@ -3,8 +3,7 @@ import logging
 from agents import RunContextWrapper, function_tool
 
 from ai_studio_agent_builder.builder.context import RequestContext
-
-from logging_config import bind_logger
+from ai_studio_agent_builder.infrastructure.observability.logging import bind_logger
 
 logger = logging.getLogger(__name__)
 

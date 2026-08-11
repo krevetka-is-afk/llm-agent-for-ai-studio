@@ -7,6 +7,7 @@ import config as legacy_config
 import credentials as legacy_credentials
 import custom_agents.tools.upload_files as legacy_upload_files
 import file_security as legacy_file_security
+import logging_config as legacy_logging
 import request_context as legacy_request_context
 import result_assembly as legacy_result_assembly
 import routing as legacy_routing
@@ -33,6 +34,9 @@ from ai_studio_agent_builder.infrastructure.persistence import (
     agent_sessions,
     api_key_store,
     telegram_user_store,
+)
+from ai_studio_agent_builder.infrastructure.observability import (
+    logging as observability,
 )
 from ai_studio_agent_builder.infrastructure.yandex_ai_studio import (
     client_factory,
@@ -68,6 +72,14 @@ def test_public_api_reexports_stable_domain_contracts() -> None:
 
 
 def test_legacy_flat_imports_reference_packaged_contracts() -> None:
+    assert legacy_logging.ContextFormatter is observability.ContextFormatter
+    assert legacy_logging.bind_logger is observability.bind_logger
+    assert legacy_logging.build_formatter is observability.build_formatter
+    assert (
+        legacy_logging.configure_console_logging
+        is observability.configure_console_logging
+    )
+    assert legacy_logging.configure_logging is observability.configure_logging
     assert legacy_agent_sessions.get_session is agent_sessions.get_session
     assert legacy_user_store.UserStore is telegram_user_store.UserStore
     assert legacy_user_store.UserSecrets is telegram_user_store.UserSecrets

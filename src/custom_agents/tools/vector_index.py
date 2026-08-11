@@ -10,13 +10,12 @@ from ai_studio_agent_builder.builder.context import (
     BuilderResourceClient,
     RequestContext,
 )
+from ai_studio_agent_builder.infrastructure.observability.logging import bind_logger
 from openai.types import (
     vector_store_create_params,
     StaticFileChunkingStrategyObjectParam,
     StaticFileChunkingStrategyParam,
 )
-
-from logging_config import bind_logger
 
 logger = logging.getLogger(__name__)
 

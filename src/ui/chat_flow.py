@@ -22,9 +22,9 @@ from ai_studio_agent_builder.application.file_policy import MAX_UPLOAD_BYTES
 from ai_studio_agent_builder.infrastructure.persistence.api_key_store import (
     ApiKeyConnection,
 )
+from ai_studio_agent_builder.infrastructure.observability.logging import bind_logger
 from context import ConversationState
 from custom_agents.tools.vector_index import VectorIndexPollingError
-from logging_config import bind_logger
 from ai_studio_agent_builder.builder.result_assembly import result_part_to_record
 from ui.agent_test_panel import AgentSpecificationActions, AgentTestCallback
 from ui.attachments import render_attachment
