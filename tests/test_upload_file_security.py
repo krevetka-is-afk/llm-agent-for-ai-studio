@@ -2,14 +2,16 @@ import pytest
 from typing import BinaryIO
 
 import custom_agents.tools.upload_files as upload_files_module
-from custom_agents.rag_agent import RAG_AGENT_INSTRUCTIONS, RAG_TOOLS_SETUP
-from custom_agents.tools.upload_files import (
+from ai_studio_agent_builder.application.file_policy import (
     MAX_UPLOAD_BYTES,
     UnsafeUploadPathError,
     UploadTooLargeError,
     resolve_upload_path,
+)
+from ai_studio_agent_builder.infrastructure.yandex_ai_studio.files_gateway import (
     upload_local_file,
 )
+from custom_agents.rag_agent import RAG_AGENT_INSTRUCTIONS, RAG_TOOLS_SETUP
 
 
 class _FakeFilesClient:

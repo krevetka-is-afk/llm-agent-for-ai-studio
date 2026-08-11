@@ -1,13 +1,9 @@
-import re
-from pathlib import Path
+"""Compatibility imports for packaged file policy.
 
+New code must import :mod:`ai_studio_agent_builder.application.file_policy`
+directly. This module is removed before the public ``v0.1.0`` release.
+"""
 
-_UNSAFE_FILENAME_CHARS = re.compile(r"[^A-Za-z0-9._ -]+")
+from ai_studio_agent_builder.application.file_policy import sanitize_filename
 
-
-def sanitize_filename(original_filename: str, *, fallback: str) -> str:
-    basename = Path(original_filename.replace("\\", "/")).name
-    safe_filename = _UNSAFE_FILENAME_CHARS.sub("_", basename).strip(" .")
-    if safe_filename in {"", ".", ".."}:
-        return fallback
-    return safe_filename
+__all__ = ["sanitize_filename"]

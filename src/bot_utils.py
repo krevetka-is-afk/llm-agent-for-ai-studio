@@ -7,7 +7,7 @@ import aiofiles
 from aiogram import Bot, types
 from aiogram.types import ContentType, Message
 
-from file_security import sanitize_filename
+from ai_studio_agent_builder.application.file_policy import sanitize_filename
 
 T = TypeVar("T")
 

@@ -1,13 +1,13 @@
 from collections.abc import Sequence
 from typing import Protocol
 
+from ai_studio_agent_builder.application.file_policy import MAX_UPLOAD_BYTES
 from ai_interaction_service import (
     Attachment,
     MAX_ATTACHMENTS_PER_REQUEST,
     MAX_TOTAL_UPLOAD_BYTES,
     UploadValidationError,
 )
-from custom_agents.tools.upload_files import MAX_UPLOAD_BYTES
 
 
 class UploadMetadata(Protocol):

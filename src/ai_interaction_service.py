@@ -12,6 +12,11 @@ from uuid import uuid4
 
 from agents import OpenAIProvider, RunConfig
 from ai_studio_agent_builder.application.dto import AIStudioCredentials
+from ai_studio_agent_builder.application.file_policy import (
+    MAX_UPLOAD_BYTES,
+    resolve_upload_path,
+    sanitize_filename,
+)
 from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentCitation,
     AgentProviderError,
@@ -23,6 +28,9 @@ from ai_studio_agent_builder.domain.routing import resolve_explicit_route
 from ai_studio_agent_builder.infrastructure.yandex_ai_studio.client_factory import (
     get_api_key_client,
     get_async_api_key_client,
+)
+from ai_studio_agent_builder.infrastructure.yandex_ai_studio.files_gateway import (
+    upload_local_file,
 )
 from ai_studio_agent_builder.infrastructure.yandex_ai_studio.responses_runner import (
     YandexResponsesAgentRunner,
@@ -45,12 +53,6 @@ from context import (
 from custom_agents.coordinator_agent import build_coordinator_agent
 from custom_agents.one_prompt_agent import build_one_prompt_agent
 from custom_agents.rag_agent import build_rag_agent
-from custom_agents.tools.upload_files import (
-    MAX_UPLOAD_BYTES,
-    resolve_upload_path,
-    upload_local_file,
-)
-from file_security import sanitize_filename
 from logging_config import bind_logger
 from result_assembly import (
     AgentRunResult,

@@ -18,8 +18,8 @@ from ai_interaction_service import (
     InteractionResult,
     UploadValidationError,
 )
+from ai_studio_agent_builder.application.file_policy import MAX_UPLOAD_BYTES
 from context import ConversationState
-from custom_agents.tools.upload_files import MAX_UPLOAD_BYTES
 from custom_agents.tools.vector_index import VectorIndexPollingError
 from logging_config import bind_logger
 from result_assembly import result_part_to_record

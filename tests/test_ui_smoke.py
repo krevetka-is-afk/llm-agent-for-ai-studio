@@ -10,7 +10,7 @@ from ai_interaction_service import (
     MAX_TOTAL_UPLOAD_BYTES,
     UploadValidationError,
 )
-from custom_agents.tools.upload_files import MAX_UPLOAD_BYTES
+from ai_studio_agent_builder.application.file_policy import MAX_UPLOAD_BYTES
 from ui.agent_test_panel import (
     RESPONSE_ID_HELP,
     TEST_INPUT_HELP,
