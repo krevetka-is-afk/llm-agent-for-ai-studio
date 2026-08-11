@@ -6,6 +6,9 @@ from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentProviderError,
     VectorStoreUnavailableError,
 )
+from ai_studio_agent_builder.infrastructure.persistence.api_key_store import (
+    ApiKeyConnection,
+)
 from ai_interaction_service import (
     AIInteractionService,
     AgentTestInputError,
@@ -14,7 +17,6 @@ from ai_interaction_service import (
     Attachment,
     UploadValidationError,
 )
-from ui.api_key_store import ApiKeyConnection
 from ui.agent_test_panel import (
     agent_test_error_message,
     citation_markdown,

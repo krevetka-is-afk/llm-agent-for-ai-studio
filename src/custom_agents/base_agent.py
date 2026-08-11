@@ -6,11 +6,13 @@ from agents.tool import Tool
 
 from ai_studio_agent_builder.builder.context import RequestContext
 from ai_studio_agent_builder.config import ModelConfig
+from ai_studio_agent_builder.infrastructure.persistence.agent_sessions import (
+    get_session,
+)
 
 from typing import Any, AsyncIterator
 
 from logging_config import bind_logger
-from session import get_session
 
 logger = logging.getLogger(__name__)
 

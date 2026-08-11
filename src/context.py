@@ -5,13 +5,17 @@ from ai_studio_agent_builder.application.builder_state import (
     ConversationState,
 )
 from ai_studio_agent_builder.builder.context import RequestContext
+from ai_studio_agent_builder.infrastructure.persistence.telegram_user_store import (
+    PendingCredentials,
+    UserSecrets,
+    UserStore,
+)
 from credentials import (
     AIStudioCredentials,
     UserCredentials,
     get_api_key_client,
     get_async_api_key_client,
 )
-from user_store import PendingCredentials, UserSecrets, UserStore
 
 __all__ = [
     "AIStudioCredentials",

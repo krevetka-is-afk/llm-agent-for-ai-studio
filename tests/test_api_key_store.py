@@ -2,7 +2,9 @@ import sqlite3
 
 from cryptography.fernet import Fernet
 
-from ui.api_key_store import EncryptedApiKeyStore
+from ai_studio_agent_builder.infrastructure.persistence.api_key_store import (
+    EncryptedApiKeyStore,
+)
 
 
 def test_api_key_store_encrypts_key_and_deletes_connection(tmp_path) -> None:

@@ -60,6 +60,9 @@ from ai_studio_agent_builder.infrastructure.yandex_ai_studio.files_gateway impor
 from ai_studio_agent_builder.infrastructure.yandex_ai_studio.responses_runner import (
     YandexResponsesAgentRunner,
 )
+from ai_studio_agent_builder.infrastructure.persistence.agent_sessions import (
+    get_session,
+)
 from agent_runtime import (
     AgentRuntimeCompilationError,
     ExecutableAgentConfig,
@@ -69,7 +72,6 @@ from custom_agents.coordinator_agent import build_coordinator_agent
 from custom_agents.one_prompt_agent import build_one_prompt_agent
 from custom_agents.rag_agent import build_rag_agent
 from logging_config import bind_logger
-from session import get_session
 
 
 logger = logging.getLogger(__name__)

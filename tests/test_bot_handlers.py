@@ -7,9 +7,11 @@ from typing import Any, cast
 from aiogram import Bot
 
 from ai_studio_agent_builder.config import PathConfig
+from ai_studio_agent_builder.infrastructure.persistence.telegram_user_store import (
+    UserStore,
+)
 from ai_interaction_service import AIInteractionService
 from bot_handlers import create_router
-from context import UserStore
 
 
 class FakeBot:

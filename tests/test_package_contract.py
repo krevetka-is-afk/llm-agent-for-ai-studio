@@ -10,6 +10,9 @@ import file_security as legacy_file_security
 import request_context as legacy_request_context
 import result_assembly as legacy_result_assembly
 import routing as legacy_routing
+import session as legacy_agent_sessions
+import ui.api_key_store as legacy_api_key_store
+import user_store as legacy_user_store
 import yandex_responses_runner as legacy_yandex_runner
 
 import ai_studio_agent_builder as public_api
@@ -25,6 +28,11 @@ from ai_studio_agent_builder.domain import (
     runtime,
     specification,
     specification_codec,
+)
+from ai_studio_agent_builder.infrastructure.persistence import (
+    agent_sessions,
+    api_key_store,
+    telegram_user_store,
 )
 from ai_studio_agent_builder.infrastructure.yandex_ai_studio import (
     client_factory,
@@ -60,6 +68,13 @@ def test_public_api_reexports_stable_domain_contracts() -> None:
 
 
 def test_legacy_flat_imports_reference_packaged_contracts() -> None:
+    assert legacy_agent_sessions.get_session is agent_sessions.get_session
+    assert legacy_user_store.UserStore is telegram_user_store.UserStore
+    assert legacy_user_store.UserSecrets is telegram_user_store.UserSecrets
+    assert legacy_api_key_store.ApiKeyConnection is api_key_store.ApiKeyConnection
+    assert (
+        legacy_api_key_store.EncryptedApiKeyStore is api_key_store.EncryptedApiKeyStore
+    )
     assert (
         legacy_specification.InvalidSpecificationRootError
         is specification_codec.InvalidSpecificationRootError

@@ -5,9 +5,11 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 from ai_studio_agent_builder.config import AppConfig, load_config
+from ai_studio_agent_builder.infrastructure.persistence.telegram_user_store import (
+    UserStore,
+)
 from ai_interaction_service import AIInteractionService
 from bot_handlers import create_router
-from context import UserStore
 from logging_config import configure_console_logging
 from telegram_session import HttpProxyTelegramSession
 

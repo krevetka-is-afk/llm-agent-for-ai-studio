@@ -6,8 +6,12 @@ import streamlit as st
 from openai import OpenAIError
 
 from ai_interaction_service import AIInteractionService
+from ai_studio_agent_builder.infrastructure.persistence.api_key_store import (
+    ApiKeyConnection,
+    ApiKeyStoreError,
+    EncryptedApiKeyStore,
+)
 from context import AIStudioCredentials, ConversationState
-from ui.api_key_store import ApiKeyConnection, ApiKeyStoreError, EncryptedApiKeyStore
 from ui.agent_test_panel import clear_agent_test_previews
 from ui.user_guidance import AI_STUDIO_URL
 

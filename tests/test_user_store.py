@@ -1,4 +1,6 @@
-from context import UserStore
+from ai_studio_agent_builder.infrastructure.persistence.telegram_user_store import (
+    UserStore,
+)
 
 
 class FakeClock:
