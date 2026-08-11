@@ -103,3 +103,21 @@ Web Search дополнительно помечен
 Search только при явном input `include_web_search=true`. Успешные core и Web
 Search jobs являются обязательным evidence перед тегом `v0.1.0`, но не должны
 становиться автоматическим required check для внешних fork PR без secrets.
+
+## Подтверждённый release evidence
+
+11 августа 2026 года полный credentialed suite выполнен локально одноразовым
+override safety-флага без изменения `.env.e2e`:
+
+```bash
+RUN_YANDEX_AI_STUDIO_E2E=1 uv run --env-file .env.e2e \
+  pytest -q -x -m yandex_ai_studio_e2e tests/e2e
+```
+
+Результат: `6 passed in 58.71s`. Пройдены builder RAG, generated One Prompt,
+quota-sensitive Web Search, generated RAG/File Search, service-backed Code
+Interpreter и отдельный provider-contract smoke. Service-backed сценарий
+подтвердил локальный `result.csv`, отсутствие credentials/remote IDs в public
+result и фактический cleanup известных input/output files и auto-container.
+Cleanup warnings отсутствовали; значения credentials и provider IDs в протокол
+не записывались.
