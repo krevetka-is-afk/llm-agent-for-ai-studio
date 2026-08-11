@@ -8,6 +8,9 @@ from context import (
     get_api_key_client,
     get_async_api_key_client,
 )
+from ai_studio_agent_builder.builder.context import (
+    RequestContext as PackagedRequestContext,
+)
 
 
 def test_context_keeps_public_compatibility_exports() -> None:
@@ -17,6 +20,7 @@ def test_context_keeps_public_compatibility_exports() -> None:
     assert ConversationState
     assert UserStore
     assert RequestContext
+    assert RequestContext is PackagedRequestContext
     assert callable(get_api_key_client)
     assert callable(get_async_api_key_client)
 

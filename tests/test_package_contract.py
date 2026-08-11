@@ -7,6 +7,7 @@ import config as legacy_config
 import credentials as legacy_credentials
 import custom_agents.tools.upload_files as legacy_upload_files
 import file_security as legacy_file_security
+import request_context as legacy_request_context
 import routing as legacy_routing
 import yandex_responses_runner as legacy_yandex_runner
 
@@ -14,6 +15,7 @@ import ai_studio_agent_builder as public_api
 from ai_studio_agent_builder import config
 from ai_studio_agent_builder.application import builder_state, dto, file_policy
 from ai_studio_agent_builder.application.ports import agent_runner
+from ai_studio_agent_builder.builder import context as builder_context
 from ai_studio_agent_builder.domain import catalog, routing, runtime, specification
 from ai_studio_agent_builder.infrastructure.yandex_ai_studio import (
     client_factory,
@@ -33,6 +35,7 @@ def test_public_api_reexports_stable_domain_contracts() -> None:
 
 
 def test_legacy_flat_imports_reference_packaged_contracts() -> None:
+    assert legacy_request_context.RequestContext is builder_context.RequestContext
     assert legacy_config.AgentRuntimeConfig is config.AgentRuntimeConfig
     assert legacy_config.AIServiceConfig is config.AIServiceConfig
     assert legacy_config.ConnectionConfig is config.ConnectionConfig

@@ -4,8 +4,8 @@ from typing import Any
 
 from agents import RunContextWrapper, function_tool
 
+from ai_studio_agent_builder.builder.context import RequestContext
 from agent_specification import build_web_search_tool_descriptor
-from context import RequestContext
 
 
 def _clean_text(value: str | None) -> str | None:

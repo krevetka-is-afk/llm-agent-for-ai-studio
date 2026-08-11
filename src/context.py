@@ -4,13 +4,13 @@ from ai_studio_agent_builder.application.builder_state import (
     ConversationOptions,
     ConversationState,
 )
+from ai_studio_agent_builder.builder.context import RequestContext
 from credentials import (
     AIStudioCredentials,
     UserCredentials,
     get_api_key_client,
     get_async_api_key_client,
 )
-from request_context import RequestContext
 from user_store import PendingCredentials, UserSecrets, UserStore
 
 __all__ = [

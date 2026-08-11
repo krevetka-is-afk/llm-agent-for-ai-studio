@@ -4,8 +4,8 @@ from agents import Agent, RunConfig, Runner
 from agents.memory import SQLiteSession
 from agents.tool import Tool
 
+from ai_studio_agent_builder.builder.context import RequestContext
 from ai_studio_agent_builder.config import ModelConfig
-from context import RequestContext
 
 from typing import Any, AsyncIterator
 

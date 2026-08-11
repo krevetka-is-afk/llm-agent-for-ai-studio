@@ -6,8 +6,10 @@ from typing import Any
 
 from agents import RunContextWrapper, function_tool
 
-from context import RequestContext
-from openai import OpenAI
+from ai_studio_agent_builder.builder.context import (
+    BuilderResourceClient,
+    RequestContext,
+)
 from openai.types import (
     vector_store_create_params,
     StaticFileChunkingStrategyObjectParam,
@@ -142,7 +144,7 @@ def _create_search_index_impl(
     tool_logger = _tool_logger(ctx)
     tool_logger.info("Создаем поисковый индекс с %s файлами", len(file_ids))
 
-    client: OpenAI = ctx.context.client
+    client: BuilderResourceClient = ctx.context.client
     vector_store = client.vector_stores.create(
         name=vector_store_name,
         metadata={"key": "value"},

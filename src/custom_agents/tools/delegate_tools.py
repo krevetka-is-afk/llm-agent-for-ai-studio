@@ -1,7 +1,9 @@
 import logging
 
 from agents import RunContextWrapper, function_tool
-from context import RequestContext, ConversationOptions
+
+from ai_studio_agent_builder.builder.context import RequestContext
+from ai_studio_agent_builder.domain.routing import ConversationOptions
 
 from logging_config import bind_logger
 

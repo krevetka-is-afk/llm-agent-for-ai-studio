@@ -24,8 +24,13 @@ from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentRunner,
     AgentRunnerError,
 )
+from ai_studio_agent_builder.application.builder_state import ConversationState
+from ai_studio_agent_builder.builder.context import RequestContext
 from ai_studio_agent_builder.config import AIServiceConfig
-from ai_studio_agent_builder.domain.routing import resolve_explicit_route
+from ai_studio_agent_builder.domain.routing import (
+    ConversationOptions,
+    resolve_explicit_route,
+)
 from ai_studio_agent_builder.infrastructure.yandex_ai_studio.client_factory import (
     get_api_key_client,
     get_async_api_key_client,
@@ -44,11 +49,6 @@ from agent_runtime import (
 from agent_specification import (
     AgentSpecification,
     InvalidSpecificationRecordError,
-)
-from context import (
-    ConversationOptions,
-    ConversationState,
-    RequestContext,
 )
 from custom_agents.coordinator_agent import build_coordinator_agent
 from custom_agents.one_prompt_agent import build_one_prompt_agent
