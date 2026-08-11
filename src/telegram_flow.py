@@ -1,16 +1,8 @@
-import asyncio
-from collections import defaultdict
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+"""Compatibility export for the packaged Telegram request gate."""
+
+from ai_studio_agent_builder.presentation.telegram.request_gate import (
+    PerUserRequestGate,
+)
 
 
-class PerUserRequestGate:
-    """Serialize mutable conversation work per user without blocking other users."""
-
-    def __init__(self) -> None:
-        self._locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
-
-    @asynccontextmanager
-    async def hold(self, user_id: str) -> AsyncIterator[None]:
-        async with self._locks[user_id]:
-            yield
+__all__ = ["PerUserRequestGate"]

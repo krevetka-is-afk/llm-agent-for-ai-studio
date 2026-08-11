@@ -5,6 +5,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+
 from .application.builder_service import BuilderConversationService
 from .application.dto import AIStudioCredentials
 from .application.file_lifecycle import ConversationFileService
@@ -20,12 +24,12 @@ from .application.ports.conversation_storage import (
     ConversationSessionStore,
 )
 from .application.preview_service import AgentPreviewService
-from .application.settings import AIServiceConfig
+from .application.settings import AIServiceConfig, AppConfig
 from .builder.agents.coordinator_agent import build_coordinator_agent
 from .builder.agents.one_prompt_agent import build_one_prompt_agent
 from .builder.agents.rag_agent import build_rag_agent
 from .builder.agents.run_adapter import BuilderAgentsRunAdapter
-from .config import load_web_ui_config
+from .config import load_config, load_web_ui_config
 from .infrastructure.observability.logging import configure_console_logging
 from .infrastructure.persistence.agent_sessions import (
     SQLiteConversationSessionStore,
@@ -33,6 +37,7 @@ from .infrastructure.persistence.agent_sessions import (
 )
 from .infrastructure.persistence.api_key_store import EncryptedApiKeyStore
 from .infrastructure.persistence.local_attachments import LocalAttachmentStore
+from .infrastructure.persistence.telegram_user_store import UserStore
 from .infrastructure.yandex_ai_studio.client_factory import (
     get_api_key_client,
     get_async_api_key_client,
@@ -42,6 +47,8 @@ from .infrastructure.yandex_ai_studio.files_gateway import upload_local_file
 from .infrastructure.yandex_ai_studio.responses_runner import (
     YandexAgentRunnerFactory,
 )
+from .presentation.telegram.handlers import create_router as create_telegram_router
+from .presentation.telegram.http_session import HttpProxyTelegramSession
 
 
 ClientFactory = Callable[[AIStudioCredentials], Any]
@@ -55,6 +62,12 @@ class WebServices:
 
     api_key_store: EncryptedApiKeyStore
     ai_interaction: AIInteractionService
+
+
+@dataclass(frozen=True)
+class TelegramRuntime:
+    bot: Bot
+    dispatcher: Dispatcher
 
 
 def build_web_services() -> WebServices:
@@ -152,16 +165,50 @@ def build_ai_interaction_components(
     )
 
 
+def build_telegram_app(config: AppConfig) -> tuple[Bot, Dispatcher]:
+    session = (
+        HttpProxyTelegramSession(config.bot.telegram_proxy_url)
+        if config.bot.telegram_proxy_url is not None
+        else None
+    )
+    bot = Bot(
+        token=config.bot.bot_token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        session=session,
+    )
+    dispatcher = Dispatcher()
+    router = create_telegram_router(
+        bot,
+        build_ai_interaction_service(config.ai_service),
+        UserStore(),
+    )
+    dispatcher.include_router(router)
+    return bot, dispatcher
+
+
+def build_telegram_runtime() -> TelegramRuntime:
+    bot, dispatcher = build_telegram_app(load_config())
+    return TelegramRuntime(bot=bot, dispatcher=dispatcher)
+
+
 def configure_web_logging() -> None:
     """Configure logging for the executable web runtime."""
 
     configure_console_logging()
 
 
+def configure_telegram_logging() -> None:
+    configure_console_logging()
+
+
 __all__ = [
     "WebServices",
+    "TelegramRuntime",
     "build_ai_interaction_components",
     "build_ai_interaction_service",
     "build_web_services",
+    "build_telegram_app",
+    "build_telegram_runtime",
+    "configure_telegram_logging",
     "configure_web_logging",
 ]

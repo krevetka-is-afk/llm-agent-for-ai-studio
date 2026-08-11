@@ -2,6 +2,8 @@ import agent_runner as legacy_agent_runner
 import ai_interaction_service as legacy_interaction
 import agent_runtime as legacy_runtime
 import agent_specification as legacy_specification
+import bot_handlers as legacy_bot_handlers
+import bot_utils as legacy_bot_utils
 import component_catalog as legacy_catalog
 import conversation_state as legacy_builder_state
 import config as legacy_config
@@ -17,10 +19,13 @@ import custom_agents.tools.upload_files as legacy_upload_files
 import custom_agents.tools.vector_index as legacy_vector_index
 import file_security as legacy_file_security
 import logging_config as legacy_logging
+import message_service as legacy_messages
 import request_context as legacy_request_context
 import result_assembly as legacy_result_assembly
 import routing as legacy_routing
 import session as legacy_agent_sessions
+import telegram_flow as legacy_telegram_flow
+import telegram_session as legacy_telegram_session
 import ui.agent_test_panel as legacy_agent_test_panel
 import ui.api_key_store as legacy_api_key_store
 import ui.attachments as legacy_attachments
@@ -101,6 +106,13 @@ from ai_studio_agent_builder.presentation.streamlit import (
     uploads,
     user_guidance,
 )
+from ai_studio_agent_builder.presentation.telegram import (
+    handlers as telegram_handlers,
+    http_session as telegram_http_session,
+    media as telegram_media,
+    messages as telegram_messages,
+    request_gate as telegram_request_gate,
+)
 
 
 def test_public_api_reexports_stable_domain_contracts() -> None:
@@ -163,6 +175,23 @@ def test_legacy_flat_imports_reference_packaged_contracts() -> None:
     )
     assert provider_connection.YandexConnectionValidator.__module__.startswith(
         "ai_studio_agent_builder.infrastructure"
+    )
+    assert issubclass(
+        legacy_bot_handlers.TelegramHandlers,
+        telegram_handlers.TelegramHandlers,
+    )
+    assert (
+        legacy_bot_utils.sanitize_download_filename
+        is telegram_media.sanitize_download_filename
+    )
+    assert legacy_messages.MessageService is telegram_messages.MessageService
+    assert (
+        legacy_telegram_flow.PerUserRequestGate
+        is telegram_request_gate.PerUserRequestGate
+    )
+    assert (
+        legacy_telegram_session.HttpProxyTelegramSession
+        is telegram_http_session.HttpProxyTelegramSession
     )
     assert legacy_base_agent.CustomAgent is base_agent.CustomAgent
     assert (

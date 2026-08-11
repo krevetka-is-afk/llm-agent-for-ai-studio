@@ -1,55 +1,17 @@
-import logging
+"""Compatibility entrypoint for the packaged Telegram runtime."""
+
 import asyncio
-from aiogram import Bot, Dispatcher
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
 
-from ai_studio_agent_builder.config import AppConfig, load_config
-from ai_studio_agent_builder.infrastructure.persistence.telegram_user_store import (
-    UserStore,
+from ai_studio_agent_builder.composition import (
+    build_telegram_app as create_app,
+    configure_telegram_logging,
 )
-from ai_studio_agent_builder.infrastructure.observability.logging import (
-    configure_console_logging,
-)
-from ai_interaction_service import AIInteractionService
-from bot_handlers import create_router
-from telegram_session import HttpProxyTelegramSession
-
-
-def create_app(config: AppConfig) -> tuple[Bot, Dispatcher]:
-    session = (
-        HttpProxyTelegramSession(config.bot.telegram_proxy_url)
-        if config.bot.telegram_proxy_url is not None
-        else None
-    )
-    bot = Bot(
-        token=config.bot.bot_token,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-        session=session,
-    )
-    dp = Dispatcher()
-
-    users_store = UserStore()
-    ai_service = AIInteractionService(config.ai_service)
-
-    router = create_router(
-        bot=bot,
-        ai_service=ai_service,
-        paths=config.ai_service.paths,
-        user_store=users_store,
-    )
-
-    dp.include_router(router)
-    return bot, dp
-
-
-async def main() -> None:
-    logging.getLogger(__name__).info("Main started")
-    config: AppConfig = load_config()
-    bot, dp = create_app(config)
-    await dp.start_polling(bot)
+from ai_studio_agent_builder.entrypoints.telegram import main
 
 
 if __name__ == "__main__":
-    configure_console_logging()
+    configure_telegram_logging()
     asyncio.run(main())
+
+
+__all__ = ["create_app", "main"]
