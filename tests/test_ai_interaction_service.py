@@ -5,7 +5,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_runner import AgentCitation, AgentProviderError, AgentRunPreview
+from ai_studio_agent_builder.application.ports.agent_runner import (
+    AgentCitation,
+    AgentProviderError,
+    AgentRunPreview,
+)
 from agent_runtime import ExecutableAgentConfig
 from agent_specification import (
     AgentSpecification,

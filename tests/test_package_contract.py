@@ -1,11 +1,12 @@
+import agent_runner as legacy_agent_runner
 import agent_runtime as legacy_runtime
 import agent_specification as legacy_specification
 import component_catalog as legacy_catalog
 import routing as legacy_routing
 
 import ai_studio_agent_builder as public_api
-from ai_studio_agent_builder.domain import catalog, runtime, specification
-from ai_studio_agent_builder.domain import routing
+from ai_studio_agent_builder.application.ports import agent_runner
+from ai_studio_agent_builder.domain import catalog, routing, runtime, specification
 
 
 def test_public_api_reexports_stable_domain_contracts() -> None:
@@ -19,6 +20,8 @@ def test_public_api_reexports_stable_domain_contracts() -> None:
 
 
 def test_legacy_flat_imports_reference_packaged_contracts() -> None:
+    assert legacy_agent_runner.AgentRunPreview is agent_runner.AgentRunPreview
+    assert legacy_agent_runner.AgentRunnerError is agent_runner.AgentRunnerError
     assert legacy_runtime.ExecutableAgentConfig is runtime.ExecutableAgentConfig
     assert (
         legacy_runtime.compile_agent_specification

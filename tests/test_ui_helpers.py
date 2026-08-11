@@ -2,7 +2,10 @@ import json
 from types import SimpleNamespace
 from typing import Any, cast
 
-from agent_runner import AgentProviderError, VectorStoreUnavailableError
+from ai_studio_agent_builder.application.ports.agent_runner import (
+    AgentProviderError,
+    VectorStoreUnavailableError,
+)
 from ai_interaction_service import (
     AIInteractionService,
     AgentTestInputError,

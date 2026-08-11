@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import streamlit as st
 
-from agent_runner import (
+from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentProviderError,
     AgentProviderTimeoutError,
     AgentRunPreview,

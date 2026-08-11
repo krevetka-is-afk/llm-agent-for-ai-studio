@@ -3,14 +3,14 @@ from typing import Any
 
 from openai import APIError, APITimeoutError, NotFoundError
 
-from agent_runner import (
+from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentCitation,
     AgentProviderError,
     AgentProviderTimeoutError,
     AgentRunPreview,
     VectorStoreUnavailableError,
 )
-from agent_runtime import ExecutableAgentConfig
+from ai_studio_agent_builder.domain.runtime import ExecutableAgentConfig
 
 
 READY_VECTOR_STORE_STATUS = "completed"

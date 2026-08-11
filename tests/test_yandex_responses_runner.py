@@ -4,12 +4,12 @@ import httpx
 import pytest
 from openai import NotFoundError
 
-from agent_runner import (
+from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentProviderError,
     AgentProviderTimeoutError,
     VectorStoreUnavailableError,
 )
-from agent_runtime import ExecutableAgentConfig
+from ai_studio_agent_builder.domain.runtime import ExecutableAgentConfig
 from yandex_responses_runner import YandexResponsesAgentRunner
 
 

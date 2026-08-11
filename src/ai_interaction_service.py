@@ -11,14 +11,14 @@ from typing import Any
 from uuid import uuid4
 
 from agents import OpenAIProvider, RunConfig
-from ai_studio_agent_builder.domain.routing import resolve_explicit_route
-from agent_runner import (
+from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentCitation,
     AgentProviderError,
     AgentRunPreview,
     AgentRunner,
     AgentRunnerError,
 )
+from ai_studio_agent_builder.domain.routing import resolve_explicit_route
 from agent_runtime import (
     AgentRuntimeCompilationError,
     ExecutableAgentConfig,
