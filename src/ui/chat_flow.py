@@ -5,7 +5,6 @@ from typing import Any, Protocol, TypeVar
 from uuid import uuid4
 
 import streamlit as st
-from openai import OpenAIError
 from streamlit.runtime.uploaded_file_manager import UploadedFile
 
 from ai_interaction_service import (
@@ -18,6 +17,7 @@ from ai_interaction_service import (
     InteractionResult,
     UploadValidationError,
 )
+from ai_studio_agent_builder.application.errors import AIStudioRequestError
 from ai_studio_agent_builder.application.file_policy import MAX_UPLOAD_BYTES
 from ai_studio_agent_builder.application.ports.api_key_store import (
     ApiKeyConnection,
@@ -106,7 +106,7 @@ def build_user_content(prompt: str, uploaded_files: Sequence[NamedUpload]) -> st
 
 
 def interaction_error_message(exc: Exception) -> str:
-    if isinstance(exc, OpenAIError):
+    if isinstance(exc, AIStudioRequestError):
         return "AI Studio отклонил запрос. Проверьте ключ, каталог и права."
     if isinstance(exc, AgentSpecificationImportError):
         return str(exc)
@@ -311,7 +311,12 @@ def _request_answer(
             request_id=request_id,
         )
         if isinstance(
-            exc, (AgentSpecificationImportError, OpenAIError, UploadValidationError)
+            exc,
+            (
+                AgentSpecificationImportError,
+                AIStudioRequestError,
+                UploadValidationError,
+            ),
         ):
             request_logger.warning(
                 "AI interaction rejected error_type=%s", type(exc).__name__

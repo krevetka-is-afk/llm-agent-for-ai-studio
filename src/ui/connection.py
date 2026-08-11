@@ -3,9 +3,9 @@ from collections.abc import Coroutine
 from typing import Any, TypeVar
 
 import streamlit as st
-from openai import OpenAIError
 
 from ai_interaction_service import AIInteractionService
+from ai_studio_agent_builder.application.errors import AIStudioRequestError
 from ai_studio_agent_builder.application.ports.api_key_store import (
     ApiKeyConnection,
     ApiKeyStore,
@@ -96,7 +96,7 @@ def _connect(
                 )
             )
         store.save(connection_id, api_key, folder_id)
-    except OpenAIError:
+    except AIStudioRequestError:
         st.sidebar.error(
             "AI Studio отклонил подключение. Проверьте ключ, каталог и роли "
             "сервисного аккаунта."

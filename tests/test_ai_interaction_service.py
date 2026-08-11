@@ -4,7 +4,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from openai import OpenAIError
 
+from ai_studio_agent_builder.application.errors import AIStudioRequestError
 from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentCitation,
     AgentProviderError,
@@ -144,6 +146,13 @@ class FailingFakeAgent(FakeAgent):
     async def respond(self, **kwargs):
         self.calls.append(kwargs)
         raise RuntimeError("agent failed")
+        yield
+
+
+class ProviderFailingFakeAgent(FakeAgent):
+    async def respond(self, **kwargs):
+        self.calls.append(kwargs)
+        raise OpenAIError("provider details")
         yield
 
 
@@ -708,6 +717,65 @@ def test_service_commits_conversation_state_only_after_success(tmp_path: Path) -
         )
 
     assert state.state is ConversationOptions.COORDINATOR
+
+
+def test_service_maps_provider_failure_to_application_error(tmp_path: Path) -> None:
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=ProviderFailingFakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+    )
+
+    with pytest.raises(AIStudioRequestError) as exc_info:
+        asyncio.run(
+            service.interact(
+                InteractionRequest(
+                    user_id="42",
+                    text="Hello",
+                    credentials=AIStudioCredentials(
+                        api_key="AQAAAA-key", folder_id="folder"
+                    ),
+                    conversation_state=ConversationState(),
+                    user_files_dir=service.user_files_dir("42"),
+                )
+            )
+        )
+
+    assert isinstance(exc_info.value.__cause__, OpenAIError)
+    assert "provider details" not in str(exc_info.value)
+
+
+def test_connection_validation_maps_provider_failure_to_application_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def reject_connection(**kwargs) -> None:
+        raise OpenAIError("provider details")
+
+    client = SimpleNamespace(
+        responses=SimpleNamespace(create=reject_connection),
+    )
+    monkeypatch.setattr(
+        "ai_interaction_service.get_api_key_client",
+        lambda credentials, config: client,
+    )
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+    )
+
+    with pytest.raises(AIStudioRequestError) as exc_info:
+        asyncio.run(
+            service.validate_connection(
+                AIStudioCredentials(api_key="AQAAAA-key", folder_id="folder")
+            )
+        )
+
+    assert isinstance(exc_info.value.__cause__, OpenAIError)
+    assert "provider details" not in str(exc_info.value)
 
 
 def test_service_does_not_commit_specification_draft_after_failure(

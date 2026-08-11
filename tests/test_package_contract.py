@@ -18,7 +18,7 @@ import yandex_responses_runner as legacy_yandex_runner
 
 import ai_studio_agent_builder as public_api
 from ai_studio_agent_builder import config
-from ai_studio_agent_builder.application import builder_state, dto, file_policy
+from ai_studio_agent_builder.application import builder_state, dto, errors, file_policy
 from ai_studio_agent_builder.application.ports import (
     agent_runner,
     api_key_store as api_key_port,
@@ -71,6 +71,9 @@ def test_public_api_reexports_stable_domain_contracts() -> None:
     assert (
         public_api.loads_agent_specification
         is specification_codec.loads_agent_specification
+    )
+    assert errors.AIStudioRequestError.__module__.startswith(
+        "ai_studio_agent_builder.application"
     )
 
 

@@ -10,7 +10,10 @@ from typing import Any
 from uuid import uuid4
 
 from agents import OpenAIProvider, RunConfig
+from openai import OpenAIError
+
 from ai_studio_agent_builder.application.dto import AIStudioCredentials
+from ai_studio_agent_builder.application.errors import AIStudioRequestError
 from ai_studio_agent_builder.application.file_policy import (
     MAX_UPLOAD_BYTES,
     resolve_upload_path,
@@ -202,14 +205,17 @@ class AIInteractionService:
 
     async def validate_connection(self, credentials: AIStudioCredentials) -> None:
         client = get_api_key_client(credentials, self._config.connection)
-        await asyncio.to_thread(
-            client.responses.create,
-            model=(
-                f"gpt://{credentials.folder_id}/{self._config.one_prompt.model_name}"
-            ),
-            input="Ответьте ровно: OK",
-            max_output_tokens=2,
-        )
+        try:
+            await asyncio.to_thread(
+                client.responses.create,
+                model=(
+                    f"gpt://{credentials.folder_id}/{self._config.one_prompt.model_name}"
+                ),
+                input="Ответьте ровно: OK",
+                max_output_tokens=2,
+            )
+        except OpenAIError as exc:
+            raise AIStudioRequestError("AI Studio request failed") from exc
 
     async def test_agent_specification(
         self,
@@ -305,6 +311,9 @@ class AIInteractionService:
         request_logger.info("AI interaction started")
         try:
             result = await self._interact(request)
+        except OpenAIError as exc:
+            request_logger.warning("AI interaction rejected by provider")
+            raise AIStudioRequestError("AI Studio request failed") from exc
         except Exception as exc:
             request_logger.exception(
                 "AI interaction failed",

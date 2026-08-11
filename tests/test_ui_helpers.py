@@ -2,6 +2,7 @@ import json
 from types import SimpleNamespace
 from typing import Any, cast
 
+from ai_studio_agent_builder.application.errors import AIStudioRequestError
 from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentProviderError,
     VectorStoreUnavailableError,
@@ -57,6 +58,9 @@ def test_chat_flow_builds_fallback_content_for_multiple_files() -> None:
 
 
 def test_chat_flow_maps_known_and_unknown_errors() -> None:
+    assert interaction_error_message(AIStudioRequestError()) == (
+        "AI Studio отклонил запрос. Проверьте ключ, каталог и права."
+    )
     assert interaction_error_message(UploadValidationError("too large")) == "too large"
     assert interaction_error_message(RuntimeError("secret details")) == (
         "Не удалось выполнить запрос к AI Studio. Повторите попытку."
