@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
+from ..dto import AIStudioCredentials
 from ...domain.runtime import ExecutableAgentConfig
 
 
@@ -31,6 +32,10 @@ class AgentRunner(Protocol):
     ) -> AgentRunPreview: ...
 
 
+class AgentRunnerFactory(Protocol):
+    def create(self, credentials: AIStudioCredentials) -> AgentRunner: ...
+
+
 class AgentRunnerError(RuntimeError):
     """Base class for safe generated-agent execution errors."""
 
@@ -57,3 +62,15 @@ class AgentProviderError(AgentRunnerError):
         self.status_code = status_code
         self.error_code = error_code
         super().__init__("Agent provider request failed")
+
+
+__all__ = [
+    "AgentCitation",
+    "AgentProviderError",
+    "AgentProviderTimeoutError",
+    "AgentRunPreview",
+    "AgentRunner",
+    "AgentRunnerError",
+    "AgentRunnerFactory",
+    "VectorStoreUnavailableError",
+]

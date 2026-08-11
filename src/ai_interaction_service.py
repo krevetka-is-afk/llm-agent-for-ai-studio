@@ -1,14 +1,10 @@
 import asyncio
 import hashlib
 import logging
-import shutil
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
-
-from openai import OpenAIError
 
 from ai_studio_agent_builder.application import interaction as interaction_contract
 from ai_studio_agent_builder.application.dto import AIStudioCredentials
@@ -21,24 +17,24 @@ from ai_studio_agent_builder.application.interaction import (
     InteractionRequest,
     InteractionResult,
     MAX_AGENT_TEST_INPUT_LENGTH,
-    UploadValidationError,
 )
-from ai_studio_agent_builder.application.errors import AIStudioRequestError
-from ai_studio_agent_builder.application.file_policy import (
-    MAX_UPLOAD_BYTES,
-    resolve_upload_path,
-    sanitize_filename,
-)
+from ai_studio_agent_builder.application.file_policy import resolve_upload_path
 from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentProviderError,
     AgentRunPreview,
     AgentRunner,
     AgentRunnerError,
+    AgentRunnerFactory,
 )
 from ai_studio_agent_builder.application.builder_state import ConversationState
 from ai_studio_agent_builder.application.ports.builder_run import (
     BuilderRunPort,
     BuilderRunRequest,
+)
+from ai_studio_agent_builder.application.ports.connection import ConnectionValidator
+from ai_studio_agent_builder.application.ports.conversation_storage import (
+    AttachmentStore,
+    ConversationSessionStore,
 )
 from ai_studio_agent_builder.builder.agents.run_adapter import BuilderAgentsRunAdapter
 from ai_studio_agent_builder.builder.agents.coordinator_agent import (
@@ -75,12 +71,19 @@ from ai_studio_agent_builder.infrastructure.yandex_ai_studio.files_gateway impor
     upload_local_file,
 )
 from ai_studio_agent_builder.infrastructure.yandex_ai_studio.responses_runner import (
-    YandexResponsesAgentRunner,
+    YandexAgentRunnerFactory,
 )
 from ai_studio_agent_builder.infrastructure.persistence.agent_sessions import (
+    SQLiteConversationSessionStore,
     get_session,
 )
+from ai_studio_agent_builder.infrastructure.persistence.local_attachments import (
+    LocalAttachmentStore,
+)
 from ai_studio_agent_builder.infrastructure.observability.logging import bind_logger
+from ai_studio_agent_builder.infrastructure.yandex_ai_studio.connection import (
+    YandexConnectionValidator,
+)
 from agent_runtime import (
     AgentRuntimeCompilationError,
     ExecutableAgentConfig,
@@ -92,9 +95,10 @@ logger = logging.getLogger(__name__)
 UPLOAD_RETENTION_POLICY = interaction_contract.UPLOAD_RETENTION_POLICY
 MAX_ATTACHMENTS_PER_REQUEST = interaction_contract.MAX_ATTACHMENTS_PER_REQUEST
 MAX_TOTAL_UPLOAD_BYTES = interaction_contract.MAX_TOTAL_UPLOAD_BYTES
+UploadValidationError = interaction_contract.UploadValidationError
 
 
-AgentRunnerFactory = Callable[[Any, str], AgentRunner]
+LegacyAgentRunnerFactory = Callable[[Any, str], AgentRunner]
 
 
 class AIInteractionService:
@@ -105,8 +109,12 @@ class AIInteractionService:
         rag_agent: Any | None = None,
         one_prompt_agent: Any | None = None,
         coordinator_agent: Any | None = None,
-        agent_runner_factory: AgentRunnerFactory | None = None,
+        agent_runner_factory: LegacyAgentRunnerFactory | None = None,
         builder_run_port: BuilderRunPort | None = None,
+        connection_validator: ConnectionValidator | None = None,
+        generated_agent_runner_factory: AgentRunnerFactory | None = None,
+        attachment_store: AttachmentStore | None = None,
+        conversation_session_store: ConversationSessionStore | None = None,
     ):
         self._config = config
         if builder_run_port is None:
@@ -131,12 +139,36 @@ class AIInteractionService:
                 ),
             )
         self._builder_run_port = builder_run_port
+        self._connection_validator = connection_validator or YandexConnectionValidator(
+            lambda credentials: get_api_key_client(credentials, config.connection),
+            model_name=config.one_prompt.model_name,
+        )
         self._agent_runner_factory = (
-            agent_runner_factory or self._build_yandex_agent_runner
+            generated_agent_runner_factory
+            or YandexAgentRunnerFactory(
+                lambda credentials: get_api_key_client(
+                    credentials,
+                    config.connection,
+                ),
+                runner_builder=agent_runner_factory,
+            )
+        )
+        self._attachment_store = attachment_store or LocalAttachmentStore(
+            config.paths.uploaded_files_dir
+        )
+        self._conversation_session_store = (
+            conversation_session_store
+            or SQLiteConversationSessionStore(
+                {
+                    config.rag_model.sessions_db_path,
+                    config.one_prompt.sessions_db_path,
+                    config.consultant.sessions_db_path,
+                }
+            )
         )
 
     def user_files_dir(self, user_id: str) -> Path:
-        return self._config.paths.uploaded_files_dir / user_id
+        return self._attachment_store.directory_for(user_id)
 
     def save_attachment(
         self,
@@ -145,34 +177,15 @@ class AIInteractionService:
         content: bytes,
         caption: str | None = None,
     ) -> Attachment:
-        if len(content) > MAX_UPLOAD_BYTES:
-            raise UploadValidationError(
-                f"Upload is {len(content)} bytes; limit is {MAX_UPLOAD_BYTES} bytes"
-            )
-        safe_filename = self._sanitize_display_filename(original_filename)
-        filename = f"{uuid4().hex}_{safe_filename}"
-        target_dir = self.user_files_dir(user_id)
-        target_dir.mkdir(parents=True, exist_ok=True)
-        (target_dir / filename).write_bytes(content)
-        return Attachment(
-            filename=filename,
-            display_name=safe_filename,
+        return self._attachment_store.save(
+            user_id,
+            original_filename,
+            content,
             caption=caption,
         )
 
     async def validate_connection(self, credentials: AIStudioCredentials) -> None:
-        client = get_api_key_client(credentials, self._config.connection)
-        try:
-            await asyncio.to_thread(
-                client.responses.create,
-                model=(
-                    f"gpt://{credentials.folder_id}/{self._config.one_prompt.model_name}"
-                ),
-                input="Ответьте ровно: OK",
-                max_output_tokens=2,
-            )
-        except OpenAIError as exc:
-            raise AIStudioRequestError("AI Studio request failed") from exc
+        await self._connection_validator.validate(credentials)
 
     async def test_agent_specification(
         self,
@@ -208,14 +221,7 @@ class AIInteractionService:
                 specification.template.value,
                 native_tool_types,
             )
-            client = get_api_key_client(
-                request.credentials,
-                self._config.connection,
-            )
-            runner = self._agent_runner_factory(
-                client,
-                request.credentials.folder_id,
-            )
+            runner = self._agent_runner_factory.create(request.credentials)
             preview = await asyncio.to_thread(
                 runner.run,
                 executable_config,
@@ -268,9 +274,6 @@ class AIInteractionService:
         request_logger.info("AI interaction started")
         try:
             result = await self._interact(request)
-        except OpenAIError as exc:
-            request_logger.warning("AI interaction rejected by provider")
-            raise AIStudioRequestError("AI Studio request failed") from exc
         except Exception as exc:
             request_logger.exception(
                 "AI interaction failed",
@@ -443,14 +446,8 @@ class AIInteractionService:
         )
 
     async def reset_conversation(self, user_id: str) -> None:
-        db_paths = {
-            self._config.rag_model.sessions_db_path,
-            self._config.one_prompt.sessions_db_path,
-            self._config.consultant.sessions_db_path,
-        }
-        for db_path in db_paths:
-            await get_session(user_id, db_path).clear_session()
-        await asyncio.to_thread(shutil.rmtree, self.user_files_dir(user_id), True)
+        await self._conversation_session_store.clear(user_id)
+        await self._attachment_store.clear(user_id)
 
     @staticmethod
     def _attachments(request: InteractionRequest) -> tuple[Attachment, ...]:
@@ -458,14 +455,6 @@ class AIInteractionService:
         if request.attachment is not None:
             attachments = (*attachments, request.attachment)
         return attachments
-
-    @staticmethod
-    def _sanitize_display_filename(original_filename: str) -> str:
-        return sanitize_filename(original_filename, fallback="upload.bin")
-
-    @staticmethod
-    def _build_yandex_agent_runner(client: Any, folder_id: str) -> AgentRunner:
-        return YandexResponsesAgentRunner(client, folder_id=folder_id)
 
 
 def _agent_test_result(preview: AgentRunPreview) -> AgentTestResult:

@@ -1,13 +1,15 @@
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from openai import APIError, APITimeoutError, NotFoundError
 
+from ...application.dto import AIStudioCredentials
 from ...application.ports.agent_runner import (
     AgentCitation,
     AgentProviderError,
     AgentProviderTimeoutError,
     AgentRunPreview,
+    AgentRunner,
     VectorStoreUnavailableError,
 )
 from ...domain.runtime import ExecutableAgentConfig
@@ -172,3 +174,32 @@ def _optional_string(value: Any) -> str | None:
 
 def _optional_int(value: Any) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+ClientFactory = Callable[[AIStudioCredentials], Any]
+RunnerBuilder = Callable[[Any, str], AgentRunner]
+
+
+class YandexAgentRunnerFactory:
+    def __init__(
+        self,
+        client_factory: ClientFactory,
+        *,
+        runner_builder: RunnerBuilder | None = None,
+    ) -> None:
+        self._client_factory = client_factory
+        self._runner_builder = runner_builder or (
+            lambda client, folder_id: YandexResponsesAgentRunner(
+                client,
+                folder_id=folder_id,
+            )
+        )
+
+    def create(self, credentials: AIStudioCredentials) -> AgentRunner:
+        return self._runner_builder(
+            self._client_factory(credentials),
+            credentials.folder_id,
+        )
+
+
+__all__ = ["YandexAgentRunnerFactory", "YandexResponsesAgentRunner"]

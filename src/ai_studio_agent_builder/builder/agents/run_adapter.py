@@ -7,14 +7,16 @@ from pathlib import Path
 from typing import Any
 
 from agents import OpenAIProvider, RunConfig
+from openai import OpenAIError
 
+from ai_studio_agent_builder.application.dto import AIStudioCredentials
+from ai_studio_agent_builder.application.errors import AIStudioRequestError
 from ai_studio_agent_builder.application.interaction import (
     Attachment,
     MAX_ATTACHMENTS_PER_REQUEST,
     MAX_TOTAL_UPLOAD_BYTES,
     UploadValidationError,
 )
-from ai_studio_agent_builder.application.dto import AIStudioCredentials
 from ai_studio_agent_builder.application.file_policy import resolve_upload_path
 from ai_studio_agent_builder.application.ports.builder_run import (
     BuilderRunOutcome,
@@ -65,6 +67,12 @@ class BuilderAgentsRunAdapter:
         self._result_assembler = ResultAssembler()
 
     async def run(self, request: BuilderRunRequest) -> BuilderRunOutcome:
+        try:
+            return await self._run(request)
+        except OpenAIError as exc:
+            raise AIStudioRequestError("AI Studio request failed") from exc
+
+    async def _run(self, request: BuilderRunRequest) -> BuilderRunOutcome:
         state = request.conversation_state
         selected_agent = state.state
         context = RequestContext(
