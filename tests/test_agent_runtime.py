@@ -3,14 +3,14 @@ from dataclasses import replace
 
 import pytest
 
-from agent_runtime import (
+from ai_studio_agent_builder.domain.runtime import (
     MissingRuntimeParameterError,
     SpecificationNotReadyError,
     UnsupportedAgentToolError,
     UnsupportedSpecificationVersionError,
     compile_agent_specification,
 )
-from agent_specification import (
+from ai_studio_agent_builder.domain.specification import (
     AgentSpecification,
     AgentSpecificationStatus,
     KnowledgeSource,
@@ -18,7 +18,7 @@ from agent_specification import (
     build_one_prompt_specification,
     build_rag_specification,
 )
-from component_catalog import TemplateId
+from ai_studio_agent_builder.domain.catalog import TemplateId
 from config import AgentRuntimeConfig
 
 

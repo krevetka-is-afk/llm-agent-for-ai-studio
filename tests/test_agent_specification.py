@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_specification import (
+from ai_studio_agent_builder.domain.specification import (
     AgentSpecification,
     AgentSpecificationStatus,
     InvalidSpecificationRecordError,
@@ -13,7 +13,7 @@ from agent_specification import (
     build_one_prompt_specification,
     build_rag_specification,
 )
-from component_catalog import (
+from ai_studio_agent_builder.domain.catalog import (
     ComponentKind,
     TemplateId,
     catalog_record,

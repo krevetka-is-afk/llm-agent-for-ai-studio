@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
 [project]
 name = "llm-agent-for-ai-studio"
 version = "0.1.0"
@@ -25,6 +29,9 @@ dev = [
 
 [tool.ty.src]
 exclude = ["uv.lock"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ai_studio_agent_builder"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
