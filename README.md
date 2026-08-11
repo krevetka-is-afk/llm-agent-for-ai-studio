@@ -1,7 +1,8 @@
-# llm-agent-for-ai-studio
+# Shada Agent Builder for Yandex AI Studio
 
-MVP ассистента, который помогает спроектировать one-prompt или RAG-приложение
-и создаёт необходимые ресурсы в Yandex AI Studio. Завершённый сценарий
+Open-source ассистент Shada, который помогает спроектировать one-prompt,
+RAG-приложение или сценарий с Code Interpreter и создаёт необходимые ресурсы в
+Yandex AI Studio. Завершённый сценарий
 возвращает валидированную `AgentSpecification`, позволяет выполнить один
 stateless тестовый запрос через Responses API и скачать как исходную
 спецификацию, так и исполняемый runtime config. One-prompt может включать
@@ -13,6 +14,11 @@ preview, а созданные артефакты доступны для без
 Основной пользовательский интерфейс — Streamlit Web UI. Telegram-бот и OAuth
 Gateway сохранены как экспериментальные адаптеры и не запускаются по умолчанию.
 MVP не создаёт постоянную Agent Atelier entity и не возвращает `agent_id`.
+
+Проект находится в статусе `0.1.x Alpha`. Названия Yandex AI Studio и Yandex
+Cloud используются для обозначения совместимости. Партнёрская атрибуция и
+визуальные материалы будут опубликованы только после отдельного согласования;
+текущие правила описаны в [гайде по бренду](docs/branding.md).
 
 ## Быстрый запуск Web UI
 
@@ -89,6 +95,8 @@ src/
 - [Каталог компонентов](docs/component-catalog.md)
 - [Тестирование и credentialed E2E](docs/testing.md)
 - [Docker и deployment](docs/deployment.md)
+- [Бренд и внешняя атрибуция](docs/branding.md)
+- [Чек-лист публичного релиза](docs/release-checklist.md)
 - [Экспериментальный Telegram-бот](docs/telegram-experimental.md)
 - [Экспериментальный OAuth Gateway](docs/oauth-gateway-experimental.md)
 
@@ -117,3 +125,16 @@ docker compose up -d --build
 сброшенными Linux capabilities, healthcheck, лимитом памяти 1 ГБ, лимитом 256
 процессов и `no-new-privileges`. Подробности — в
 [docs/deployment.md](docs/deployment.md).
+
+## Участие в проекте
+
+Перед изменениями прочитайте [CONTRIBUTING.md](CONTRIBUTING.md) и
+[GOVERNANCE.md](GOVERNANCE.md). Ошибки и предложения оформляются через GitHub
+Issues. Уязвимости нельзя публиковать в issues — используйте приватный процесс
+из [SECURITY.md](SECURITY.md).
+
+## Лицензия
+
+Исходный код распространяется по лицензии MIT. Полный текст находится в
+[LICENSE](LICENSE). Лицензия на код не предоставляет прав на товарные знаки или
+на заявления от имени Shada, Yandex либо Yandex Cloud.
