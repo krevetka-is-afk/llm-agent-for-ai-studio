@@ -14,6 +14,7 @@ from ai_studio_agent_builder.application.interaction import (
 from ai_studio_agent_builder.application.file_policy import MAX_UPLOAD_BYTES
 from ai_studio_agent_builder.presentation.streamlit.agent_test_panel import (
     RESPONSE_ID_HELP,
+    TEST_FILES_HELP,
     TEST_INPUT_HELP,
     TOTAL_TOKENS_HELP,
 )
@@ -74,7 +75,7 @@ from ai_studio_agent_builder.presentation.streamlit.result_view import render_re
 def runtime_json(specification):
     return '{"schema_version":"1.0","model_name":"test-model"}'
 
-def test_agent(specification, user_input, request_id):
+def test_agent(specification, user_input, request_id, uploaded_files):
     return AgentTestResult(
         response_id="resp-test",
         output_text=f"Ответ: {user_input}",
@@ -143,7 +144,7 @@ from ai_studio_agent_builder.application.interaction import AgentTestResult, Gen
 from ai_studio_agent_builder.presentation.streamlit.agent_test_panel import AgentSpecificationActions
 from ai_studio_agent_builder.presentation.streamlit.result_view import render_result_parts
 
-def test_agent(specification, user_input, request_id):
+def test_agent(specification, user_input, request_id, uploaded_files):
     return AgentTestResult(
         response_id="resp-test",
         output_text="Файл готов",
@@ -217,6 +218,78 @@ render_result_parts(
     assert any("Подключитесь к AI Studio" in element.value for element in app.info)
 
 
+def test_result_view_shows_preview_uploader_only_for_code_interpreter() -> None:
+    app = AppTest.from_string(
+        """
+from ai_studio_agent_builder.application.interaction import AgentTestResult
+from ai_studio_agent_builder.presentation.streamlit.agent_test_panel import AgentSpecificationActions
+from ai_studio_agent_builder.presentation.streamlit.result_view import render_result_parts
+
+def test_agent(specification, user_input, request_id, uploaded_files):
+    return AgentTestResult(
+        response_id="resp",
+        output_text="files:" + ",".join(file.name for file in uploaded_files),
+        citations=(),
+    )
+
+actions = AgentSpecificationActions(
+    runtime_config_json=lambda specification: '{"schema_version":"1.0"}',
+    test_agent=test_agent,
+)
+render_result_parts(
+    [{
+        "kind": "agent_specification",
+        "specification": {
+            "template": "one_prompt",
+            "status": "ready",
+            "tools": [],
+        },
+    }],
+    key_prefix="plain",
+    agent_actions=actions,
+)
+render_result_parts(
+    [{
+        "kind": "agent_specification",
+        "specification": {
+            "template": "one_prompt",
+            "status": "ready",
+            "tools": [{"tool_id": "code_interpreter", "parameters": {}}],
+        },
+    }],
+    key_prefix="code",
+    agent_actions=actions,
+)
+"""
+    ).run()
+
+    assert not app.exception
+    assert len(app.file_uploader) == 1
+    assert app.file_uploader[0].label == "Файлы для Code Interpreter"
+    assert app.file_uploader[0].help == TEST_FILES_HELP
+    assert any(
+        "provider TTL контейнера — 20 минут" in item.value for item in app.caption
+    )
+
+    app.file_uploader[0].upload("numbers.csv", b"value\n1\n", "text/csv")
+    app.text_area[1].set_value("Посчитай")
+    app.button[1].click()
+    app.run()
+
+    assert not app.exception
+    assert any("files:numbers.csv" in item.value for item in app.markdown)
+
+    app.file_uploader[0].clear().upload(
+        "changed.csv",
+        b"value\n2\n",
+        "text/csv",
+    )
+    app.run()
+
+    assert not app.exception
+    assert all("files:numbers.csv" not in item.value for item in app.markdown)
+
+
 def test_result_view_keeps_json_card_but_hides_runtime_for_malformed_spec() -> None:
     app = AppTest.from_string(
         """
@@ -234,7 +307,7 @@ render_result_parts(
     key_prefix="malformed",
     agent_actions=AgentSpecificationActions(
         runtime_config_json=reject_runtime,
-        test_agent=lambda specification, user_input, request_id: None,
+        test_agent=lambda specification, user_input, request_id, uploaded_files: None,
     ),
 )
 """

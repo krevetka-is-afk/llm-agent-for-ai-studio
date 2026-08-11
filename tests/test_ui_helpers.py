@@ -2,10 +2,13 @@ import json
 from types import SimpleNamespace
 from typing import Any, cast
 
+import pytest
+
 from ai_studio_agent_builder.application.errors import (
     AIStudioRequestError,
     VectorIndexUnavailableError,
 )
+from ai_studio_agent_builder.application.file_policy import MAX_UPLOAD_BYTES
 from ai_studio_agent_builder.application.interaction import (
     AIInteraction,
     AgentTestInputError,
@@ -24,6 +27,8 @@ from ai_studio_agent_builder.application.ports.api_key_store import (
 from ai_studio_agent_builder.presentation.streamlit.agent_test_panel import (
     agent_test_error_message,
     citation_markdown,
+    has_code_interpreter_tool,
+    preview_request_fingerprint,
     preview_state_key,
     specification_fingerprint,
 )
@@ -116,6 +121,52 @@ def test_agent_specification_fingerprint_is_canonical_and_content_sensitive() ->
     assert preview_state_key("message-1") != preview_state_key("message-2")
 
 
+class _PreviewUpload:
+    def __init__(self, name: str, data: bytes, mime_type: str = "text/plain") -> None:
+        self.name = name
+        self.data = data
+        self.type = mime_type
+        self.size = len(data)
+        self.read_count = 0
+
+    def getvalue(self) -> bytes:
+        self.read_count += 1
+        return self.data
+
+
+def test_preview_fingerprint_includes_validated_file_name_type_and_content() -> None:
+    specification = {"template": "one_prompt", "tools": []}
+    first = _PreviewUpload("input.csv", b"value\n1\n", "text/csv")
+    same = _PreviewUpload("input.csv", b"value\n1\n", "text/csv")
+    changed = _PreviewUpload("input.csv", b"value\n2\n", "text/csv")
+
+    first_fingerprint = preview_request_fingerprint(specification, (first,))
+
+    assert first_fingerprint == preview_request_fingerprint(specification, (same,))
+    assert first_fingerprint != preview_request_fingerprint(
+        specification,
+        (changed,),
+    )
+
+
+def test_preview_fingerprint_validates_metadata_before_reading_content() -> None:
+    oversized = _PreviewUpload("large.bin", b"")
+    oversized.size = MAX_UPLOAD_BYTES + 1
+
+    with pytest.raises(UploadValidationError):
+        preview_request_fingerprint({}, (oversized,))
+
+    assert oversized.read_count == 0
+
+
+def test_code_interpreter_uploader_detection_uses_public_tool_descriptor() -> None:
+    assert has_code_interpreter_tool(
+        {"tools": [{"tool_id": "code_interpreter", "parameters": {}}]}
+    )
+    assert not has_code_interpreter_tool({"tools": [{"tool_id": "knowledge_search"}]})
+    assert not has_code_interpreter_tool({"tools": "code_interpreter"})
+
+
 def test_agent_test_errors_are_bounded_and_actionable() -> None:
     unavailable = VectorStoreUnavailableError("vs-secret", "expired")
 
@@ -172,6 +223,7 @@ def test_chat_flow_builds_callbacks_without_exposing_connection_to_result_view()
         def __init__(self) -> None:
             self.test_request: AgentTestRequest | None = None
             self.generated_file_reads: list[tuple[str, str]] = []
+            self.saved_preview_files: list[tuple[str, str, bytes, str | None]] = []
 
         def prepare_agent_runtime(self, specification):
             return SimpleNamespace(to_json=lambda: '{"model_name":"test-model"}')
@@ -187,6 +239,21 @@ def test_chat_flow_builds_callbacks_without_exposing_connection_to_result_view()
         def read_generated_file(self, user_id: str, local_name: str) -> bytes:
             self.generated_file_reads.append((user_id, local_name))
             return b"generated"
+
+        def save_attachment(
+            self,
+            user_id: str,
+            original_filename: str,
+            content: bytes,
+            caption: str | None = None,
+        ) -> Attachment:
+            self.saved_preview_files.append(
+                (user_id, original_filename, content, caption)
+            )
+            return Attachment(
+                filename="internal-input.csv",
+                display_name=original_filename,
+            )
 
     service = FakeService()
     disconnected = build_agent_specification_actions(
@@ -206,13 +273,20 @@ def test_chat_flow_builds_callbacks_without_exposing_connection_to_result_view()
     )
     assert connected.test_agent is not None
 
-    result = connected.test_agent({}, "Question", "request-1")
+    upload = _PreviewUpload("input.csv", b"value\n1\n", "text/csv")
+    result = connected.test_agent({}, "Question", "request-1", (upload,))
 
     assert result.output_text == "Answer"
     assert service.test_request is not None
     assert service.test_request.user_id == "web-user"
     assert service.test_request.request_id == "request-1"
     assert service.test_request.credentials.folder_id == "folder-1"
+    assert service.test_request.attachments == (
+        Attachment(filename="internal-input.csv", display_name="input.csv"),
+    )
+    assert service.saved_preview_files == [
+        ("web-user", "input.csv", b"value\n1\n", "Question")
+    ]
     assert connected.generated_file_reader is not None
     assert connected.generated_file_reader("stored.csv") == b"generated"
     assert service.generated_file_reads == [("web-user", "stored.csv")]

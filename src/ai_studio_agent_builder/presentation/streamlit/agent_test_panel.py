@@ -8,9 +8,11 @@ from uuid import uuid4
 
 import streamlit as st
 
+from ai_studio_agent_builder.application.file_policy import MAX_UPLOAD_BYTES
 from ai_studio_agent_builder.application.interaction import (
     AgentTestInputError,
     AgentTestResult,
+    UploadValidationError,
 )
 from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentProviderError,
@@ -23,14 +25,19 @@ from ai_studio_agent_builder.domain.specification import (
     InvalidSpecificationRecordError,
 )
 
-from .user_guidance import render_agent_next_steps
 from .attachments import render_generated_preview
+from .uploads import UploadContent, uploaded_files_fingerprint
+from .user_guidance import render_agent_next_steps
 
 
 PREVIEW_STATE_PREFIX = "agent-test-preview:"
 TEST_INPUT_HELP = (
     "Отдельный вопрос для проверки уже собранного агента. Он не изменяет "
     "инструкцию или основной диалог Agent Builder."
+)
+TEST_FILES_HELP = (
+    "Эти файлы будут доступны только текущему stateless preview через "
+    "Code Interpreter. Файлы из Builder-чата автоматически не подставляются."
 )
 SOURCES_HELP = (
     "Ссылки или файлы, которые Web Search или File Search использовал при "
@@ -67,7 +74,7 @@ GENERATED_FILE_WARNING_MESSAGES = {
 
 RuntimeConfigCallback = Callable[[Mapping[str, Any]], str]
 AgentTestCallback = Callable[
-    [Mapping[str, Any], str, str],
+    [Mapping[str, Any], str, str, tuple[UploadContent, ...]],
     AgentTestResult,
 ]
 GeneratedFileReader = Callable[[str], bytes]
@@ -82,7 +89,7 @@ class AgentSpecificationActions:
 
 @dataclass(frozen=True)
 class AgentPreviewState:
-    specification_fingerprint: str
+    request_fingerprint: str
     result: AgentTestResult
 
 
@@ -158,16 +165,6 @@ def render_agent_test_panel(
         st.warning("Не удалось подготовить runtime-конфигурацию.")
         return
 
-    fingerprint = specification_fingerprint(specification)
-    state_key = preview_state_key(key_prefix)
-    cached_preview = st.session_state.get(state_key)
-    if (
-        isinstance(cached_preview, AgentPreviewState)
-        and cached_preview.specification_fingerprint != fingerprint
-    ):
-        del st.session_state[state_key]
-        cached_preview = None
-
     if specification.get("template") == "rag":
         ttl_days = _rag_ttl_days(specification)
         st.warning(
@@ -175,6 +172,9 @@ def render_agent_test_panel(
             + (f" со сроком хранения {ttl_days} день." if ttl_days is not None else ".")
         )
 
+    user_input = ""
+    submitted = False
+    uploaded_files: tuple[UploadContent, ...] = ()
     if actions.test_agent is None:
         st.info("Подключитесь к AI Studio, чтобы протестировать агента.")
     else:
@@ -185,6 +185,20 @@ def render_agent_test_panel(
                 max_chars=10_000,
                 help=TEST_INPUT_HELP,
             )
+            if has_code_interpreter_tool(specification):
+                selected_files = st.file_uploader(
+                    "Файлы для Code Interpreter",
+                    accept_multiple_files=True,
+                    key=f"{key_prefix}-agent-test-files",
+                    help=TEST_FILES_HELP,
+                    max_upload_size=MAX_UPLOAD_BYTES // (1024 * 1024),
+                )
+                uploaded_files = tuple(selected_files or ())
+                st.caption(
+                    "Для каждого запуска создаётся временный auto container без "
+                    "доступа к сети. Приложение очищает remote-файлы после preview; "
+                    "provider TTL контейнера — 20 минут бездействия."
+                )
             submitted = st.form_submit_button(
                 "Протестировать агента",
                 type="primary",
@@ -193,25 +207,48 @@ def render_agent_test_panel(
                     "настройками агента."
                 ),
             )
-        if submitted:
-            if not user_input.strip():
-                st.error("Введите тестовый запрос.")
-            else:
-                try:
-                    with st.spinner("Агент выполняет запрос..."):
-                        result = actions.test_agent(
-                            specification,
-                            user_input,
-                            uuid4().hex,
-                        )
-                except Exception as exc:
-                    st.error(agent_test_error_message(exc))
-                else:
-                    cached_preview = AgentPreviewState(
-                        specification_fingerprint=fingerprint,
-                        result=result,
+
+    upload_validation_error: UploadValidationError | None = None
+    try:
+        request_fingerprint = preview_request_fingerprint(
+            specification,
+            uploaded_files,
+        )
+    except UploadValidationError as exc:
+        request_fingerprint = None
+        upload_validation_error = exc
+
+    state_key = preview_state_key(key_prefix)
+    cached_preview = st.session_state.get(state_key)
+    if isinstance(cached_preview, AgentPreviewState) and (
+        request_fingerprint is None
+        or cached_preview.request_fingerprint != request_fingerprint
+    ):
+        del st.session_state[state_key]
+        cached_preview = None
+
+    if upload_validation_error is not None:
+        st.error(str(upload_validation_error))
+    if submitted:
+        if not user_input.strip():
+            st.error("Введите тестовый запрос.")
+        elif upload_validation_error is None and actions.test_agent is not None:
+            try:
+                with st.spinner("Агент выполняет запрос..."):
+                    result = actions.test_agent(
+                        specification,
+                        user_input,
+                        uuid4().hex,
+                        uploaded_files,
                     )
-                    st.session_state[state_key] = cached_preview
+            except Exception as exc:
+                st.error(agent_test_error_message(exc))
+            else:
+                cached_preview = AgentPreviewState(
+                    request_fingerprint=request_fingerprint or "",
+                    result=result,
+                )
+                st.session_state[state_key] = cached_preview
 
     if isinstance(cached_preview, AgentPreviewState):
         render_agent_preview(
@@ -371,6 +408,26 @@ def specification_fingerprint(specification: Mapping[str, Any]) -> str:
         sort_keys=True,
     )
     return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
+
+def preview_request_fingerprint(
+    specification: Mapping[str, Any],
+    uploaded_files: tuple[UploadContent, ...],
+) -> str:
+    digest = hashlib.sha256()
+    digest.update(specification_fingerprint(specification).encode("ascii"))
+    digest.update(uploaded_files_fingerprint(uploaded_files).encode("ascii"))
+    return digest.hexdigest()
+
+
+def has_code_interpreter_tool(specification: Mapping[str, Any]) -> bool:
+    tools = specification.get("tools")
+    if not isinstance(tools, list | tuple):
+        return False
+    return any(
+        isinstance(tool, Mapping) and tool.get("tool_id") == "code_interpreter"
+        for tool in tools
+    )
 
 
 def preview_state_key(key_prefix: str) -> str:

@@ -105,6 +105,16 @@ Provider gateway отвечает только за отдельные create/re
 ровно IDs текущего request. Spec, prompt, filename и UI не являются источниками
 provider IDs.
 
+## Presentation contract
+
+Streamlit показывает multi-file uploader только если публичный descriptor
+`code_interpreter` присутствует в specification. Файлы Builder-чата не
+переиспользуются автоматически: пользователь выбирает inputs каждого stateless
+preview явно. До чтения bytes проверяются count/per-file/total metadata limits,
+после чего cache fingerprint включает canonical specification, имена, MIME,
+размеры и content digests выбранных файлов. Изменение любого input сбрасывает
+предыдущий preview result.
+
 ## Retention
 
 Remote auto container имеет provider TTL, но TTL не заменяет cleanup. Локальные

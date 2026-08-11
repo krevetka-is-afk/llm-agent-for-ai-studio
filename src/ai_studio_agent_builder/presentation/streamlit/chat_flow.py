@@ -10,6 +10,7 @@ from streamlit.runtime.uploaded_file_manager import UploadedFile
 from ai_studio_agent_builder.application.interaction import (
     AIInteraction,
     AgentSpecificationImportError,
+    AgentTestInputError,
     AgentTestRequest,
     AgentTestResult,
     Attachment,
@@ -31,7 +32,7 @@ from .agent_test_panel import AgentSpecificationActions, AgentTestCallback
 from .attachments import render_attachment
 from .connection import credentials_from_connection
 from .result_view import render_result_parts
-from .uploads import attachment_record, validate_uploaded_files
+from .uploads import UploadContent, attachment_record, validate_uploaded_files
 
 
 logger = logging.getLogger(__name__)
@@ -203,15 +204,11 @@ def _save_attachments(
     request_id: str,
 ) -> tuple[Attachment, ...] | None:
     try:
-        validate_uploaded_files(uploaded_files)
-        return tuple(
-            ai_service.save_attachment(
-                connection_id,
-                uploaded_file.name,
-                uploaded_file.getvalue(),
-                caption=prompt or None,
-            )
-            for uploaded_file in uploaded_files
+        return _persist_uploaded_files(
+            ai_service,
+            connection_id,
+            prompt,
+            uploaded_files,
         )
     except UploadValidationError as exc:
         st.error(str(exc))
@@ -222,6 +219,24 @@ def _save_attachments(
         )
         st.error("Не удалось сохранить загруженный файл. Повторите попытку.")
     return None
+
+
+def _persist_uploaded_files(
+    ai_service: AIInteraction,
+    connection_id: str,
+    prompt: str,
+    uploaded_files: Sequence[UploadContent],
+) -> tuple[Attachment, ...]:
+    validate_uploaded_files(uploaded_files)
+    return tuple(
+        ai_service.save_attachment(
+            connection_id,
+            uploaded_file.name,
+            uploaded_file.getvalue(),
+            caption=prompt or None,
+        )
+        for uploaded_file in uploaded_files
+    )
 
 
 def _append_and_render_user_message(
@@ -345,7 +360,25 @@ def build_agent_specification_actions(
             specification: Mapping[str, Any],
             user_input: str,
             request_id: str,
+            uploaded_files: tuple[UploadContent, ...],
         ) -> AgentTestResult:
+            try:
+                attachments = _persist_uploaded_files(
+                    ai_service,
+                    connection_id,
+                    user_input,
+                    uploaded_files,
+                )
+            except UploadValidationError as exc:
+                raise AgentTestInputError(str(exc)) from exc
+            except OSError as exc:
+                _request_logger(connection_id, request_id).warning(
+                    "Could not persist preview inputs error_type=%s",
+                    type(exc).__name__,
+                )
+                raise AgentTestInputError(
+                    "Не удалось сохранить файлы для preview. Повторите попытку."
+                ) from exc
             return _run_async(
                 ai_service.test_agent_specification(
                     AgentTestRequest(
@@ -354,6 +387,7 @@ def build_agent_specification_actions(
                         specification_record=specification,
                         user_input=user_input,
                         request_id=request_id,
+                        attachments=attachments,
                     )
                 )
             )

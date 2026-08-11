@@ -1,5 +1,6 @@
 """Validate Streamlit upload metadata and build attachment records."""
 
+import hashlib
 from collections.abc import Sequence
 from typing import Protocol
 
@@ -23,6 +24,10 @@ class UploadMetadata(Protocol):
 class UploadRecordMetadata(UploadMetadata, Protocol):
     @property
     def type(self) -> str | None: ...
+
+
+class UploadContent(UploadRecordMetadata, Protocol):
+    def getvalue(self) -> bytes: ...
 
 
 def validate_uploaded_files(uploaded_files: Sequence[UploadMetadata]) -> None:
@@ -54,3 +59,19 @@ def attachment_record(
         "mime_type": uploaded_file.type or "application/octet-stream",
         "size": uploaded_file.size,
     }
+
+
+def uploaded_files_fingerprint(uploaded_files: Sequence[UploadContent]) -> str:
+    """Hash validated preview inputs without persisting or exposing file content."""
+    validate_uploaded_files(uploaded_files)
+    digest = hashlib.sha256()
+    digest.update(len(uploaded_files).to_bytes(4, "big"))
+    for uploaded_file in uploaded_files:
+        data = uploaded_file.getvalue()
+        digest.update(uploaded_file.name.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update((uploaded_file.type or "").encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(uploaded_file.size.to_bytes(8, "big"))
+        digest.update(hashlib.sha256(data).digest())
+    return digest.hexdigest()
