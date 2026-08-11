@@ -1,19 +1,13 @@
 from dataclasses import replace
 from collections.abc import Mapping
-from enum import Enum, auto
 
-from agent_specification import (
+from ai_studio_agent_builder.domain.routing import ConversationOptions
+from ai_studio_agent_builder.domain.specification import (
     AgentSpecification,
     KnowledgeSource,
     ToolDescriptor,
     specification_template_for,
 )
-
-
-class ConversationOptions(Enum):
-    COORDINATOR = auto()
-    RAG = auto()
-    ONE_PROMPT = auto()
 
 
 class ConversationState:

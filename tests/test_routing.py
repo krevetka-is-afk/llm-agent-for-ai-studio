@@ -1,7 +1,9 @@
 import pytest
 
-from conversation_state import ConversationOptions
-from routing import resolve_explicit_route
+from ai_studio_agent_builder.domain.routing import (
+    ConversationOptions,
+    resolve_explicit_route,
+)
 
 
 @pytest.mark.parametrize(

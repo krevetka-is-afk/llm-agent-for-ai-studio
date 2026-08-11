@@ -11,6 +11,7 @@ from typing import Any
 from uuid import uuid4
 
 from agents import OpenAIProvider, RunConfig
+from ai_studio_agent_builder.domain.routing import resolve_explicit_route
 from agent_runner import (
     AgentCitation,
     AgentProviderError,
@@ -56,7 +57,6 @@ from result_assembly import (
     merge_agent_runs,
     render_result_text,
 )
-from routing import resolve_explicit_route
 from session import get_session
 from yandex_responses_runner import YandexResponsesAgentRunner
 

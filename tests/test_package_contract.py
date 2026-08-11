@@ -1,9 +1,11 @@
 import agent_runtime as legacy_runtime
 import agent_specification as legacy_specification
 import component_catalog as legacy_catalog
+import routing as legacy_routing
 
 import ai_studio_agent_builder as public_api
 from ai_studio_agent_builder.domain import catalog, runtime, specification
+from ai_studio_agent_builder.domain import routing
 
 
 def test_public_api_reexports_stable_domain_contracts() -> None:
@@ -25,3 +27,5 @@ def test_legacy_flat_imports_reference_packaged_contracts() -> None:
     assert legacy_specification.AgentSpecification is specification.AgentSpecification
     assert legacy_specification.KnowledgeSource is specification.KnowledgeSource
     assert legacy_catalog.TemplateId is catalog.TemplateId
+    assert legacy_routing.ConversationOptions is routing.ConversationOptions
+    assert legacy_routing.resolve_explicit_route is routing.resolve_explicit_route
