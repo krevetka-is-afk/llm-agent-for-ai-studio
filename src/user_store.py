@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from conversation_state import ConversationState
-from credentials import AIStudioCredentials
+from ai_studio_agent_builder.application.dto import AIStudioCredentials
 
 
 DEFAULT_PENDING_CREDENTIAL_TTL_SECONDS = 5 * 60

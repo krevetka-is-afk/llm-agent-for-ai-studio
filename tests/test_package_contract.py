@@ -2,12 +2,15 @@ import agent_runner as legacy_agent_runner
 import agent_runtime as legacy_runtime
 import agent_specification as legacy_specification
 import component_catalog as legacy_catalog
+import credentials as legacy_credentials
 import routing as legacy_routing
 import yandex_responses_runner as legacy_yandex_runner
 
 import ai_studio_agent_builder as public_api
+from ai_studio_agent_builder.application import dto
 from ai_studio_agent_builder.application.ports import agent_runner
 from ai_studio_agent_builder.domain import catalog, routing, runtime, specification
+from ai_studio_agent_builder.infrastructure.yandex_ai_studio import client_factory
 from ai_studio_agent_builder.infrastructure.yandex_ai_studio import responses_runner
 
 
@@ -22,6 +25,13 @@ def test_public_api_reexports_stable_domain_contracts() -> None:
 
 
 def test_legacy_flat_imports_reference_packaged_contracts() -> None:
+    assert legacy_credentials.AIStudioCredentials is dto.AIStudioCredentials
+    assert legacy_credentials.UserCredentials is dto.UserCredentials
+    assert legacy_credentials.get_api_key_client is client_factory.get_api_key_client
+    assert (
+        legacy_credentials.get_async_api_key_client
+        is client_factory.get_async_api_key_client
+    )
     assert legacy_agent_runner.AgentRunPreview is agent_runner.AgentRunPreview
     assert legacy_agent_runner.AgentRunnerError is agent_runner.AgentRunnerError
     assert legacy_runtime.ExecutableAgentConfig is runtime.ExecutableAgentConfig

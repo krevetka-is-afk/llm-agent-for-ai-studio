@@ -1,5 +1,8 @@
 from config import ConnectionConfig
-from context import AIStudioCredentials, get_api_key_client
+from ai_studio_agent_builder.application.dto import AIStudioCredentials
+from ai_studio_agent_builder.infrastructure.yandex_ai_studio.client_factory import (
+    get_api_key_client,
+)
 
 
 def test_api_key_client_uses_yandex_api_key_authorization_scheme() -> None:

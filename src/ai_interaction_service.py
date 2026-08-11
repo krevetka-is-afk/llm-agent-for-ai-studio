@@ -11,6 +11,7 @@ from typing import Any
 from uuid import uuid4
 
 from agents import OpenAIProvider, RunConfig
+from ai_studio_agent_builder.application.dto import AIStudioCredentials
 from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentCitation,
     AgentProviderError,
@@ -19,6 +20,10 @@ from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentRunnerError,
 )
 from ai_studio_agent_builder.domain.routing import resolve_explicit_route
+from ai_studio_agent_builder.infrastructure.yandex_ai_studio.client_factory import (
+    get_api_key_client,
+    get_async_api_key_client,
+)
 from ai_studio_agent_builder.infrastructure.yandex_ai_studio.responses_runner import (
     YandexResponsesAgentRunner,
 )
@@ -33,12 +38,9 @@ from agent_specification import (
 )
 from config import AIServiceConfig
 from context import (
-    AIStudioCredentials,
     ConversationOptions,
     ConversationState,
     RequestContext,
-    get_api_key_client,
-    get_async_api_key_client,
 )
 from custom_agents.coordinator_agent import build_coordinator_agent
 from custom_agents.one_prompt_agent import build_one_prompt_agent
