@@ -150,7 +150,7 @@ handles и удаляются с провайдера вместе с inputs/con
 | NFR-04 | Upload flow должен иметь ограниченный blast radius. | Файлы сохраняются в пользовательской директории, имена санитизируются, лимиты проверяются. |
 | NFR-05 | Результат должен быть воспроизводимым для отчёта и проверки. | Есть docs по архитектуре, схеме spec, каталогу, testing и test results. |
 | NFR-06 | Проверка качества должна быть автоматизируемой. | Поддерживаются `ruff format --check`, `ruff check`, `ty check`, `pytest -q`, `pre-commit`. |
-| NFR-07 | Credentialed E2E не должен запускаться случайно. | Тест помечен `yandex_ai_studio_e2e` и требует explicit env flag. |
+| NFR-07 | Credentialed E2E не должен запускаться случайно или на недоверенном PR. | Тест помечен `yandex_ai_studio_e2e` и требует explicit env flag; GitHub workflow доступен только через `workflow_dispatch` и protected environment. |
 | NFR-08 | MVP должен оставаться малым и проверяемым. | Новые функции реализованы без новых production dependencies и без marketplace scope. |
 | NFR-09 | Внутренний model/tool flow должен иметь ограниченный, настраиваемый бюджет turns. | `ModelConfig.max_turns` передаётся в SDK Runner; значение по умолчанию и production config равны 20. |
 | NFR-10 | Тест готового агента не должен изменять основной диалог или черновик спецификации. | Preview выполняется отдельным application-service method без `ConversationState.commit_from()`. |
@@ -160,6 +160,7 @@ handles и удаляются с провайдера вместе с inputs/con
 | NFR-14 | Многошаговый RAG flow не должен зависеть от повторной передачи файла пользователем или выбора `file_id` моделью. | Загруженный файл остаётся доступен после уточнения имени индекса; повторное создание переиспользует существующий индекс; внутренние идентификаторы не включаются в prompt агента. |
 | NFR-15 | Code Interpreter file lifecycle должен иметь ограниченный blast radius. | До provider call применяются лимиты 5 inputs, 10 MiB на файл и 25 MiB суммарно; outputs ограничены 10 файлами, 10 MiB на файл и 25 MiB суммарно, сохраняются атомарно, partial удаляется. |
 | NFR-16 | Кэш preview не должен переиспользоваться для другого набора файлов. | Fingerprint включает canonical spec и name/MIME/size/content digest каждого выбранного input; изменение набора очищает результат. |
+| NFR-17 | Публичный release не должен собираться с известными уязвимостями production lock. | Обычный CI выполняет `pip-audit` по frozen export; release gate останавливается при найденной advisory, а исправленные минимальные версии отражены в `pyproject.toml`. |
 
 ## Трассировка
 
@@ -194,7 +195,7 @@ handles и удаляются с провайдера вместе с inputs/con
 | NFR-04 | `application/file_policy.py`, `presentation/streamlit/uploads.py`, `application/file_lifecycle.py` | `tests/test_upload_file_security.py`, `tests/test_ui_smoke.py` |
 | NFR-05 | `docs/*.md`, `docs/report/*.typ` | Документальная проверка |
 | NFR-06 | `pyproject.toml`, `.pre-commit-config.yaml` | Quality gate commands |
-| NFR-07 | `tests/e2e/test_yandex_ai_studio_rag_e2e.py`, `tests/e2e/test_yandex_ai_studio_agent_runtime_e2e.py` | `pytest` skip без env; opt-in запуск с credentials |
+| NFR-07 | `tests/e2e/*.py`, `.github/workflows/yandex-e2e.yml` | `pytest` skip без env; manual protected-environment запуск с credentials |
 | NFR-08 | `pyproject.toml`, code review | `uv run pytest -q`, `uv run ty check`, dependency diff |
 | NFR-09 | `config.py`, `builder/agents/base_agent.py`, `config.yaml` | `tests/test_base_agent.py`, `tests/test_config.py` |
 | NFR-10 | `application/builder_service.py`, `presentation/streamlit/chat_flow.py` | `tests/test_ai_interaction_service.py`, `tests/test_ui_smoke.py` |
@@ -204,3 +205,4 @@ handles и удаляются с провайдера вместе с inputs/con
 | NFR-14 | `application/builder_state.py`, `builder_service.py`, `builder/agents/tools/vector_index.py`, `builder/result_assembly.py` | `tests/test_builder_state.py`, `tests/test_ai_interaction_service.py`, `tests/test_vector_index.py`, `tests/test_result_assembly.py` |
 | NFR-15 | `application/interaction.py`, `file_lifecycle.py`, `file_policy.py`, `infrastructure/persistence/local_attachments.py` | `tests/test_upload_file_security.py`, `tests/test_generated_artifact_storage.py` |
 | NFR-16 | `presentation/streamlit/agent_test_panel.py` | `tests/test_ui_helpers.py`, `tests/test_ui_smoke.py` |
+| NFR-17 | `pyproject.toml`, `uv.lock`, `.github/workflows/ci.yml` | frozen `uv export` + `pip-audit`; build и full test suite |

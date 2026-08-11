@@ -1,6 +1,9 @@
 import asyncio
+import csv
+import io
 import logging
 import os
+from collections.abc import Iterator
 from pathlib import Path
 from uuid import uuid4
 
@@ -11,6 +14,7 @@ from ai_studio_agent_builder.application.dto import AIStudioCredentials
 from ai_studio_agent_builder.application.interaction import (
     AgentTestRequest,
     AgentTestResult,
+    Attachment,
 )
 from ai_studio_agent_builder.application.interaction_facade import (
     AIInteractionService,
@@ -37,6 +41,7 @@ from ai_studio_agent_builder.infrastructure.yandex_ai_studio.client_factory impo
     get_api_key_client,
 )
 from ai_studio_agent_builder.infrastructure.yandex_ai_studio.files_gateway import (
+    YandexFileResourceGateway,
     upload_local_file,
 )
 
@@ -219,11 +224,99 @@ async def _run_rag(tmp_path: Path) -> None:
             await asyncio.to_thread(client.files.delete, file_id)
 
 
+def test_generated_code_interpreter_runs_service_file_lifecycle(
+    tmp_path: Path,
+) -> None:
+    asyncio.run(_run_code_interpreter(tmp_path))
+
+
+async def _run_code_interpreter(tmp_path: Path) -> None:
+    credentials = _credentials()
+    config = _service_config(tmp_path)
+    client = get_api_key_client(credentials, config.connection)
+    tracked_files = _TrackedFileResources(YandexFileResourceGateway(client))
+    service = build_ai_interaction_service(
+        config,
+        file_resource_gateway_factory=_TrackedFileResourceGatewayFactory(tracked_files),
+    )
+    user_id = f"code-interpreter-runtime-e2e-{uuid4().hex}"
+    context = service.save_attachment(
+        user_id,
+        "context.txt",
+        b"Multiply the CSV sum by 2.\n",
+    )
+    numbers = service.save_attachment(
+        user_id,
+        "numbers.csv",
+        b"label,value\nalpha,10\nbeta,15\ngamma,25\n",
+    )
+    specification = build_one_prompt_specification(
+        purpose="Verify the generated Code Interpreter runtime",
+        instructions=(
+            "Always use Code Interpreter to read attached files, calculate the "
+            "answer, and create the requested output file."
+        ),
+        expected_result="A marker and a cited result.csv artifact",
+        code_interpreter=True,
+    )
+    runtime_json = service.prepare_agent_runtime(specification.to_record()).to_json()
+    assert "file_ids" not in runtime_json
+
+    try:
+        result = await _test_agent(
+            service,
+            credentials,
+            specification.to_record(),
+            (
+                "Read both attached files. Create result.csv with columns "
+                "metric,value and rows sum, multiplier, result. Reply with "
+                "SERVICE_CODE_INTERPRETER_OK and cite result.csv."
+            ),
+            user_id=user_id,
+            attachments=(context, numbers),
+        )
+
+        assert "SERVICE_CODE_INTERPRETER_OK" in result.output_text
+        assert result.generated_file_warnings == ()
+        generated = [
+            artifact
+            for artifact in result.generated_files
+            if artifact.display_name == "result.csv"
+        ]
+        assert len(generated) == 1
+        assert generated[0].mime_type == "text/csv"
+        payload = service.read_generated_file(user_id, generated[0].local_name)
+        rows = {
+            row["metric"]: float(row["value"])
+            for row in csv.DictReader(io.StringIO(payload.decode("utf-8")))
+        }
+        assert rows == {"sum": 50.0, "multiplier": 2.0, "result": 100.0}
+
+        assert tracked_files.uploaded_input_ids
+        assert tracked_files.downloaded_output_ids
+        assert tracked_files.uploaded_input_ids <= tracked_files.deleted_file_ids
+        assert tracked_files.downloaded_output_ids <= tracked_files.deleted_file_ids
+        assert tracked_files.deleted_container_ids
+        serialized_result = repr(result)
+        for remote_id in (
+            tracked_files.uploaded_input_ids
+            | tracked_files.downloaded_output_ids
+            | tracked_files.deleted_container_ids
+        ):
+            assert remote_id not in serialized_result
+        _assert_no_credentials(result, credentials)
+    finally:
+        await service.reset_conversation(user_id)
+
+
 async def _test_agent(
     service: AIInteractionService,
     credentials: AIStudioCredentials,
     specification_record: dict,
     user_input: str,
+    *,
+    user_id: str | None = None,
+    attachments: tuple[Attachment, ...] = (),
 ) -> AgentTestResult:
     runtime_json = service.prepare_agent_runtime(specification_record).to_json()
     assert credentials.api_key not in runtime_json
@@ -231,10 +324,11 @@ async def _test_agent(
     return await asyncio.wait_for(
         service.test_agent_specification(
             AgentTestRequest(
-                user_id=f"runtime-e2e-{uuid4().hex}",
+                user_id=user_id or f"runtime-e2e-{uuid4().hex}",
                 credentials=credentials,
                 specification_record=specification_record,
                 user_input=user_input,
+                attachments=attachments,
             )
         ),
         timeout=float(os.getenv("YC_AI_STUDIO_E2E_TIMEOUT_SECONDS", "420")),
@@ -248,3 +342,43 @@ def _assert_no_credentials(
     serialized_result = repr(result)
     assert credentials.api_key not in serialized_result
     assert credentials.folder_id not in serialized_result
+
+
+class _TrackedFileResources:
+    def __init__(self, delegate: YandexFileResourceGateway) -> None:
+        self._delegate = delegate
+        self.uploaded_input_ids: set[str] = set()
+        self.downloaded_output_ids: set[str] = set()
+        self.deleted_file_ids: set[str] = set()
+        self.deleted_container_ids: set[str] = set()
+
+    def upload_user_file(self, base_dir: Path, filename: str) -> str:
+        file_id = self._delegate.upload_user_file(base_dir, filename)
+        self.uploaded_input_ids.add(file_id)
+        return file_id
+
+    def iter_file_bytes(
+        self,
+        file_id: str,
+        *,
+        chunk_size: int,
+    ) -> Iterator[bytes]:
+        self.downloaded_output_ids.add(file_id)
+        yield from self._delegate.iter_file_bytes(file_id, chunk_size=chunk_size)
+
+    def delete_file(self, file_id: str) -> None:
+        self._delegate.delete_file(file_id)
+        self.deleted_file_ids.add(file_id)
+
+    def delete_container(self, container_id: str) -> None:
+        self._delegate.delete_container(container_id)
+        self.deleted_container_ids.add(container_id)
+
+
+class _TrackedFileResourceGatewayFactory:
+    def __init__(self, gateway: _TrackedFileResources) -> None:
+        self._gateway = gateway
+
+    def create(self, credentials: AIStudioCredentials) -> _TrackedFileResources:
+        del credentials
+        return self._gateway

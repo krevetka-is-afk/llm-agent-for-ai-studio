@@ -1,0 +1,86 @@
+name: Yandex AI Studio E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      include_web_search:
+        description: Run the quota-sensitive Web Search scenario
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: yandex-ai-studio-e2e
+  cancel-in-progress: false
+
+jobs:
+  core:
+    name: Core credentialed E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: yandex-ai-studio-e2e
+    env:
+      RUN_YANDEX_AI_STUDIO_E2E: "1"
+      YC_AI_STUDIO_API_KEY: ${{ secrets.YC_AI_STUDIO_API_KEY }}
+      YC_AI_STUDIO_FOLDER_ID: ${{ secrets.YC_AI_STUDIO_FOLDER_ID }}
+      YC_AI_STUDIO_BASE_URL: ${{ vars.YC_AI_STUDIO_BASE_URL || 'https://ai.api.cloud.yandex.net/v1' }}
+      YC_AI_STUDIO_MODEL: ${{ vars.YC_AI_STUDIO_MODEL || 'gpt-oss-120b' }}
+      YC_AI_STUDIO_REQUEST_TIMEOUT_SECONDS: ${{ vars.YC_AI_STUDIO_REQUEST_TIMEOUT_SECONDS || '90' }}
+      YC_AI_STUDIO_E2E_TIMEOUT_SECONDS: ${{ vars.YC_AI_STUDIO_E2E_TIMEOUT_SECONDS || '420' }}
+      YC_AI_STUDIO_E2E_KEEP_REMOTE: "0"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          python-version: "3.13"
+
+      - name: Sync locked environment
+        run: uv sync --frozen
+
+      - name: Run core provider and service-backed scenarios
+        run: >-
+          uv run pytest -q
+          -m "yandex_ai_studio_e2e and not yandex_ai_studio_web_search_e2e"
+          tests/e2e
+
+  web-search:
+    name: Quota-sensitive Web Search E2E
+    if: ${{ inputs.include_web_search }}
+    needs: core
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: yandex-ai-studio-e2e
+    env:
+      RUN_YANDEX_AI_STUDIO_E2E: "1"
+      YC_AI_STUDIO_API_KEY: ${{ secrets.YC_AI_STUDIO_API_KEY }}
+      YC_AI_STUDIO_FOLDER_ID: ${{ secrets.YC_AI_STUDIO_FOLDER_ID }}
+      YC_AI_STUDIO_BASE_URL: ${{ vars.YC_AI_STUDIO_BASE_URL || 'https://ai.api.cloud.yandex.net/v1' }}
+      YC_AI_STUDIO_MODEL: ${{ vars.YC_AI_STUDIO_MODEL || 'gpt-oss-120b' }}
+      YC_AI_STUDIO_REQUEST_TIMEOUT_SECONDS: ${{ vars.YC_AI_STUDIO_REQUEST_TIMEOUT_SECONDS || '90' }}
+      YC_AI_STUDIO_E2E_TIMEOUT_SECONDS: ${{ vars.YC_AI_STUDIO_E2E_TIMEOUT_SECONDS || '420' }}
+      YC_AI_STUDIO_E2E_KEEP_REMOTE: "0"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          python-version: "3.13"
+
+      - name: Sync locked environment
+        run: uv sync --frozen
+
+      - name: Run Web Search scenario
+        run: >-
+          uv run pytest -q
+          -m yandex_ai_studio_web_search_e2e
+          tests/e2e/test_yandex_ai_studio_agent_runtime_e2e.py
