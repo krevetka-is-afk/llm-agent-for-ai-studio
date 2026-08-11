@@ -29,7 +29,9 @@ def test_web_ui_starts_in_disconnected_state(tmp_path: Path, monkeypatch) -> Non
     )
     monkeypatch.setenv("YC_API_KEY_DB_PATH", str(tmp_path / "api-keys.db"))
 
-    app = AppTest.from_file("src/ui/app.py", default_timeout=10).run()
+    app = AppTest.from_file(
+        "src/ai_studio_agent_builder/entrypoints/web.py", default_timeout=10
+    ).run()
 
     assert not app.exception
     assert app.title[0].value == "AI Studio Chat"

@@ -25,9 +25,13 @@ def test_compose_keeps_mvp_entrypoints_and_experimental_profiles() -> None:
     assert services["web-ui"]["command"][:3] == [
         "streamlit",
         "run",
-        "ui/app.py",
+        "src/ai_studio_agent_builder/entrypoints/web.py",
     ]
-    assert services["telegram-bot"]["command"] == ["python", "app.py"]
+    assert services["telegram-bot"]["command"] == [
+        "python",
+        "-m",
+        "ai_studio_agent_builder.entrypoints.telegram",
+    ]
     assert services["oauth-gateway"]["command"] == [
         "python",
         "-m",
@@ -72,11 +76,14 @@ def test_compose_overrides_web_runtime_paths_with_data_volume() -> None:
     }
 
 
-def test_dockerfile_keeps_flat_runtime_contract() -> None:
+def test_dockerfile_installs_and_runs_the_package() -> None:
     dockerfile = (REPOSITORY_ROOT / "Dockerfile").read_text(encoding="utf-8")
 
-    assert "ENV PYTHONPATH=/app" in dockerfile
-    assert "COPY --chown=app:app src/ ." in dockerfile
+    assert "ENV PYTHONPATH" not in dockerfile
+    assert "uv sync --locked --no-install-project" in dockerfile
+    assert "uv sync --locked --no-editable" in dockerfile
+    assert "COPY src/ai_studio_agent_builder src/ai_studio_agent_builder" in dockerfile
+    assert "COPY --chown=app:app src/ ." not in dockerfile
 
 
 def test_docker_build_context_excludes_credentials_and_local_agent_state() -> None:

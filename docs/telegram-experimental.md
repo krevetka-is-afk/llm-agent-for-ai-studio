@@ -4,7 +4,7 @@ Telegram-бот не использует OAuth и запускается тол
 `telegram-experimental`.
 
 ```bash
-PYTHONPATH=src uv run --env-file .env.bot python src/app.py
+uv run --env-file .env.bot python -m ai_studio_agent_builder.entrypoints.telegram
 ```
 
 Подключение выполняется в личном чате:

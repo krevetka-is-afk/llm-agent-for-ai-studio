@@ -59,6 +59,9 @@ jobs:
       - name: Test
         run: uv run pytest -q
 
+      - name: Build distribution artifacts
+        run: uv build --wheel --sdist --out-dir "${RUNNER_TEMP}/dist"
+
       - name: Audit production lock
         run: |
           uv export --frozen --no-dev --no-hashes --format requirements-txt --output-file "${RUNNER_TEMP}/requirements.txt"

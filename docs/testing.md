@@ -7,6 +7,7 @@ uv run ruff format --check .
 uv run ruff check .
 uv run ty check
 uv run pytest -q
+uv build --wheel --sdist
 uv run pre-commit run --all-files
 ```
 
@@ -31,10 +32,10 @@ E2E opt-in состоит из двух наборов:
 
 ```bash
 cp .env.e2e.example .env.e2e
-PYTHONPATH=src uv run --env-file .env.e2e pytest \
+uv run --env-file .env.e2e pytest \
   -m yandex_ai_studio_e2e tests/e2e/test_yandex_ai_studio_rag_e2e.py
 
-PYTHONPATH=src uv run --env-file .env.e2e pytest \
+uv run --env-file .env.e2e pytest \
   -m yandex_ai_studio_e2e \
   tests/e2e/test_yandex_ai_studio_agent_runtime_e2e.py
 ```

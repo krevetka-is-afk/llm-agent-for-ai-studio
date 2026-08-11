@@ -29,7 +29,7 @@ services:
   telegram-bot:
     profiles: ["telegram-experimental"]
     build: .
-    command: ["python", "app.py"]
+    command: ["python", "-m", "ai_studio_agent_builder.entrypoints.telegram"]
     env_file: .env.bot
     restart: unless-stopped
     mem_limit: 1g
@@ -47,7 +47,7 @@ services:
 
   web-ui:
     build: .
-    command: ["streamlit", "run", "ui/app.py", "--server.address=0.0.0.0", "--server.port=8501", "--browser.gatherUsageStats=false"]
+    command: ["streamlit", "run", "src/ai_studio_agent_builder/entrypoints/web.py", "--server.address=0.0.0.0", "--server.port=8501", "--browser.gatherUsageStats=false"]
     env_file: .env.web
     environment:
       YC_API_KEY_DB_PATH: /data/api_keys.db

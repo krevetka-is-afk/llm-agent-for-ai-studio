@@ -26,7 +26,7 @@ uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_
 запустите приложение:
 
 ```bash
-PYTHONPATH=src uv run --env-file .env.web streamlit run src/ui/app.py
+uv run --env-file .env.web streamlit run src/ai_studio_agent_builder/entrypoints/web.py
 ```
 
 Локальные базы и загруженные файлы сохраняются в `.local/`; этот каталог
@@ -54,21 +54,17 @@ vector store проверяется при тестовом запуске.
 
 ```text
 src/
-├── ai_interaction_service.py   # единый application service и transaction boundary
-├── agent_specification.py      # формальная JSON-спецификация создаваемого агента
-├── agent_runtime.py            # pure compiler в provider-neutral runtime config
-├── agent_runner.py             # port, preview и безопасная taxonomy ошибок
-├── yandex_responses_runner.py  # adapter Yandex Responses API
-├── component_catalog.py        # каталог шаблонов и компонентов MVP
-├── credentials.py             # credentials и OpenAI client factories
-├── conversation_state.py      # route, draft/latest specification и commit boundary
-├── routing.py                 # deterministic overrides for explicit route choices
-├── request_context.py         # least-privilege tool context
-├── user_store.py              # in-memory Telegram credentials + TTL
-├── context.py                 # compatibility re-exports
-├── custom_agents/             # coordinator, RAG и one-prompt агенты
-├── ui/                        # Streamlit entrypoint и изолированные UI-модули
-└── experimental/oauth/        # замороженный OAuth-прототип
+├── ai_studio_agent_builder/
+│   ├── domain/                # спецификация, каталог, routing и runtime compiler
+│   ├── application/           # use cases, DTO, errors и порты
+│   ├── builder/               # orchestration builder-агентов и tools
+│   ├── infrastructure/        # Yandex AI Studio, persistence и observability
+│   ├── presentation/
+│   │   ├── streamlit/         # Web UI
+│   │   └── telegram/          # экспериментальный Telegram adapter
+│   ├── entrypoints/           # тонкие Web/Telegram bootstraps
+│   └── composition.py         # composition root
+└── experimental/oauth/        # временно изолированный OAuth-прототип
 ```
 
 Подробности и границы модулей: [docs/architecture.md](docs/architecture.md).
@@ -93,6 +89,7 @@ uv run ruff format --check .
 uv run ruff check .
 uv run ty check
 uv run pytest -q
+uv build --wheel --sdist
 uv run pre-commit run --all-files
 ```
 
