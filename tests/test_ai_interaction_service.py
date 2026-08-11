@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 from openai import OpenAIError
 
+import ai_studio_agent_builder.application.file_lifecycle as file_lifecycle_module
 from ai_studio_agent_builder.application.errors import AIStudioRequestError
 from ai_studio_agent_builder.application.dto import AIStudioCredentials
 from ai_studio_agent_builder.application.builder_state import ConversationState
@@ -21,6 +22,7 @@ from ai_studio_agent_builder.application.interaction import (
 from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentCitation,
     AgentProviderError,
+    AgentProviderTimeoutError,
     AgentRunPreview,
 )
 from ai_studio_agent_builder.application.ports.builder_run import BuilderRunOutcome
@@ -35,7 +37,10 @@ from ai_studio_agent_builder.config import (
 from ai_studio_agent_builder.composition import build_ai_interaction_service
 from ai_studio_agent_builder.domain.catalog import TemplateId
 from ai_studio_agent_builder.domain.routing import ConversationOptions
-from ai_studio_agent_builder.domain.runtime import ExecutableAgentConfig
+from ai_studio_agent_builder.domain.runtime import (
+    ExecutableAgentConfig,
+    InvalidRuntimeFileBindingError,
+)
 from ai_studio_agent_builder.domain.specification import (
     AgentSpecification,
     KnowledgeSource,
@@ -174,6 +179,42 @@ class FakeGeneratedAgentRunner:
         return self.preview
 
 
+class FakeFileResourceGateway:
+    def __init__(
+        self,
+        *,
+        remote_ids: tuple[str, ...] = ("file-request-1", "file-request-2"),
+        upload_error_at: int | None = None,
+        cleanup_error: bool = False,
+    ) -> None:
+        self.remote_ids = remote_ids
+        self.upload_error_at = upload_error_at
+        self.cleanup_error = cleanup_error
+        self.uploads: list[tuple[Path, str]] = []
+        self.deleted: list[str] = []
+
+    def upload_user_file(self, base_dir: Path, filename: str) -> str:
+        self.uploads.append((base_dir, filename))
+        if self.upload_error_at == len(self.uploads):
+            raise AgentProviderError()
+        return self.remote_ids[len(self.uploads) - 1]
+
+    def delete_file(self, file_id: str) -> None:
+        self.deleted.append(file_id)
+        if self.cleanup_error:
+            raise AgentProviderError()
+
+
+class FakeFileResourceGatewayFactory:
+    def __init__(self, gateway: FakeFileResourceGateway) -> None:
+        self.gateway = gateway
+        self.create_calls: list[AIStudioCredentials] = []
+
+    def create(self, credentials: AIStudioCredentials) -> FakeFileResourceGateway:
+        self.create_calls.append(credentials)
+        return self.gateway
+
+
 class FakeBuilderRunPort:
     def __init__(self) -> None:
         self.requests = []
@@ -211,6 +252,15 @@ def _service_config(tmp_path: Path) -> AIServiceConfig:
             max_output_tokens=10,
         ),
     )
+
+
+def _code_interpreter_specification_record() -> dict:
+    return build_one_prompt_specification(
+        purpose="Analyze uploaded data",
+        instructions="Use code for checked calculations.",
+        expected_result="A concise analysis",
+        code_interpreter=True,
+    ).to_record()
 
 
 def test_service_routes_to_agent_selected_by_conversation_state(tmp_path: Path) -> None:
@@ -1162,6 +1212,407 @@ def test_service_runs_serialized_specification_without_mutating_builder_state(
     assert "AQAAAA-secret" not in exported_config.to_json()
     assert builder_state.state is state_before.state
     assert builder_state.agent_specification == state_before.agent_specification
+
+
+def test_service_binds_preview_files_to_request_copy_and_cleans_remote_inputs(
+    tmp_path: Path,
+) -> None:
+    runner = FakeGeneratedAgentRunner()
+    gateway = FakeFileResourceGateway()
+    gateway_factory = FakeFileResourceGatewayFactory(gateway)
+    service = build_ai_interaction_service(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+        agent_runner_factory=lambda client, folder_id: runner,
+        file_resource_gateway_factory=gateway_factory,
+    )
+    first = service.save_attachment("42", "sales.csv", b"amount\n10\n")
+    second = service.save_attachment("42", "rates.txt", b"rate=2")
+    specification_record = _code_interpreter_specification_record()
+    base_config = service.prepare_agent_runtime(specification_record)
+    base_json = base_config.to_json()
+    credentials = AIStudioCredentials(
+        api_key="AQAAAA-secret",
+        folder_id="folder-1",
+    )
+
+    result = asyncio.run(
+        service.test_agent_specification(
+            AgentTestRequest(
+                user_id="42",
+                credentials=credentials,
+                specification_record=specification_record,
+                user_input="Calculate the converted total",
+                attachments=(first, second),
+            )
+        )
+    )
+
+    assert result.response_id == "resp-1"
+    assert gateway_factory.create_calls == [credentials]
+    assert gateway.uploads == [
+        (service.user_files_dir("42"), first.filename),
+        (service.user_files_dir("42"), second.filename),
+    ]
+    assert gateway.deleted == ["file-request-1", "file-request-2"]
+    request_config, user_input = runner.calls[0]
+    assert user_input == "Calculate the converted total"
+    assert request_config.tools[0]["container"]["file_ids"] == [
+        "file-request-1",
+        "file-request-2",
+    ]
+    assert base_config.to_json() == base_json
+    assert service.prepare_agent_runtime(specification_record).to_json() == base_json
+
+
+def test_service_uses_auto_container_without_files_or_gateway_call(
+    tmp_path: Path,
+) -> None:
+    runner = FakeGeneratedAgentRunner()
+    gateway_factory = FakeFileResourceGatewayFactory(FakeFileResourceGateway())
+    service = build_ai_interaction_service(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+        agent_runner_factory=lambda client, folder_id: runner,
+        file_resource_gateway_factory=gateway_factory,
+    )
+
+    asyncio.run(
+        service.test_agent_specification(
+            AgentTestRequest(
+                user_id="42",
+                credentials=AIStudioCredentials(
+                    api_key="AQAAAA-secret",
+                    folder_id="folder-1",
+                ),
+                specification_record=_code_interpreter_specification_record(),
+                user_input="Use file-secret-from-prompt and calculate 2 + 2",
+            )
+        )
+    )
+
+    assert gateway_factory.create_calls == []
+    container = runner.calls[0][0].tools[0]["container"]
+    assert container == {
+        "type": "auto",
+        "memory_limit": "1g",
+        "network_policy": {"type": "disabled"},
+    }
+
+
+def test_service_rejects_attachments_without_code_interpreter_before_provider_call(
+    tmp_path: Path,
+) -> None:
+    gateway_factory = FakeFileResourceGatewayFactory(FakeFileResourceGateway())
+    runner_factory_calls: list[tuple[object, str]] = []
+
+    def runner_factory(client, folder_id: str):
+        runner_factory_calls.append((client, folder_id))
+        return FakeGeneratedAgentRunner()
+
+    service = build_ai_interaction_service(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+        agent_runner_factory=runner_factory,
+        file_resource_gateway_factory=gateway_factory,
+    )
+    attachment = service.save_attachment("42", "input.csv", b"value\n1\n")
+
+    with pytest.raises(AgentTestInputError):
+        asyncio.run(
+            service.test_agent_specification(
+                AgentTestRequest(
+                    user_id="42",
+                    credentials=AIStudioCredentials(
+                        api_key="AQAAAA-secret",
+                        folder_id="folder-1",
+                    ),
+                    specification_record=build_one_prompt_specification(
+                        purpose="Draft replies",
+                        instructions="Be concise.",
+                        expected_result="Reply",
+                    ).to_record(),
+                    user_input="Analyze this file",
+                    attachments=(attachment,),
+                )
+            )
+        )
+
+    assert gateway_factory.create_calls == []
+    assert runner_factory_calls == []
+
+
+@pytest.mark.parametrize(
+    "attachments",
+    [
+        (Attachment(filename="../outside.csv"),),
+        (Attachment(filename="safe.csv", file_id="file-injected"),),
+        tuple(Attachment(filename=f"file-{index}.csv") for index in range(6)),
+    ],
+)
+def test_service_rejects_untrusted_preview_attachment_metadata_before_upload(
+    tmp_path: Path,
+    attachments: tuple[Attachment, ...],
+) -> None:
+    gateway_factory = FakeFileResourceGatewayFactory(FakeFileResourceGateway())
+    service = build_ai_interaction_service(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+        agent_runner_factory=lambda client, folder_id: FakeGeneratedAgentRunner(),
+        file_resource_gateway_factory=gateway_factory,
+    )
+
+    with pytest.raises(AgentTestInputError):
+        asyncio.run(
+            service.test_agent_specification(
+                AgentTestRequest(
+                    user_id="42",
+                    credentials=AIStudioCredentials(
+                        api_key="AQAAAA-secret",
+                        folder_id="folder-1",
+                    ),
+                    specification_record=_code_interpreter_specification_record(),
+                    user_input="Analyze the inputs",
+                    attachments=attachments,
+                )
+            )
+        )
+
+    assert gateway_factory.create_calls == []
+
+
+def test_service_validates_total_attachment_size_before_upload(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(file_lifecycle_module, "MAX_TOTAL_UPLOAD_BYTES", 5)
+    gateway_factory = FakeFileResourceGatewayFactory(FakeFileResourceGateway())
+    service = build_ai_interaction_service(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+        agent_runner_factory=lambda client, folder_id: FakeGeneratedAgentRunner(),
+        file_resource_gateway_factory=gateway_factory,
+    )
+    first = service.save_attachment("42", "first.txt", b"123")
+    second = service.save_attachment("42", "second.txt", b"456")
+
+    with pytest.raises(AgentTestInputError):
+        asyncio.run(
+            service.test_agent_specification(
+                AgentTestRequest(
+                    user_id="42",
+                    credentials=AIStudioCredentials(
+                        api_key="AQAAAA-secret",
+                        folder_id="folder-1",
+                    ),
+                    specification_record=_code_interpreter_specification_record(),
+                    user_input="Analyze the inputs",
+                    attachments=(first, second),
+                )
+            )
+        )
+
+    assert gateway_factory.create_calls == []
+
+
+def test_service_cleans_completed_uploads_after_partial_upload_failure(
+    tmp_path: Path,
+) -> None:
+    gateway = FakeFileResourceGateway(upload_error_at=2)
+    gateway_factory = FakeFileResourceGatewayFactory(gateway)
+    runner_factory_calls: list[tuple[object, str]] = []
+
+    def runner_factory(client, folder_id: str):
+        runner_factory_calls.append((client, folder_id))
+        return FakeGeneratedAgentRunner()
+
+    service = build_ai_interaction_service(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+        agent_runner_factory=runner_factory,
+        file_resource_gateway_factory=gateway_factory,
+    )
+    first = service.save_attachment("42", "first.txt", b"1")
+    second = service.save_attachment("42", "second.txt", b"2")
+
+    with pytest.raises(AgentProviderError):
+        asyncio.run(
+            service.test_agent_specification(
+                AgentTestRequest(
+                    user_id="42",
+                    credentials=AIStudioCredentials(
+                        api_key="AQAAAA-secret",
+                        folder_id="folder-1",
+                    ),
+                    specification_record=_code_interpreter_specification_record(),
+                    user_input="Analyze",
+                    attachments=(first, second),
+                )
+            )
+        )
+
+    assert gateway.deleted == ["file-request-1"]
+    assert runner_factory_calls == []
+
+
+@pytest.mark.parametrize(
+    ("runner_error", "expected_error"),
+    [
+        (AgentProviderError(), AgentProviderError),
+        (AgentProviderTimeoutError(), AgentProviderTimeoutError),
+        (RuntimeError("provider-secret"), AgentProviderError),
+    ],
+)
+def test_service_cleans_remote_inputs_after_runner_failure(
+    tmp_path: Path,
+    runner_error: Exception,
+    expected_error: type[Exception],
+) -> None:
+    gateway = FakeFileResourceGateway()
+    runner = FakeGeneratedAgentRunner(error=runner_error)
+    service = build_ai_interaction_service(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+        agent_runner_factory=lambda client, folder_id: runner,
+        file_resource_gateway_factory=FakeFileResourceGatewayFactory(gateway),
+    )
+    attachment = service.save_attachment("42", "input.txt", b"1")
+
+    with pytest.raises(expected_error):
+        asyncio.run(
+            service.test_agent_specification(
+                AgentTestRequest(
+                    user_id="42",
+                    credentials=AIStudioCredentials(
+                        api_key="AQAAAA-secret",
+                        folder_id="folder-1",
+                    ),
+                    specification_record=_code_interpreter_specification_record(),
+                    user_input="Analyze",
+                    attachments=(attachment,),
+                )
+            )
+        )
+
+    assert gateway.deleted == ["file-request-1"]
+
+
+def test_service_cleans_remote_inputs_when_runner_factory_fails(tmp_path: Path) -> None:
+    gateway = FakeFileResourceGateway()
+
+    def failing_runner_factory(client, folder_id: str):
+        raise RuntimeError("provider-secret")
+
+    service = build_ai_interaction_service(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+        agent_runner_factory=failing_runner_factory,
+        file_resource_gateway_factory=FakeFileResourceGatewayFactory(gateway),
+    )
+    attachment = service.save_attachment("42", "input.txt", b"1")
+
+    with pytest.raises(AgentProviderError):
+        asyncio.run(
+            service.test_agent_specification(
+                AgentTestRequest(
+                    user_id="42",
+                    credentials=AIStudioCredentials(
+                        api_key="AQAAAA-secret",
+                        folder_id="folder-1",
+                    ),
+                    specification_record=_code_interpreter_specification_record(),
+                    user_input="Analyze",
+                    attachments=(attachment,),
+                )
+            )
+        )
+
+    assert gateway.deleted == ["file-request-1"]
+
+
+def test_service_cleans_remote_inputs_when_runtime_binding_fails(
+    tmp_path: Path,
+) -> None:
+    gateway = FakeFileResourceGateway(remote_ids=("file-duplicate", "file-duplicate"))
+    service = build_ai_interaction_service(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+        agent_runner_factory=lambda client, folder_id: FakeGeneratedAgentRunner(),
+        file_resource_gateway_factory=FakeFileResourceGatewayFactory(gateway),
+    )
+    first = service.save_attachment("42", "first.txt", b"1")
+    second = service.save_attachment("42", "second.txt", b"2")
+
+    with pytest.raises(InvalidRuntimeFileBindingError):
+        asyncio.run(
+            service.test_agent_specification(
+                AgentTestRequest(
+                    user_id="42",
+                    credentials=AIStudioCredentials(
+                        api_key="AQAAAA-secret",
+                        folder_id="folder-1",
+                    ),
+                    specification_record=_code_interpreter_specification_record(),
+                    user_input="Analyze",
+                    attachments=(first, second),
+                )
+            )
+        )
+    assert gateway.deleted == ["file-duplicate", "file-duplicate"]
+
+
+def test_service_preserves_success_when_remote_input_cleanup_fails(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    gateway = FakeFileResourceGateway(cleanup_error=True)
+    service = build_ai_interaction_service(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+        agent_runner_factory=lambda client, folder_id: FakeGeneratedAgentRunner(),
+        file_resource_gateway_factory=FakeFileResourceGatewayFactory(gateway),
+    )
+    attachment = service.save_attachment("42", "private-input.txt", b"1")
+
+    result = asyncio.run(
+        service.test_agent_specification(
+            AgentTestRequest(
+                user_id="42",
+                credentials=AIStudioCredentials(
+                    api_key="AQAAAA-secret",
+                    folder_id="folder-1",
+                ),
+                specification_record=_code_interpreter_specification_record(),
+                user_input="Analyze",
+                attachments=(attachment,),
+            )
+        )
+    )
+
+    assert result.response_id == "resp-1"
+    log_text = "\n".join(record.getMessage() for record in caplog.records)
+    assert "file-request-1" not in log_text
+    assert attachment.filename not in log_text
 
 
 def test_service_strictly_parses_specification_before_creating_runner(

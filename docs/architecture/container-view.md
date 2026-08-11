@@ -18,7 +18,8 @@ flowchart TB
     subgraph application["Application"]
         builder_service["BuilderConversationService"]
         preview_service["AgentPreviewService"]
-        file_service["FileLifecycleService"]
+        conversation_files["ConversationFileService"]
+        preview_input_files["PreviewInputFileLifecycle"]
         ports["Application ports"]
     end
 
@@ -45,10 +46,12 @@ flowchart TB
     telegram --> builder_service
     builder_service --> domain
     preview_service --> domain
-    preview_service --> file_service
+    preview_service --> preview_input_files
+    builder_service --> conversation_files
     builder_service --> ports
     preview_service --> ports
-    file_service --> ports
+    conversation_files --> ports
+    preview_input_files --> ports
     agents --> assembly
     agents -. "implements BuilderRunPort" .-> ports
     yandex -. "implements" .-> ports

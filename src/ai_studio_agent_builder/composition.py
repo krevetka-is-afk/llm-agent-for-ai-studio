@@ -11,7 +11,10 @@ from aiogram.enums import ParseMode
 
 from .application.builder_service import BuilderConversationService
 from .application.dto import AIStudioCredentials
-from .application.file_lifecycle import ConversationFileService
+from .application.file_lifecycle import (
+    ConversationFileService,
+    PreviewInputFileLifecycle,
+)
 from .application.interaction_facade import (
     AIInteractionComponents,
     AIInteractionService,
@@ -23,6 +26,7 @@ from .application.ports.conversation_storage import (
     AttachmentStore,
     ConversationSessionStore,
 )
+from .application.ports.file_resource_gateway import FileResourceGatewayFactory
 from .application.preview_service import AgentPreviewService
 from .application.settings import AIServiceConfig, AppConfig
 from .builder.agents.coordinator_agent import build_coordinator_agent
@@ -43,7 +47,10 @@ from .infrastructure.yandex_ai_studio.client_factory import (
     get_async_api_key_client,
 )
 from .infrastructure.yandex_ai_studio.connection import YandexConnectionValidator
-from .infrastructure.yandex_ai_studio.files_gateway import upload_local_file
+from .infrastructure.yandex_ai_studio.files_gateway import (
+    YandexFileResourceGatewayFactory,
+    upload_local_file,
+)
 from .infrastructure.yandex_ai_studio.responses_runner import (
     YandexAgentRunnerFactory,
 )
@@ -93,6 +100,7 @@ def build_ai_interaction_service(
     builder_run_port: BuilderRunPort | None = None,
     connection_validator: ConnectionValidator | None = None,
     generated_agent_runner_factory: AgentRunnerFactory | None = None,
+    file_resource_gateway_factory: FileResourceGatewayFactory | None = None,
     attachment_store: AttachmentStore | None = None,
     conversation_session_store: ConversationSessionStore | None = None,
     sync_client_factory: ClientFactory | None = None,
@@ -109,6 +117,7 @@ def build_ai_interaction_service(
             builder_run_port=builder_run_port,
             connection_validator=connection_validator,
             generated_agent_runner_factory=generated_agent_runner_factory,
+            file_resource_gateway_factory=file_resource_gateway_factory,
             attachment_store=attachment_store,
             conversation_session_store=conversation_session_store,
             sync_client_factory=sync_client_factory,
@@ -128,6 +137,7 @@ def build_ai_interaction_components(
     builder_run_port: BuilderRunPort | None = None,
     connection_validator: ConnectionValidator | None = None,
     generated_agent_runner_factory: AgentRunnerFactory | None = None,
+    file_resource_gateway_factory: FileResourceGatewayFactory | None = None,
     attachment_store: AttachmentStore | None = None,
     conversation_session_store: ConversationSessionStore | None = None,
     sync_client_factory: ClientFactory | None = None,
@@ -168,6 +178,10 @@ def build_ai_interaction_components(
     attachment_store = attachment_store or LocalAttachmentStore(
         config.paths.uploaded_files_dir
     )
+    file_resource_gateway_factory = (
+        file_resource_gateway_factory
+        or YandexFileResourceGatewayFactory(sync_client_factory)
+    )
     conversation_session_store = (
         conversation_session_store
         or SQLiteConversationSessionStore(
@@ -183,6 +197,10 @@ def build_ai_interaction_components(
         preview=AgentPreviewService(
             config.generated_agent_runtime,
             generated_agent_runner_factory,
+            PreviewInputFileLifecycle(
+                attachment_store,
+                file_resource_gateway_factory,
+            ),
         ),
         files=ConversationFileService(
             attachment_store,

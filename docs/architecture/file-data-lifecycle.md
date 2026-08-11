@@ -51,10 +51,16 @@ stateDiagram-v2
 
 ## Ownership и cleanup
 
-`FileLifecycleService` — единственный application-level владелец реестра
-ресурсов preview request. Он регистрирует remote reference сразу после успешного
-создания, до следующей операции. Cleanup выполняется в `finally` и не зависит от
-того, дошёл ли flow до provider request.
+`PreviewInputFileLifecycle` — application-level владелец реестра входных
+remote resources одного preview request. Он предварительно проверяет все local
+handles и квоты, регистрирует remote reference сразу после успешного создания,
+создаёт request-scoped копию runtime config и выполняет cleanup в `finally`
+независимо от того, дошёл ли flow до Responses request.
+
+`ConversationFileService` отдельно владеет сохранением и retention локальных
+conversation files. Output artifacts добавляются в CI-4 как отдельная
+application responsibility под общей политикой ADR-0003; они не расширяют
+runner файловым I/O.
 
 Provider gateway отвечает только за отдельные create/read/delete операции и
 нормализацию ошибок. UI не удаляет remote resources, а runner не пишет bytes на
@@ -68,7 +74,7 @@ Provider gateway отвечает только за отдельные create/re
 | Provider timeout/error | По retention policy | Удалить все | Удалить | Удалить известные |
 | Output превысил cap | По retention policy | Удалить все | Удалить | Удалить/TTL warning |
 | Success | По retention policy | Удалить все | Отсутствует | Удалить после local verify |
-| Cleanup API упал | Не влияет | Warning + bounded retry/TTL | Удалить | Warning + bounded retry/TTL |
+| Cleanup API упал | Не влияет | Warning + provider TTL fallback | Удалить | Warning + provider TTL fallback |
 
 ## Валидация и квоты первой версии
 
@@ -83,6 +89,14 @@ Provider gateway отвечает только за отдельные create/re
 - output читается chunked с per-file/total counters; отсутствие или ложный
   `Content-Length` не отключает лимиты;
 - HTML, SVG, XML, executable и неизвестные MIME — download-only.
+
+## Runtime binding
+
+Базовый `ExecutableAgentConfig` содержит только auto container с безопасными
+параметрами и никогда не содержит `file_ids`. После успешного upload чистая
+функция `bind_code_interpreter_files()` создаёт копию config и добавляет в неё
+ровно IDs текущего request. Spec, prompt, filename и UI не являются источниками
+provider IDs.
 
 ## Retention
 

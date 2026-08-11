@@ -5,10 +5,13 @@ import pytest
 
 from ai_studio_agent_builder.config import AgentRuntimeConfig
 from ai_studio_agent_builder.domain.runtime import (
+    InvalidRuntimeFileBindingError,
     MissingRuntimeParameterError,
+    MissingCodeInterpreterToolError,
     SpecificationNotReadyError,
     UnsupportedAgentToolError,
     UnsupportedSpecificationVersionError,
+    bind_code_interpreter_files,
     compile_agent_specification,
 )
 from ai_studio_agent_builder.domain.specification import (
@@ -106,6 +109,96 @@ def test_compile_rag_to_file_search() -> None:
         "your identity or capabilities." in config.instructions
     )
     assert "Answer from the handbook" in config.instructions
+
+
+def test_compile_code_interpreter_to_safe_automatic_container() -> None:
+    specification = build_one_prompt_specification(
+        purpose="Analyze uploaded data",
+        instructions="Use code for calculations.",
+        expected_result="A checked analysis",
+        code_interpreter=True,
+    )
+
+    config = compile_agent_specification(specification, runtime=RUNTIME)
+
+    assert config.tools == (
+        {
+            "type": "code_interpreter",
+            "container": {
+                "type": "auto",
+                "memory_limit": "1g",
+                "network_policy": {"type": "disabled"},
+            },
+        },
+    )
+    assert "isolated Code Interpreter environment" in config.instructions
+    assert "file_ids" not in config.to_json()
+
+
+def test_bind_code_interpreter_files_returns_request_scoped_copy() -> None:
+    specification = build_one_prompt_specification(
+        purpose="Analyze uploaded data",
+        instructions="Use code for calculations.",
+        expected_result="A checked analysis",
+        code_interpreter=True,
+    )
+    base_config = compile_agent_specification(specification, runtime=RUNTIME)
+    base_json = base_config.to_json()
+
+    request_config = bind_code_interpreter_files(
+        base_config,
+        ("file-request-1", "file-request-2"),
+    )
+
+    assert request_config is not base_config
+    assert request_config.tools[0]["container"]["file_ids"] == [
+        "file-request-1",
+        "file-request-2",
+    ]
+    assert base_config.to_json() == base_json
+    assert "file-request" not in base_config.to_json()
+
+
+def test_bind_code_interpreter_files_rejects_missing_tool_and_untrusted_ids() -> None:
+    base_config = compile_agent_specification(
+        build_one_prompt_specification(
+            purpose="Draft replies",
+            instructions="Be concise.",
+            expected_result="Reply",
+        ),
+        runtime=RUNTIME,
+    )
+
+    with pytest.raises(MissingCodeInterpreterToolError):
+        bind_code_interpreter_files(base_config, ("file-1",))
+
+    code_config = compile_agent_specification(
+        build_one_prompt_specification(
+            purpose="Analyze data",
+            instructions="Calculate.",
+            expected_result="Analysis",
+            code_interpreter=True,
+        ),
+        runtime=RUNTIME,
+    )
+    for file_ids in (("",), ("file-1", "file-1"), "file-1"):
+        with pytest.raises(InvalidRuntimeFileBindingError):
+            bind_code_interpreter_files(code_config, file_ids)
+
+    contaminated_config = replace(
+        code_config,
+        tools=(
+            {
+                **code_config.tools[0],
+                "container": {
+                    **code_config.tools[0]["container"],
+                    "file_ids": ["file-from-base-config"],
+                },
+            },
+        ),
+    )
+    with pytest.raises(InvalidRuntimeFileBindingError):
+        bind_code_interpreter_files(contaminated_config, ())
 
 
 def test_compile_rejects_non_ready_specification() -> None:

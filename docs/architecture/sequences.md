@@ -59,47 +59,45 @@ sequenceDiagram
     UI-->>User: text, citations, usage
 ```
 
-## Целевой Code Interpreter preview
+## Реализованный Code Interpreter input preview (CI-3)
 
 ```mermaid
 sequenceDiagram
     actor User as Пользователь
     participant UI as Presentation
     participant Preview as AgentPreviewService
-    participant Files as FileLifecycleService
+    participant Files as PreviewInputFileLifecycle
     participant Gateway as FileResourceGateway
     participant Compiler as Runtime compiler
     participant Runner as AgentRunner
     participant API as Yandex AI Studio
 
     User->>UI: Specification + input + local file handles
-    UI->>Preview: PreviewRequest
-    Preview->>Preview: validate spec, input and trusted attachments
+    UI->>Preview: AgentTestRequest
+    Preview->>Preview: strict import + input validation
+    Preview->>Compiler: compile(specification)
+    Compiler-->>Preview: base config without file IDs
+    Preview->>Files: validate trusted attachments and quotas
     loop each accepted input file
-        Preview->>Files: upload(local artifact)
         Files->>Gateway: create user_data file
         Gateway->>API: Files.create
         API-->>Gateway: remote file reference
         Gateway-->>Files: RemoteFileRef
     end
-    Preview->>Compiler: compile(specification)
-    Compiler-->>Preview: base config without file IDs
-    Preview->>Files: bind authorized refs to request copy
+    Files->>Files: bind authorized refs to request copy
     Files-->>Preview: request-scoped config
     Preview->>Runner: run(config copy, input)
     Runner->>API: Responses.create with auto container
-    API-->>Runner: response + artifact references
-    Runner-->>Preview: normalized preview DTO
-    loop each generated artifact
-        Preview->>Files: download(reference)
-        Files->>Gateway: stream content
-        Gateway->>API: Files.content
-        Files-->>Preview: LocalArtifact
-    end
-    Preview-->>UI: text + local artifacts + bounded warnings
-    UI-->>User: result and downloads
-    Preview->>Files: cleanup all known remote refs
+    API-->>Runner: raw response + citations
+    Runner-->>Preview: AgentRunPreview
+    Preview->>Files: leave context
+    Files->>Gateway: delete all known remote input refs
+    Preview-->>UI: AgentTestResult
+    UI-->>User: text, citations and usage
 ```
+
+Скачивание generated artifacts добавляется отдельно в CI-4. Оно использует ту
+же ownership policy, но не меняет input binding и базовый runtime config.
 
 ## Failure semantics Code Interpreter
 

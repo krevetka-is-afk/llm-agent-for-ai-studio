@@ -71,6 +71,7 @@ class AgentTestRequest:
     specification_record: Mapping[str, Any]
     user_input: str
     request_id: str = field(default_factory=lambda: uuid4().hex)
+    attachments: tuple[Attachment, ...] = ()
 
 
 @dataclass(frozen=True)

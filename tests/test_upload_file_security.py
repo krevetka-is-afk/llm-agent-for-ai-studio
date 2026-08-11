@@ -9,6 +9,7 @@ from ai_studio_agent_builder.application.file_policy import (
     resolve_upload_path,
 )
 from ai_studio_agent_builder.infrastructure.yandex_ai_studio.files_gateway import (
+    YandexFileResourceGateway,
     upload_local_file,
 )
 from ai_studio_agent_builder.builder.agents.rag_agent import (
@@ -20,11 +21,16 @@ from ai_studio_agent_builder.builder.agents.rag_agent import (
 class _FakeFilesClient:
     def __init__(self) -> None:
         self.created: list[bytes] = []
+        self.purposes: list[str] = []
+        self.deleted: list[str] = []
 
     def create(self, *, file: BinaryIO, purpose: str):
-        assert purpose == "assistants"
+        self.purposes.append(purpose)
         self.created.append(file.read())
         return type("UploadedFile", (), {"id": "file-safe"})()
+
+    def delete(self, file_id: str):
+        self.deleted.append(file_id)
 
 
 class _FakeClient:
@@ -68,6 +74,7 @@ def test_upload_local_file_uploads_only_valid_regular_file(tmp_path):
 
     assert file_id == "file-safe"
     assert client.files.created == [b"safe"]
+    assert client.files.purposes == ["assistants"]
 
 
 def test_upload_local_file_enforces_size_limit(tmp_path):
@@ -75,6 +82,18 @@ def test_upload_local_file_enforces_size_limit(tmp_path):
 
     with pytest.raises(UploadTooLargeError):
         upload_local_file(_FakeClient(), tmp_path, "huge.bin")
+
+
+def test_code_interpreter_gateway_uses_user_data_and_deletes_remote_file(tmp_path):
+    (tmp_path / "input.csv").write_bytes(b"value\n1\n")
+    client = _FakeClient()
+    gateway = YandexFileResourceGateway(client)
+
+    file_id = gateway.upload_user_file(tmp_path, "input.csv")
+    gateway.delete_file(file_id)
+
+    assert client.files.purposes == ["user_data"]
+    assert client.files.deleted == ["file-safe"]
 
 
 def test_rag_agent_has_no_model_facing_upload_file_tool():

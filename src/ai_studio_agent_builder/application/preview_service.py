@@ -7,6 +7,9 @@ import time
 from collections.abc import Mapping
 from typing import Any
 
+from ai_studio_agent_builder.application.file_lifecycle import (
+    PreviewInputFileLifecycle,
+)
 from ai_studio_agent_builder.application.interaction import (
     AgentTestInputError,
     AgentTestRequest,
@@ -42,9 +45,11 @@ class AgentPreviewService:
         self,
         runtime_settings: AgentRuntimeSettings,
         runner_factory: AgentRunnerFactory,
+        input_file_lifecycle: PreviewInputFileLifecycle,
     ) -> None:
         self._runtime_settings = runtime_settings
         self._runner_factory = runner_factory
+        self._input_file_lifecycle = input_file_lifecycle
 
     async def test_agent_specification(
         self,
@@ -82,13 +87,14 @@ class AgentPreviewService:
                 specification.template.value,
                 native_tool_types,
             )
-            runner = self._runner_factory.create(request.credentials)
             preview = await asyncio.to_thread(
-                runner.run,
+                self._run_preview,
+                request,
                 executable_config,
                 user_input,
             )
         except (
+            AgentTestInputError,
             InvalidSpecificationRecordError,
             AgentRuntimeCompilationError,
             AgentRunnerError,
@@ -111,6 +117,19 @@ class AgentPreviewService:
             _duration_ms(started_at),
         )
         return _agent_test_result(preview)
+
+    def _run_preview(
+        self,
+        request: AgentTestRequest,
+        executable_config: ExecutableAgentConfig,
+        user_input: str,
+    ) -> AgentRunPreview:
+        with self._input_file_lifecycle.bind_inputs(
+            request,
+            executable_config,
+        ) as request_config:
+            runner = self._runner_factory.create(request.credentials)
+            return runner.run(request_config, user_input)
 
     def prepare_agent_runtime(
         self,

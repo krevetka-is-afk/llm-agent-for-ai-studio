@@ -1,9 +1,11 @@
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
 from .specification import (
+    CODE_INTERPRETER_MEMORY_LIMIT,
+    CODE_INTERPRETER_NETWORK_POLICY,
     SCHEMA_VERSION as SPECIFICATION_SCHEMA_VERSION,
     AgentSpecification,
     AgentSpecificationStatus,
@@ -38,6 +40,14 @@ class UnsupportedAgentToolError(AgentRuntimeCompilationError):
 
 
 class MissingRuntimeParameterError(AgentRuntimeCompilationError):
+    pass
+
+
+class InvalidRuntimeFileBindingError(AgentRuntimeCompilationError):
+    pass
+
+
+class MissingCodeInterpreterToolError(InvalidRuntimeFileBindingError):
     pass
 
 
@@ -108,6 +118,58 @@ def compile_agent_specification(
     )
 
 
+def bind_code_interpreter_files(
+    config: ExecutableAgentConfig,
+    file_ids: Sequence[str],
+) -> ExecutableAgentConfig:
+    """Return a request-scoped config containing only trusted provider file IDs."""
+    code_tool_indexes = tuple(
+        index
+        for index, tool in enumerate(config.tools)
+        if tool.get("type") == "code_interpreter"
+    )
+    if not code_tool_indexes:
+        raise MissingCodeInterpreterToolError(
+            "Code Interpreter attachments require a code_interpreter tool"
+        )
+    if len(code_tool_indexes) != 1:
+        raise InvalidRuntimeFileBindingError(
+            "Runtime must contain exactly one code_interpreter tool"
+        )
+    if isinstance(file_ids, str | bytes | bytearray):
+        raise InvalidRuntimeFileBindingError("Provider file IDs must be a sequence")
+
+    trusted_file_ids: list[str] = []
+    for file_id in file_ids:
+        if not isinstance(file_id, str) or not file_id.strip():
+            raise InvalidRuntimeFileBindingError("Provider file ID is invalid")
+        if file_id in trusted_file_ids:
+            raise InvalidRuntimeFileBindingError("Provider file IDs must be unique")
+        trusted_file_ids.append(file_id)
+
+    base_code_tool = config.tools[code_tool_indexes[0]]
+    base_container = base_code_tool.get("container")
+    if not isinstance(base_container, Mapping) or base_container.get("type") != "auto":
+        raise InvalidRuntimeFileBindingError(
+            "Code Interpreter runtime requires an automatic container"
+        )
+    if "file_ids" in base_container:
+        raise InvalidRuntimeFileBindingError(
+            "Base runtime must not contain provider file IDs"
+        )
+    if not trusted_file_ids:
+        return config
+
+    tools = [_json_copy(tool) for tool in config.tools]
+    tool_index = code_tool_indexes[0]
+    code_tool = tools[tool_index]
+    code_tool["container"] = {
+        **dict(base_container),
+        "file_ids": list(trusted_file_ids),
+    }
+    return replace(config, tools=tuple(tools))
+
+
 def _compile_tool(tool: Any) -> Mapping[str, Any]:
     if tool.tool_id == "web_search":
         search_context_size = tool.parameters.get("search_context_size")
@@ -126,6 +188,25 @@ def _compile_tool(tool: Any) -> Mapping[str, Any]:
         return {
             "type": "file_search",
             "vector_store_ids": [index_id],
+        }
+    if tool.tool_id == "code_interpreter":
+        memory_limit = tool.parameters.get("memory_limit")
+        network_policy = tool.parameters.get("network_policy")
+        if memory_limit != CODE_INTERPRETER_MEMORY_LIMIT:
+            raise MissingRuntimeParameterError(
+                "code_interpreter requires the supported memory limit"
+            )
+        if network_policy != CODE_INTERPRETER_NETWORK_POLICY:
+            raise MissingRuntimeParameterError(
+                "code_interpreter requires the supported network policy"
+            )
+        return {
+            "type": "code_interpreter",
+            "container": {
+                "type": "auto",
+                "memory_limit": memory_limit,
+                "network_policy": {"type": network_policy},
+            },
         }
     raise UnsupportedAgentToolError(
         f"Unsupported executable agent tool: {tool.tool_id!r}"
@@ -190,6 +271,11 @@ def _compile_identity_and_capabilities(
     if "web_search" in tool_ids:
         lines.append(
             "- You can search the public web for current information using web_search."
+        )
+    if "code_interpreter" in tool_ids:
+        lines.append(
+            "- You can run code in an isolated Code Interpreter environment for "
+            "calculation, data analysis, and file transformation."
         )
     if not tool_ids:
         lines.append(

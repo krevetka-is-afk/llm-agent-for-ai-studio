@@ -12,8 +12,10 @@ remote resources и partial local files без владельца.
 
 ## Решение
 
-`FileLifecycleService` в application layer владеет registry всех локальных и
-remote artifacts одного preview request. Он:
+Application layer владеет registry всех локальных и remote artifacts одного
+preview request. Для CI-3 это реализует `PreviewInputFileLifecycle`; локальным
+conversation retention отдельно владеет `ConversationFileService`. Input
+lifecycle:
 
 1. валидирует trusted local handles и квоты;
 2. регистрирует remote reference сразу после create;
@@ -21,6 +23,9 @@ remote artifacts одного preview request. Он:
 4. скачивает output chunked с per-file/total caps;
 5. удаляет partial local output;
 6. выполняет cleanup всех известных remote resources в `finally`.
+
+CI-4 добавляет output lifecycle в application layer под тем же ownership
+контрактом, не перенося download или cleanup в UI/runner.
 
 Infrastructure `FileResourceGateway` реализует атомарные provider operations.
 Runner только возвращает artifact references. UI отображает local artifact DTO

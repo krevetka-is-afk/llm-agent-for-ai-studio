@@ -104,6 +104,25 @@ def test_web_search_sends_native_tool_without_preflight() -> None:
     assert client.vector_stores.retrieve_calls == []
 
 
+def test_code_interpreter_sends_bound_files_without_vector_preflight() -> None:
+    client = FakeClient()
+    runner = YandexResponsesAgentRunner(client, folder_id="folder-1")
+    tool = {
+        "type": "code_interpreter",
+        "container": {
+            "type": "auto",
+            "memory_limit": "1g",
+            "network_policy": {"type": "disabled"},
+            "file_ids": ["file-request-1"],
+        },
+    }
+
+    runner.run(_config(tools=(tool,)), "Calculate the total")
+
+    assert client.responses.calls[0]["tools"] == [tool]
+    assert client.vector_stores.retrieve_calls == []
+
+
 def test_file_search_preflights_vector_store_before_response() -> None:
     client = FakeClient(statuses={"vs-123": "completed"})
     runner = YandexResponsesAgentRunner(client, folder_id="folder-1")
