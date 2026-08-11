@@ -1,19 +1,13 @@
 import sqlite3
 import time
-from dataclasses import dataclass
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
 
-
-class ApiKeyStoreError(Exception):
-    pass
-
-
-@dataclass(frozen=True)
-class ApiKeyConnection:
-    api_key: str
-    folder_id: str
+from ai_studio_agent_builder.application.ports.api_key_store import (
+    ApiKeyConnection,
+    ApiKeyStoreError,
+)
 
 
 class EncryptedApiKeyStore:

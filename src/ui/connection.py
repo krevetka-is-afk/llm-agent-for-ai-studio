@@ -6,10 +6,10 @@ import streamlit as st
 from openai import OpenAIError
 
 from ai_interaction_service import AIInteractionService
-from ai_studio_agent_builder.infrastructure.persistence.api_key_store import (
+from ai_studio_agent_builder.application.ports.api_key_store import (
     ApiKeyConnection,
+    ApiKeyStore,
     ApiKeyStoreError,
-    EncryptedApiKeyStore,
 )
 from context import AIStudioCredentials, ConversationState
 from ui.agent_test_panel import clear_agent_test_previews
@@ -33,7 +33,7 @@ def credentials_from_connection(connection: ApiKeyConnection) -> AIStudioCredent
 
 
 def render_connection(
-    store: EncryptedApiKeyStore,
+    store: ApiKeyStore,
     ai_service: AIInteractionService,
     connection_id: str,
 ) -> ApiKeyConnection | None:
@@ -66,7 +66,7 @@ def render_connection(
 
 
 def _connect(
-    store: EncryptedApiKeyStore,
+    store: ApiKeyStore,
     ai_service: AIInteractionService,
     connection_id: str,
 ) -> ApiKeyConnection | None:

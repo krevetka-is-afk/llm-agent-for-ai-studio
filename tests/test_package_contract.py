@@ -19,7 +19,10 @@ import yandex_responses_runner as legacy_yandex_runner
 import ai_studio_agent_builder as public_api
 from ai_studio_agent_builder import config
 from ai_studio_agent_builder.application import builder_state, dto, file_policy
-from ai_studio_agent_builder.application.ports import agent_runner
+from ai_studio_agent_builder.application.ports import (
+    agent_runner,
+    api_key_store as api_key_port,
+)
 from ai_studio_agent_builder.builder import context as builder_context
 from ai_studio_agent_builder.builder import result_assembly
 from ai_studio_agent_builder.builder.agents import sdk_event_adapter
@@ -83,7 +86,10 @@ def test_legacy_flat_imports_reference_packaged_contracts() -> None:
     assert legacy_agent_sessions.get_session is agent_sessions.get_session
     assert legacy_user_store.UserStore is telegram_user_store.UserStore
     assert legacy_user_store.UserSecrets is telegram_user_store.UserSecrets
-    assert legacy_api_key_store.ApiKeyConnection is api_key_store.ApiKeyConnection
+    assert legacy_api_key_store.ApiKeyConnection is api_key_port.ApiKeyConnection
+    assert legacy_api_key_store.ApiKeyStoreError is api_key_port.ApiKeyStoreError
+    assert api_key_store.ApiKeyConnection is api_key_port.ApiKeyConnection
+    assert api_key_store.ApiKeyStoreError is api_key_port.ApiKeyStoreError
     assert (
         legacy_api_key_store.EncryptedApiKeyStore is api_key_store.EncryptedApiKeyStore
     )

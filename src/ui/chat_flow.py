@@ -19,7 +19,7 @@ from ai_interaction_service import (
     UploadValidationError,
 )
 from ai_studio_agent_builder.application.file_policy import MAX_UPLOAD_BYTES
-from ai_studio_agent_builder.infrastructure.persistence.api_key_store import (
+from ai_studio_agent_builder.application.ports.api_key_store import (
     ApiKeyConnection,
 )
 from ai_studio_agent_builder.infrastructure.observability.logging import bind_logger
