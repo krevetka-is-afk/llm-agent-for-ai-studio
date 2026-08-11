@@ -10,6 +10,11 @@ from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentProviderError,
     AgentRunPreview,
 )
+from ai_studio_agent_builder.builder.result_assembly import (
+    AgentSpecificationResultPart,
+    IndexedFileResult,
+    VectorIndexResultPart,
+)
 from ai_studio_agent_builder.config import (
     AIServiceConfig,
     AgentRuntimeConfig,
@@ -37,11 +42,6 @@ from ai_interaction_service import (
     UploadValidationError,
 )
 from context import AIStudioCredentials, ConversationOptions, ConversationState
-from result_assembly import (
-    AgentSpecificationResultPart,
-    IndexedFileResult,
-    VectorIndexResultPart,
-)
 
 
 class FakeAgent:

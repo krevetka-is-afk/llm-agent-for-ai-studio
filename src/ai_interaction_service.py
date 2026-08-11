@@ -25,7 +25,17 @@ from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentRunnerError,
 )
 from ai_studio_agent_builder.application.builder_state import ConversationState
+from ai_studio_agent_builder.builder.agents.sdk_event_adapter import AgentRunCollector
 from ai_studio_agent_builder.builder.context import RequestContext
+from ai_studio_agent_builder.builder.result_assembly import (
+    AgentRunResult,
+    AgentSpecificationResultPart,
+    MarkdownResultPart,
+    ResultAssembler,
+    ResultPart,
+    merge_agent_runs,
+    render_result_text,
+)
 from ai_studio_agent_builder.config import AIServiceConfig
 from ai_studio_agent_builder.domain.routing import (
     ConversationOptions,
@@ -54,16 +64,6 @@ from custom_agents.coordinator_agent import build_coordinator_agent
 from custom_agents.one_prompt_agent import build_one_prompt_agent
 from custom_agents.rag_agent import build_rag_agent
 from logging_config import bind_logger
-from result_assembly import (
-    AgentRunResult,
-    AgentSpecificationResultPart,
-    AgentRunCollector,
-    MarkdownResultPart,
-    ResultAssembler,
-    ResultPart,
-    merge_agent_runs,
-    render_result_text,
-)
 from session import get_session
 
 

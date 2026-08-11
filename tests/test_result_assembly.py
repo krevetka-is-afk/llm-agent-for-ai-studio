@@ -4,9 +4,9 @@ from types import SimpleNamespace
 
 from agent_specification import build_one_prompt_specification
 from context import ConversationOptions
-from result_assembly import (
+from ai_studio_agent_builder.builder.agents.sdk_event_adapter import AgentRunCollector
+from ai_studio_agent_builder.builder.result_assembly import (
     AgentSpecificationResultPart,
-    AgentRunCollector,
     AgentRunResult,
     IndexedFileResult,
     MarkdownResultPart,

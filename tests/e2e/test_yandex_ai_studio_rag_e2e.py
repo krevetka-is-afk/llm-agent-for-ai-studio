@@ -10,6 +10,7 @@ import pytest
 
 import ai_interaction_service as interaction_module
 from ai_interaction_service import AIInteractionService, InteractionRequest
+from ai_studio_agent_builder.builder.result_assembly import VectorIndexResultPart
 from ai_studio_agent_builder.config import (
     AgentRuntimeConfig,
     AIServiceConfig,
@@ -24,7 +25,6 @@ from context import (
     ConversationState,
     get_api_key_client,
 )
-from result_assembly import VectorIndexResultPart
 
 pytestmark = [
     pytest.mark.yandex_ai_studio_e2e,
