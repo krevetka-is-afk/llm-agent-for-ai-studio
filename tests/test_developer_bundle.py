@@ -248,8 +248,9 @@ def test_code_interpreter_bundle_example_scopes_files_downloads_and_cleans_up(
     class FakeFiles:
         with_streaming_response = FakeStreamingFiles()
 
-        def create(self, *, file, purpose):
+        def create(self, *, file, purpose, expires_after):
             captured["uploads"].append((file.name, file.read(), purpose))
+            captured["upload_expiration"] = expires_after
             return SimpleNamespace(id="input-request-file-id")
 
         def delete(self, file_id):
@@ -322,6 +323,10 @@ def test_code_interpreter_bundle_example_scopes_files_downloads_and_cleans_up(
     assert (tmp_path / "generated" / "result.csv").read_bytes() == output_payload
     assert captured["uploads"] == [(str(input_path), input_payload, "user_data")]
     assert captured["downloaded_file_id"] == "output-request-file-id"
+    assert captured["upload_expiration"] == {
+        "anchor": "created_at",
+        "seconds": 172800,
+    }
     assert captured["chunk_size"] == 64 * 1024
     assert captured["deleted_files"] == [
         "input-request-file-id",

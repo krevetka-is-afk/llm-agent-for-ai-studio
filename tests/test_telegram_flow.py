@@ -59,3 +59,32 @@ def test_different_users_are_not_globally_blocked() -> None:
         return entered
 
     assert asyncio.run(scenario()) == {"42", "84"}
+
+
+def test_global_request_concurrency_is_bounded() -> None:
+    async def scenario() -> list[str]:
+        gate = PerUserRequestGate(max_concurrent_requests=1)
+        entered: list[str] = []
+        first_entered = asyncio.Event()
+        release_first = asyncio.Event()
+
+        async def first() -> None:
+            async with gate.hold("42"):
+                entered.append("42")
+                first_entered.set()
+                await release_first.wait()
+
+        async def second() -> None:
+            await first_entered.wait()
+            async with gate.hold("84"):
+                entered.append("84")
+
+        tasks = [asyncio.create_task(first()), asyncio.create_task(second())]
+        await first_entered.wait()
+        await asyncio.sleep(0)
+        assert entered == ["42"]
+        release_first.set()
+        await asyncio.gather(*tasks)
+        return entered
+
+    assert asyncio.run(scenario()) == ["42", "84"]

@@ -49,7 +49,7 @@ def load_oauth_gateway_config() -> OAuthGatewayConfig:
         redirect_uri=_required_value(values, "YC_OAUTH_REDIRECT_URI"),
         encryption_key=_required_value(values, "YC_TOKEN_ENCRYPTION_KEY"),
         storage_path=Path(os.getenv("YC_OAUTH_DB_PATH", "yc_oauth.db")).resolve(),
-        callback_host=os.getenv("YC_OAUTH_CALLBACK_HOST", "0.0.0.0"),
+        callback_host=os.getenv("YC_OAUTH_CALLBACK_HOST", "127.0.0.1"),
         callback_port=int(os.getenv("YC_OAUTH_CALLBACK_PORT", "8080")),
         scopes=scopes,
         shared_secret=_required_value(values, "OAUTH_GATEWAY_SHARED_SECRET"),

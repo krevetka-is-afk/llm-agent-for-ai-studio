@@ -155,16 +155,26 @@ def _create_search_index_impl(
     vector_store_id = vector_store.id
     tool_logger.info("Vector Store создан: %s", vector_store_id)
 
-    _wait_for_vector_store_completed(
-        client=client,
-        vector_store_id=vector_store_id,
-        tool_logger=tool_logger,
-        sleep=sleep,
-        monotonic=monotonic,
-        poll_interval_seconds=poll_interval_seconds,
-        timeout_seconds=timeout_seconds,
-        max_attempts=max_attempts,
-    )
+    try:
+        _wait_for_vector_store_completed(
+            client=client,
+            vector_store_id=vector_store_id,
+            tool_logger=tool_logger,
+            sleep=sleep,
+            monotonic=monotonic,
+            poll_interval_seconds=poll_interval_seconds,
+            timeout_seconds=timeout_seconds,
+            max_attempts=max_attempts,
+        )
+    except BaseException:
+        try:
+            client.vector_stores.delete(vector_store_id)
+        except Exception as exc:
+            tool_logger.warning(
+                "Vector Store cleanup failed after index build error category=%s",
+                type(exc).__name__,
+            )
+        raise
 
     tool_logger.info("Vector Store %s готов к работе", vector_store_id)
     request_state = getattr(ctx.context, "state", None)

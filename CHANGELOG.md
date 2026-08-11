@@ -23,7 +23,13 @@
   context.
 - Входные и выходные файлы ограничены политиками размера и количества; remote
   IDs и пользовательские bytes не попадают в экспорт.
-- CI сканирует полную Git-историю на секреты и проверяет production lock на
+- Telegram-загрузки проверяются до скачивания и потоково ограничиваются по
+  фактическому числу bytes; storage scopes изолированы от path traversal.
+- Временные provider inputs получают 48-часовой TTL, неудачные RAG-запуски
+  очищают уже созданные files/vector stores, а локальные sensitive stores
+  используют минимальные POSIX-права и bounded retention.
+- CI сканирует каждый предлагаемый диапазон commit'ов на секреты, отдельный
+  release workflow проверяет всю Git-историю, а production lock проверяется на
   известные уязвимости.
 
 [Unreleased]: https://github.com/krevetka-is-afk/llm-agent-for-ai-studio/commits/main

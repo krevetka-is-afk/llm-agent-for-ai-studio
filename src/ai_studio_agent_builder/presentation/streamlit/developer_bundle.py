@@ -217,7 +217,11 @@ def _has_code_interpreter(tools: list[dict[str, Any]]) -> bool:
 def _upload_inputs(client: Any, paths: list[Path], uploaded_ids: list[str]) -> None:
     for path in paths:
         with path.open("rb") as source:
-            uploaded = client.files.create(file=source, purpose="user_data")
+            uploaded = client.files.create(
+                file=source,
+                purpose="user_data",
+                expires_after={"anchor": "created_at", "seconds": 172800},
+            )
         file_id = _value(uploaded, "id")
         if not isinstance(file_id, str) or not file_id:
             raise RuntimeError("Files API did not return an input file ID")

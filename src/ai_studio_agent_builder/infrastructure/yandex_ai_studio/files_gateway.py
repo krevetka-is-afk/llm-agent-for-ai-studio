@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, BinaryIO, Protocol
 
 from openai import APIError, APITimeoutError
+from openai.types import file_create_params
 
 from ...application.dto import AIStudioCredentials
 from ...application.file_policy import enforce_upload_size, resolve_upload_path
@@ -26,7 +27,13 @@ class _StreamingFilesResource(Protocol):
 
 
 class _FilesResource(Protocol):
-    def create(self, *, file: BinaryIO, purpose: str) -> Any: ...
+    def create(
+        self,
+        *,
+        file: BinaryIO,
+        purpose: str,
+        expires_after: file_create_params.ExpiresAfter,
+    ) -> Any: ...
 
     def delete(self, file_id: str) -> Any: ...
 
@@ -44,6 +51,9 @@ class _UploadClient(Protocol):
 
     @property
     def containers(self) -> _ContainersResource: ...
+
+
+REMOTE_INPUT_RETENTION_SECONDS = 2 * 24 * 60 * 60
 
 
 def upload_local_file(client: _UploadClient, base_dir: Path, filename: str) -> str:
@@ -67,7 +77,14 @@ def _upload_local_file(
     enforce_upload_size(path, source_name=filename)
     try:
         with path.open("rb") as file:
-            uploaded_file = client.files.create(file=file, purpose=purpose)
+            uploaded_file = client.files.create(
+                file=file,
+                purpose=purpose,
+                expires_after=file_create_params.ExpiresAfter(
+                    anchor="created_at",
+                    seconds=REMOTE_INPUT_RETENTION_SECONDS,
+                ),
+            )
     except (APITimeoutError, TimeoutError) as exc:
         raise AgentProviderTimeoutError() from exc
     except APIError as exc:
@@ -149,6 +166,7 @@ def _provider_error(exc: APIError) -> AgentProviderError:
 
 
 __all__ = [
+    "REMOTE_INPUT_RETENTION_SECONDS",
     "YandexFileResourceGateway",
     "YandexFileResourceGatewayFactory",
     "upload_local_file",

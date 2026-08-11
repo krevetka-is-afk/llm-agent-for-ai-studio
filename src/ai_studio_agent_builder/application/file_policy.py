@@ -24,6 +24,31 @@ def sanitize_filename(original_filename: str, *, fallback: str) -> str:
     return safe_filename
 
 
+def resolve_storage_directory(root_dir: Path, scope_id: str) -> Path:
+    """Resolve one caller-owned storage scope without allowing root escape."""
+    if (
+        not isinstance(scope_id, str)
+        or not scope_id.strip()
+        or scope_id in {".", ".."}
+        or "/" in scope_id
+        or "\\" in scope_id
+    ):
+        raise UnsafeUploadPathError("Storage scope must be one non-empty path segment")
+
+    root = root_dir.resolve(strict=False)
+    candidate = root / scope_id
+    if candidate.is_symlink():
+        raise UnsafeUploadPathError("Symlink storage scopes are not allowed")
+    resolved = candidate.resolve(strict=False)
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise UnsafeUploadPathError(
+            "Storage scope escapes the configured root"
+        ) from exc
+    return resolved
+
+
 def resolve_upload_path(base_dir: Path, filename: str) -> Path:
     """Return the canonical upload path or raise on traversal/symlink access."""
     requested = Path(filename)

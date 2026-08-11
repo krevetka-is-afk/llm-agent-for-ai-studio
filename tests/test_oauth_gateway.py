@@ -6,15 +6,20 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from cryptography.fernet import Fernet
 
-from ai_studio_agent_builder.experimental.oauth.config import OAuthGatewayConfig
+from ai_studio_agent_builder.experimental.oauth.config import (
+    OAuthGatewayConfig,
+    load_oauth_gateway_config,
+)
 from ai_studio_agent_builder.experimental.oauth.credential_store import (
     EncryptedCredentialStore,
 )
 from ai_studio_agent_builder.experimental.oauth.gateway import (
     GatewayInvalidState,
+    GatewayRemoteError,
     OAuthFolder,
     OAuthGateway,
     OAuthTokens,
+    YandexCloudOAuthClient,
 )
 
 
@@ -64,6 +69,38 @@ def _gateway(tmp_path, *, expires_in: int = 3600):
     remote = FakeRemoteClient(expires_in=expires_in)
     store = EncryptedCredentialStore(config.storage_path, config.encryption_key)
     return OAuthGateway(config, store, remote), remote, config
+
+
+def test_gateway_defaults_to_loopback_outside_explicit_container_config(
+    tmp_path, monkeypatch
+) -> None:
+    required_values = {
+        "YC_OAUTH_CLIENT_ID": "client-id",
+        "YC_OAUTH_CLIENT_SECRET": "client-secret",
+        "YC_OAUTH_REDIRECT_URI": "https://gateway.example/yc/oauth/callback",
+        "YC_TOKEN_ENCRYPTION_KEY": Fernet.generate_key().decode("ascii"),
+        "OAUTH_GATEWAY_SHARED_SECRET": "internal-secret",
+        "YC_OAUTH_DB_PATH": str(tmp_path / "refresh_tokens.db"),
+    }
+    for name, value in required_values.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("YC_OAUTH_CALLBACK_HOST", raising=False)
+
+    assert load_oauth_gateway_config().callback_host == "127.0.0.1"
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    (
+        "file:///etc/passwd",
+        "http://auth.yandex.cloud/oauth/token",
+        "https://auth.yandex.cloud.attacker.example/oauth/token",
+        "https://user@auth.yandex.cloud/oauth/token",
+    ),
+)
+def test_yandex_oauth_client_rejects_non_allowlisted_endpoints(endpoint: str) -> None:
+    with pytest.raises(GatewayRemoteError, match="not allowed"):
+        YandexCloudOAuthClient._request_json(endpoint)
 
 
 def test_gateway_uses_pkce_and_credential_store_holds_only_refresh_token(

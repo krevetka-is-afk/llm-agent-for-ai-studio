@@ -22,10 +22,18 @@ class _FakeFilesClient:
     def __init__(self) -> None:
         self.created: list[bytes] = []
         self.purposes: list[str] = []
+        self.expirations: list[dict[str, object]] = []
         self.deleted: list[str] = []
 
-    def create(self, *, file: BinaryIO, purpose: str):
+    def create(
+        self,
+        *,
+        file: BinaryIO,
+        purpose: str,
+        expires_after: dict[str, object],
+    ):
         self.purposes.append(purpose)
+        self.expirations.append(expires_after)
         self.created.append(file.read())
         return type("UploadedFile", (), {"id": "file-safe"})()
 
@@ -115,6 +123,7 @@ def test_upload_local_file_uploads_only_valid_regular_file(tmp_path):
     assert file_id == "file-safe"
     assert client.files.created == [b"safe"]
     assert client.files.purposes == ["assistants"]
+    assert client.files.expirations == [{"anchor": "created_at", "seconds": 172800}]
 
 
 def test_upload_local_file_enforces_size_limit(tmp_path):
@@ -135,6 +144,7 @@ def test_code_interpreter_gateway_uses_user_data_and_deletes_remote_file(tmp_pat
     gateway.delete_container("container-safe")
 
     assert client.files.purposes == ["user_data"]
+    assert client.files.expirations == [{"anchor": "created_at", "seconds": 172800}]
     assert chunks == (b"first", b"second")
     assert client.files.deleted == ["file-safe"]
     assert client.containers.deleted == ["container-safe"]

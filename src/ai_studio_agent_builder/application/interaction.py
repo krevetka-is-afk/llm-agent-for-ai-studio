@@ -21,8 +21,10 @@ MAX_GENERATED_FILES_PER_REQUEST = 10
 MAX_GENERATED_FILE_BYTES = 10 * 1024 * 1024
 MAX_TOTAL_GENERATED_BYTES = 25 * 1024 * 1024
 UPLOAD_RETENTION_POLICY = (
-    "User upload directories are request-scoped for model access and are removed "
-    "when the user resets the conversation."
+    "Local user upload directories are removed when the user resets the conversation. "
+    "Temporary provider input files have a maximum 48-hour lifetime; RAG vector "
+    "stores expire after one day. Failed builds are cleaned up immediately on a "
+    "best-effort basis."
 )
 
 

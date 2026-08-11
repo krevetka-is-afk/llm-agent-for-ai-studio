@@ -65,6 +65,12 @@ Runner только нормализует references и не выполняет
 conversation/generated files, а presentation читает outputs только по
 user-scoped local handle.
 
+`BuilderAgentsRunAdapter` владеет файлами stateful RAG build. Он регистрирует
+каждый созданный provider file до следующего upload и удаляет новые files и
+vector store, если turn завершается ошибкой. На success RAG-ресурсы остаются
+доступны спецификации, но получают обязательный provider TTL: 48 часов для
+input files и один день для vector store.
+
 Provider gateway отвечает только за отдельные create/read/delete операции и
 нормализацию ошибок. UI не удаляет remote resources, а runner не пишет bytes на
 диск.
@@ -86,6 +92,8 @@ Provider gateway отвечает только за отдельные create/re
 - не более 25 MiB суммарно на входной request;
 - не более 10 выходных файлов;
 - не более 10 MiB на один выходной файл и 25 MiB суммарно;
+- не более 100 файлов и 100 MiB в одном user scope; не более 512 MiB в общем
+  local storage root;
 - basename нормализуется, traversal/symlink запрещены, collision создаёт новое
   уникальное имя;
 - declared MIME и размер являются hints, а не доказательством;
@@ -117,10 +125,14 @@ preview явно. До чтения bytes проверяются count/per-file/
 
 ## Retention
 
-Remote auto container имеет provider TTL, но TTL не заменяет cleanup. Локальные
-input/output artifacts хранятся только в user-scoped directory до reset или
-утверждённого retention deadline. Конкретные сроки и user-facing wording
-настраиваются централизованно и документируются в UI/README.
+Remote auto container имеет provider TTL, но TTL не заменяет cleanup. Preview
+resources удаляются после request, а TTL остаётся fallback на случай ошибки
+cleanup. Stateful RAG inputs живут не более 48 часов, vector store — не более
+одного дня; ошибка build запускает немедленный best-effort cleanup. Локальные
+input/output artifacts хранятся только в user-scoped directory до reset.
+Забытые зашифрованные Web-подключения удаляются через 30 дней.
+Экспериментальный Telegram adapter сериализует запросы одного пользователя и
+допускает не более восьми одновременных запросов процесса.
 
 ## Logging и observability
 

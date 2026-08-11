@@ -1,4 +1,8 @@
+import os
 import sqlite3
+import stat
+
+import pytest
 
 from cryptography.fernet import Fernet
 
@@ -27,3 +31,29 @@ def test_api_key_store_encrypts_key_and_deletes_connection(tmp_path) -> None:
     store.delete("web-session")
 
     assert store.get("web-session") is None
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX mode unavailable")
+def test_api_key_store_restricts_database_permissions(tmp_path) -> None:
+    path = tmp_path / "api_keys.db"
+
+    EncryptedApiKeyStore(path, Fernet.generate_key().decode("ascii"))
+
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+def test_api_key_store_purges_expired_connections(tmp_path) -> None:
+    path = tmp_path / "api_keys.db"
+    store = EncryptedApiKeyStore(
+        path,
+        Fernet.generate_key().decode("ascii"),
+        retention_seconds=60,
+    )
+    store.save("abandoned-session", "AQAAAA-secret-api-key", "b1gfolder")
+    with sqlite3.connect(path) as database:
+        database.execute(
+            "UPDATE api_key_connections SET updated_at = 0 WHERE connection_id = ?",
+            ("abandoned-session",),
+        )
+
+    assert store.get("abandoned-session") is None

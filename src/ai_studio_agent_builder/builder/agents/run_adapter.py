@@ -1,6 +1,7 @@
 """Agents SDK implementation of the application-owned builder run port."""
 
 import asyncio
+import logging
 from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
@@ -37,6 +38,7 @@ from .sdk_event_adapter import AgentRunCollector
 
 ClientFactory = Callable[[AIStudioCredentials], Any]
 FileUploader = Callable[[Any, Path, str], str]
+logger = logging.getLogger(__name__)
 
 
 class UnsupportedConversationStateError(RuntimeError):
@@ -74,7 +76,6 @@ class BuilderAgentsRunAdapter:
 
     async def _run(self, request: BuilderRunRequest) -> BuilderRunOutcome:
         state = request.conversation_state
-        selected_agent = state.state
         context = RequestContext(
             user_id=request.user_id,
             request_id=request.request_id,
@@ -91,12 +92,39 @@ class BuilderAgentsRunAdapter:
             tracing_disabled=True,
             trace_include_sensitive_data=False,
         )
+        initial_vector_store_id = self._current_vector_store_id(state)
+        uploaded_file_ids: list[str] = []
+        try:
+            return await self._run_with_context(
+                request,
+                context,
+                run_config,
+                uploaded_file_ids,
+            )
+        except BaseException:
+            await self._cleanup_failed_run(
+                context,
+                uploaded_file_ids,
+                initial_vector_store_id=initial_vector_store_id,
+            )
+            raise
+
+    async def _run_with_context(
+        self,
+        request: BuilderRunRequest,
+        context: RequestContext,
+        run_config: RunConfig,
+        uploaded_file_ids: list[str],
+    ) -> BuilderRunOutcome:
+        state = request.conversation_state
+        selected_agent = state.state
         attachments = request.attachments
         if selected_agent is ConversationOptions.RAG:
             attachments = await self._ensure_uploaded_files(
                 attachments,
                 context.client,
                 request.user_files_dir,
+                uploaded_file_ids,
             )
             self._authorize_attachment_ids(context, attachments)
 
@@ -121,6 +149,7 @@ class BuilderAgentsRunAdapter:
                 attachments,
                 context.client,
                 request.user_files_dir,
+                uploaded_file_ids,
             )
             self._authorize_attachment_ids(context, attachments)
             runs.append(
@@ -163,6 +192,7 @@ class BuilderAgentsRunAdapter:
         attachments: tuple[Attachment, ...],
         client: Any,
         base_dir: Path,
+        uploaded_file_ids: list[str],
     ) -> tuple[Attachment, ...]:
         self._validate_attachment_registry(attachments)
         total_upload_bytes = sum(
@@ -186,8 +216,56 @@ class BuilderAgentsRunAdapter:
                 base_dir,
                 attachment.filename,
             )
+            uploaded_file_ids.append(file_id)
             uploaded_attachments.append(replace(attachment, file_id=file_id))
         return tuple(uploaded_attachments)
+
+    async def _cleanup_failed_run(
+        self,
+        context: RequestContext,
+        uploaded_file_ids: list[str],
+        *,
+        initial_vector_store_id: str | None,
+    ) -> None:
+        current_vector_store_id = self._current_vector_store_id(context.state)
+        if (
+            current_vector_store_id is not None
+            and current_vector_store_id != initial_vector_store_id
+        ):
+            try:
+                await asyncio.to_thread(
+                    context.client.vector_stores.delete,
+                    current_vector_store_id,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Failed builder run left vector store cleanup incomplete",
+                    extra={
+                        "user_id": context.user_id,
+                        "request_id": context.request_id,
+                        "error_type": type(exc).__name__,
+                    },
+                )
+        for file_id in reversed(uploaded_file_ids):
+            try:
+                await asyncio.to_thread(context.client.files.delete, file_id)
+            except Exception as exc:
+                logger.warning(
+                    "Failed builder run left input file cleanup incomplete",
+                    extra={
+                        "user_id": context.user_id,
+                        "request_id": context.request_id,
+                        "error_type": type(exc).__name__,
+                    },
+                )
+
+    @staticmethod
+    def _current_vector_store_id(state: Any) -> str | None:
+        specification = state.agent_specification
+        if specification is None:
+            return None
+        value = specification.parameters.get("index_id")
+        return value if isinstance(value, str) and value else None
 
     @staticmethod
     def _validate_attachment_registry(attachments: tuple[Attachment, ...]) -> None:

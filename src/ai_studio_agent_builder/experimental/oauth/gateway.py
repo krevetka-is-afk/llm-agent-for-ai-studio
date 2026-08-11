@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass
 from typing import Protocol, cast
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 from .config import OAuthGatewayConfig
@@ -16,13 +16,20 @@ from .credential_store import CredentialStoreError, EncryptedCredentialStore
 logger = logging.getLogger(__name__)
 
 AUTHORIZATION_ENDPOINT = "https://auth.yandex.cloud/oauth/authorize"
-TOKEN_ENDPOINT = "https://auth.yandex.cloud/oauth/token"
+# This is the OAuth endpoint URL, not a password or token value.
+TOKEN_ENDPOINT = "https://auth.yandex.cloud/oauth/token"  # nosec B105
 REVOCATION_ENDPOINT = "https://auth.yandex.cloud/oauth/revoke"
 RESOURCE_MANAGER_ENDPOINT = (
     "https://resource-manager.api.cloud.yandex.net/resource-manager/v1"
 )
 TOKEN_REFRESH_SKEW_SECONDS = 60
 STATE_TTL_SECONDS = 600
+ALLOWED_YANDEX_ENDPOINT_HOSTS = frozenset(
+    {
+        "auth.yandex.cloud",
+        "resource-manager.api.cloud.yandex.net",
+    }
+)
 
 
 class OAuthGatewayError(Exception):
@@ -243,6 +250,7 @@ class YandexCloudOAuthClient:
         data: dict[str, str] | None = None,
         headers: dict[str, str] | None = None,
     ) -> dict[str, object]:
+        _validate_yandex_endpoint(url)
         request = Request(
             url,
             data=urlencode(data).encode("utf-8") if data is not None else None,
@@ -250,7 +258,9 @@ class YandexCloudOAuthClient:
             method="POST" if data is not None else "GET",
         )
         try:
-            with urlopen(request, timeout=20) as response:
+            # URL validation above constrains this internal client to fixed HTTPS
+            # Yandex hosts; callers cannot supply arbitrary schemes or hosts.
+            with urlopen(request, timeout=20) as response:  # nosec B310
                 payload = response.read().decode("utf-8")
         except HTTPError as exc:
             logger.warning("Yandex Cloud OAuth API returned HTTP %s", exc.code)
@@ -268,6 +278,23 @@ class YandexCloudOAuthClient:
         if not isinstance(parsed, dict):
             raise GatewayRemoteError("Yandex Cloud API returned an invalid response")
         return parsed
+
+
+def _validate_yandex_endpoint(url: str) -> None:
+    parsed = urlsplit(url)
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise GatewayRemoteError("Yandex Cloud endpoint is invalid") from exc
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname not in ALLOWED_YANDEX_ENDPOINT_HOSTS
+        or parsed.username is not None
+        or parsed.password is not None
+        or port not in (None, 443)
+        or parsed.fragment
+    ):
+        raise GatewayRemoteError("Yandex Cloud endpoint is not allowed")
 
 
 class OAuthGateway:

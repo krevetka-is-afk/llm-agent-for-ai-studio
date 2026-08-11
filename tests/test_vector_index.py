@@ -15,6 +15,7 @@ class FakeVectorStores:
     def __init__(self, statuses: list[str]) -> None:
         self._statuses = statuses
         self.retrieve_calls: list[str] = []
+        self.delete_calls: list[str] = []
         self.create_kwargs: dict[str, Any] | None = None
 
     def create(self, **kwargs: Any) -> SimpleNamespace:
@@ -28,6 +29,9 @@ class FakeVectorStores:
         else:
             status = "in_progress"
         return SimpleNamespace(status=status)
+
+    def delete(self, vector_store_id: str) -> None:
+        self.delete_calls.append(vector_store_id)
 
 
 class FakeClient:
@@ -145,6 +149,20 @@ def test_unknown_status_raises_bounded_typed_error() -> None:
     assert exc_info.value.status == "migrating"
     assert exc_info.value.attempt == 1
     assert client.vector_stores.retrieve_calls == ["vs_unknown"]
+
+
+def test_index_build_failure_deletes_the_new_vector_store() -> None:
+    client = FakeClient(["failed"])
+
+    with pytest.raises(vector_index.VectorIndexTerminalStatusError):
+        vector_index._create_search_index_impl(
+            make_ctx(client, ConversationState(ConversationOptions.RAG)),
+            ["file_1"],
+            "knowledge",
+            sleep=lambda _: None,
+        )
+
+    assert client.vector_stores.delete_calls == ["vs_123"]
 
 
 def test_tool_uses_only_server_managed_pending_files() -> None:
