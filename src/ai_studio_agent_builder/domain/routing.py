@@ -14,6 +14,9 @@ class RoutingReason(StrEnum):
     RAG_REQUESTED = "rag_requested"
     ONE_PROMPT_REQUESTED = "one_prompt_requested"
     WEB_SEARCH_WITHOUT_VECTOR_KNOWLEDGE = "web_search_without_vector_knowledge"
+    CODE_INTERPRETER_WITHOUT_VECTOR_KNOWLEDGE = (
+        "code_interpreter_without_vector_knowledge"
+    )
     FILES_REJECTED = "files_rejected"
 
 
@@ -42,7 +45,11 @@ _RAG_REJECTED_AFTER = re.compile(
 _RAG_REQUESTED = re.compile(
     rf"\b{_RAG_TERM}\b|"
     r"\bсозда[а-я]*\s+(?:мне\s+)?(?:векторн[а-я]*\s+)?индекс[а-я]*\b|"
-    r"\bиндекс[а-я]*\s+(?:из|для)\s+файл[а-я]*\b"
+    r"\bиндекс[а-я]*\s+(?:из|для)\s+файл[а-я]*\b|"
+    r"\b(?:ищ[а-я]*|поиск[а-я]*)\s+(?:по|в)\s+"
+    r"(?:загруженн[а-я]*\s+)?(?:файл[а-я]*|документ[а-я]*|отчет[а-я]*)\b|"
+    r"\bsearch(?:\s+the)?\s+(?:uploaded\s+)?"
+    r"(?:files?|documents?|reports?)\b"
 )
 _ONE_PROMPT_REQUESTED = re.compile(
     r"\b(?:one[\s-]?prompt|одн[а-я]*[\s-]?промпт[а-я]*)\b"
@@ -55,6 +62,25 @@ _WEB_SEARCH_REJECTED = re.compile(
     r"\bне\s+(?:нуж[а-я]*|хоч[а-я]*|использ[а-я]*)\s+"
     r"(?:веб[\s-]?поиск[а-я]*|поиск[а-я]*\s+в\s+интернет[а-я]*)\b|"
     r"\b(?:no|without|do\s+not\s+need|don't\s+need)\s+web[\s-]?search\b"
+)
+_CODE_INTERPRETER_TERM = r"(?:code[\s-]?interpreter|интерпретатор[а-я]*\s+кода)"
+_CODE_INTERPRETER_REJECTED = re.compile(
+    rf"\b(?:без|не\s+(?:нуж[а-я]*|хоч[а-я]*|использ[а-я]*))\s+"
+    rf"{_CODE_INTERPRETER_TERM}\b|"
+    rf"\b(?:no|without|do\s+not\s+(?:need|want|use)|"
+    rf"don't\s+(?:need|want|use))(?:\s+the)?\s+{_CODE_INTERPRETER_TERM}\b"
+)
+_CODE_INTERPRETER_REQUESTED = re.compile(
+    rf"\b{_CODE_INTERPRETER_TERM}\b|"
+    r"\b(?:проанализир[а-я]*|обработ[а-я]*|преобраз[а-я]*)"
+    r"(?:\s+[а-яa-z0-9.-]+){0,5}\s+(?:csv|xlsx|таблиц[а-я]*)\b|"
+    r"\b(?:сдела[а-я]*|постро[а-я]*|выполн[а-я]*)"
+    r"(?:\s+[а-яa-z0-9.-]+){0,5}\s+"
+    r"(?:расчет[а-я]*|вычислен[а-я]*|график[а-я]*)"
+    r"(?:\s+[а-яa-z0-9.-]+){0,6}\s+"
+    r"(?:файл[а-я]*|данн[а-я]*|csv|xlsx)\b|"
+    r"\b(?:analy[sz]e|process|transform)"
+    r"(?:\s+[a-z0-9.-]+){0,5}\s+(?:csv|xlsx|spreadsheet)\b"
 )
 _FILES_REJECTED = re.compile(
     r"\b(?:пока\s+)?без\s+(?:файл[а-я]*|документ[а-я]*)\b|"
@@ -95,6 +121,13 @@ def resolve_explicit_route(message: str | None) -> RoutingDecision | None:
         return RoutingDecision(
             ConversationOptions.ONE_PROMPT,
             RoutingReason.WEB_SEARCH_WITHOUT_VECTOR_KNOWLEDGE,
+        )
+    if _CODE_INTERPRETER_REJECTED.search(normalized):
+        return None
+    if _CODE_INTERPRETER_REQUESTED.search(normalized):
+        return RoutingDecision(
+            ConversationOptions.ONE_PROMPT,
+            RoutingReason.CODE_INTERPRETER_WITHOUT_VECTOR_KNOWLEDGE,
         )
     if _FILES_REJECTED.search(normalized):
         return RoutingDecision(
