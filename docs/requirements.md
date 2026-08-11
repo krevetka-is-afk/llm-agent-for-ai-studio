@@ -144,36 +144,39 @@ UI показывает typed result parts: vector index, agent specification и
 
 ## Трассировка
 
+Пути модулей ниже указаны относительно
+`src/ai_studio_agent_builder/`, если явно не задан другой корень.
+
 | Требование | Модуль | Тест/проверка |
 | --- | --- | --- |
-| FR-01 | `src/ui/chat_flow.py`, `src/ui/uploads.py`, `src/ai_interaction_service.py` | `tests/test_ui_helpers.py`, `tests/test_ui_smoke.py`, `tests/test_ai_interaction_service.py` |
-| FR-02 | `src/routing.py`, `src/ai_interaction_service.py`, `src/conversation_state.py`, `src/custom_agents/coordinator_agent.py` | `tests/test_routing.py`, `tests/test_ai_interaction_service.py`, `tests/test_prompt_quality.py` |
-| FR-03 | `src/conversation_state.py`, `src/ai_interaction_service.py`, `src/custom_agents/tools/vector_index.py` | `tests/test_context_compat.py`, `tests/test_ai_interaction_service.py`, `tests/test_vector_index.py` |
-| FR-04 | `src/result_assembly.py` | `tests/test_result_assembly.py`, `tests/test_ai_interaction_service.py` |
-| FR-05 | `src/custom_agents/tools/agent_specification.py`, `src/result_assembly.py`, `src/agent_specification.py` | `tests/test_agent_specification_tools.py`, `tests/test_result_assembly.py`, `tests/test_ai_interaction_service.py` |
-| FR-06 | `src/agent_specification.py` | `tests/test_agent_specification.py` |
-| FR-07 | `src/agent_specification.py`, `src/component_catalog.py` | `tests/test_agent_specification.py` |
-| FR-08 | `src/custom_agents/tools/vector_index.py`, `src/agent_specification.py` | `tests/test_vector_index.py`, `tests/test_agent_specification_tools.py`, `tests/test_agent_specification.py` |
-| FR-09 | `src/agent_specification.py`, `src/ui/result_view.py` | `tests/test_agent_specification.py`, `tests/test_ui_smoke.py` |
-| FR-10 | `src/component_catalog.py`, `docs/component-catalog.md` | `tests/test_agent_specification.py` |
-| FR-11 | `src/custom_agents/one_prompt_agent.py`, `src/custom_agents/tools/agent_specification.py`, `src/agent_specification.py` | `tests/test_prompt_quality.py`, `tests/test_agent_specification_tools.py`, `tests/test_agent_specification.py` |
-| FR-12 | `src/agent_specification.py`, `src/agent_runtime.py` | `tests/test_agent_specification.py`, `tests/test_agent_runtime.py` |
-| FR-13 | `src/agent_runtime.py` | `tests/test_agent_runtime.py` |
-| FR-14 | `src/ai_interaction_service.py`, `src/agent_runner.py`, `src/yandex_responses_runner.py`, `src/ui/agent_test_panel.py` | `tests/test_ai_interaction_service.py`, `tests/test_yandex_responses_runner.py`, `tests/test_ui_helpers.py`, `tests/test_ui_smoke.py` |
-| FR-15 | `src/ai_interaction_service.py`, `src/agent_runtime.py`, `src/ui/agent_test_panel.py` | `tests/test_ai_interaction_service.py`, `tests/test_agent_runtime.py`, `tests/test_ui_smoke.py` |
-| FR-16 | `src/yandex_responses_runner.py` | `tests/test_yandex_responses_runner.py`, `tests/e2e/test_yandex_ai_studio_agent_runtime_e2e.py` |
-| FR-17 | `src/ui/user_guidance.py`, `src/ui/developer_bundle.py`, `src/ui/agent_test_panel.py` | `tests/test_ui_smoke.py`, `tests/test_developer_bundle.py`; Playwright visual smoke |
-| NFR-01 | `src/request_context.py`, `src/agent_specification.py` | `tests/test_context.py`, `tests/test_agent_specification.py` |
-| NFR-02 | `src/ui/chat_flow.py`, `src/ui/agent_test_panel.py`, `src/yandex_responses_runner.py` | `tests/test_ui_helpers.py`, `tests/test_yandex_responses_runner.py` |
-| NFR-03 | `src/conversation_state.py`, `src/ai_interaction_service.py` | `tests/test_context_compat.py`, `tests/test_ai_interaction_service.py` |
-| NFR-04 | `src/file_security.py`, `src/ui/uploads.py`, `src/ai_interaction_service.py` | `tests/test_upload_file_security.py`, `tests/test_ui_smoke.py` |
+| FR-01 | `presentation/streamlit/chat_flow.py`, `uploads.py`, `application/builder_service.py` | `tests/test_ui_helpers.py`, `tests/test_ui_smoke.py`, `tests/test_ai_interaction_service.py` |
+| FR-02 | `domain/routing.py`, `application/builder_service.py`, `builder_state.py`, `builder/agents/coordinator_agent.py` | `tests/test_routing.py`, `tests/test_ai_interaction_service.py`, `tests/test_prompt_quality.py` |
+| FR-03 | `application/builder_state.py`, `builder_service.py`, `builder/agents/tools/vector_index.py` | `tests/test_builder_state.py`, `tests/test_ai_interaction_service.py`, `tests/test_vector_index.py` |
+| FR-04 | `builder/result_assembly.py` | `tests/test_result_assembly.py`, `tests/test_ai_interaction_service.py` |
+| FR-05 | `builder/agents/tools/agent_specification.py`, `builder/result_assembly.py`, `domain/specification.py` | `tests/test_agent_specification_tools.py`, `tests/test_result_assembly.py`, `tests/test_ai_interaction_service.py` |
+| FR-06 | `domain/specification.py` | `tests/test_agent_specification.py` |
+| FR-07 | `domain/specification.py`, `domain/catalog.py` | `tests/test_agent_specification.py` |
+| FR-08 | `builder/agents/tools/vector_index.py`, `domain/specification.py` | `tests/test_vector_index.py`, `tests/test_agent_specification_tools.py`, `tests/test_agent_specification.py` |
+| FR-09 | `domain/specification.py`, `presentation/streamlit/result_view.py` | `tests/test_agent_specification.py`, `tests/test_ui_smoke.py` |
+| FR-10 | `domain/catalog.py`, `docs/component-catalog.md` | `tests/test_agent_specification.py` |
+| FR-11 | `builder/agents/one_prompt_agent.py`, `builder/agents/tools/agent_specification.py`, `domain/specification.py` | `tests/test_prompt_quality.py`, `tests/test_agent_specification_tools.py`, `tests/test_agent_specification.py` |
+| FR-12 | `domain/specification.py`, `domain/runtime.py` | `tests/test_agent_specification.py`, `tests/test_agent_runtime.py` |
+| FR-13 | `domain/runtime.py` | `tests/test_agent_runtime.py` |
+| FR-14 | `application/preview_service.py`, `application/ports/agent_runner.py`, `infrastructure/yandex_ai_studio/responses_runner.py`, `presentation/streamlit/agent_test_panel.py` | `tests/test_ai_interaction_service.py`, `tests/test_yandex_responses_runner.py`, `tests/test_ui_helpers.py`, `tests/test_ui_smoke.py` |
+| FR-15 | `application/preview_service.py`, `domain/runtime.py`, `presentation/streamlit/agent_test_panel.py` | `tests/test_ai_interaction_service.py`, `tests/test_agent_runtime.py`, `tests/test_ui_smoke.py` |
+| FR-16 | `infrastructure/yandex_ai_studio/responses_runner.py` | `tests/test_yandex_responses_runner.py`, `tests/e2e/test_yandex_ai_studio_agent_runtime_e2e.py` |
+| FR-17 | `presentation/streamlit/user_guidance.py`, `developer_bundle.py`, `agent_test_panel.py` | `tests/test_ui_smoke.py`, `tests/test_developer_bundle.py`; Playwright visual smoke |
+| NFR-01 | `builder/context.py`, `domain/specification.py` | `tests/test_context.py`, `tests/test_agent_specification.py` |
+| NFR-02 | `presentation/streamlit/chat_flow.py`, `agent_test_panel.py`, `infrastructure/yandex_ai_studio/responses_runner.py` | `tests/test_ui_helpers.py`, `tests/test_yandex_responses_runner.py` |
+| NFR-03 | `application/builder_state.py`, `builder_service.py` | `tests/test_builder_state.py`, `tests/test_ai_interaction_service.py` |
+| NFR-04 | `application/file_policy.py`, `presentation/streamlit/uploads.py`, `application/file_lifecycle.py` | `tests/test_upload_file_security.py`, `tests/test_ui_smoke.py` |
 | NFR-05 | `docs/*.md`, `docs/report/*.typ` | Документальная проверка |
 | NFR-06 | `pyproject.toml`, `.pre-commit-config.yaml` | Quality gate commands |
 | NFR-07 | `tests/e2e/test_yandex_ai_studio_rag_e2e.py`, `tests/e2e/test_yandex_ai_studio_agent_runtime_e2e.py` | `pytest` skip без env; opt-in запуск с credentials |
 | NFR-08 | `pyproject.toml`, code review | `uv run pytest -q`, `uv run ty check`, dependency diff |
-| NFR-09 | `src/config.py`, `src/custom_agents/base_agent.py`, `config.yaml` | `tests/test_base_agent.py`, `tests/test_config.py` |
-| NFR-10 | `src/ai_interaction_service.py`, `src/ui/chat_flow.py` | `tests/test_ai_interaction_service.py`, `tests/test_ui_smoke.py` |
-| NFR-11 | `src/ui/chat_flow.py`, `src/ui/agent_test_panel.py`, `src/yandex_responses_runner.py` | `tests/test_ui_helpers.py`, `tests/test_yandex_responses_runner.py` |
-| NFR-12 | `src/ui/agent_test_panel.py` | `tests/test_ui_helpers.py`, `tests/test_ui_smoke.py` |
-| NFR-13 | `src/ui/agent_test_panel.py`, `src/ui/result_view.py`, `src/ui/user_guidance.py` | `tests/test_ui_smoke.py`; Playwright tooltip/visual smoke |
-| NFR-14 | `src/conversation_state.py`, `src/ai_interaction_service.py`, `src/custom_agents/tools/vector_index.py`, `src/result_assembly.py` | `tests/test_context_compat.py`, `tests/test_ai_interaction_service.py`, `tests/test_vector_index.py`, `tests/test_result_assembly.py` |
+| NFR-09 | `config.py`, `builder/agents/base_agent.py`, `config.yaml` | `tests/test_base_agent.py`, `tests/test_config.py` |
+| NFR-10 | `application/builder_service.py`, `presentation/streamlit/chat_flow.py` | `tests/test_ai_interaction_service.py`, `tests/test_ui_smoke.py` |
+| NFR-11 | `presentation/streamlit/chat_flow.py`, `agent_test_panel.py`, `infrastructure/yandex_ai_studio/responses_runner.py` | `tests/test_ui_helpers.py`, `tests/test_yandex_responses_runner.py` |
+| NFR-12 | `presentation/streamlit/agent_test_panel.py` | `tests/test_ui_helpers.py`, `tests/test_ui_smoke.py` |
+| NFR-13 | `presentation/streamlit/agent_test_panel.py`, `result_view.py`, `user_guidance.py` | `tests/test_ui_smoke.py`; Playwright tooltip/visual smoke |
+| NFR-14 | `application/builder_state.py`, `builder_service.py`, `builder/agents/tools/vector_index.py`, `builder/result_assembly.py` | `tests/test_builder_state.py`, `tests/test_ai_interaction_service.py`, `tests/test_vector_index.py`, `tests/test_result_assembly.py` |

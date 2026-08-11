@@ -2,8 +2,6 @@ import json
 import logging
 from types import SimpleNamespace
 
-from agent_specification import build_one_prompt_specification
-from context import ConversationOptions
 from ai_studio_agent_builder.builder.agents.sdk_event_adapter import AgentRunCollector
 from ai_studio_agent_builder.builder.result_assembly import (
     AgentSpecificationResultPart,
@@ -16,6 +14,10 @@ from ai_studio_agent_builder.builder.result_assembly import (
     merge_agent_runs,
     render_result_text,
     result_part_to_record,
+)
+from ai_studio_agent_builder.domain.routing import ConversationOptions
+from ai_studio_agent_builder.domain.specification import (
+    build_one_prompt_specification,
 )
 
 

@@ -8,8 +8,13 @@ from uuid import uuid4
 
 import pytest
 
-import ai_interaction_service as interaction_module
-from ai_interaction_service import AIInteractionService, InteractionRequest
+from ai_studio_agent_builder.application.builder_state import ConversationState
+from ai_studio_agent_builder.application.dto import AIStudioCredentials
+from ai_studio_agent_builder.application.interaction import InteractionRequest
+from ai_studio_agent_builder.application.interaction_facade import (
+    AIInteractionService,
+)
+from ai_studio_agent_builder.composition import build_ai_interaction_service
 from ai_studio_agent_builder.config import (
     AgentRuntimeConfig,
     AIServiceConfig,
@@ -18,11 +23,12 @@ from ai_studio_agent_builder.config import (
     PathConfig,
     SessionDBConfig,
 )
-from context import (
-    AIStudioCredentials,
-    ConversationOptions,
-    ConversationState,
+from ai_studio_agent_builder.domain.routing import ConversationOptions
+from ai_studio_agent_builder.infrastructure.yandex_ai_studio.client_factory import (
     get_api_key_client,
+)
+from ai_studio_agent_builder.infrastructure.yandex_ai_studio.files_gateway import (
+    upload_local_file,
 )
 
 pytestmark = [
@@ -137,29 +143,18 @@ async def _run_yandex_ai_studio_rag_e2e(
 ) -> None:
     credentials = _required_e2e_env()
     config = _service_config(tmp_path)
-    service = AIInteractionService(config)
     resource_suffix = uuid4().hex[:12]
     user_id = f"e2e-yandex-ai-studio-rag-{resource_suffix}"
     index_name = f"codex-e2e-{resource_suffix}"
-    user_dir = service.user_files_dir(user_id)
     local_filename = "tiny-rag-source.txt"
-    attachment = service.save_attachment(
-        user_id,
-        local_filename,
-        (
-            "Project codename: Day 2 RAG credentialed E2E.\n"
-            "The expected verification phrase is VECTOR_INDEX_RESULT_PART_OK.\n"
-        ).encode(),
-    )
 
     client = get_api_key_client(credentials, config.connection)
     uploaded_file_ids: list[str] = []
     created_vector_store_ids: set[str] = set()
-    real_upload_local_file = interaction_module.upload_local_file
     real_vector_store_create = client.vector_stores.create
 
     def _capture_upload(*args: Any, **kwargs: Any) -> str:
-        file_id = real_upload_local_file(*args, **kwargs)
+        file_id = upload_local_file(*args, **kwargs)
         uploaded_file_ids.append(file_id)
         return file_id
 
@@ -169,12 +164,20 @@ async def _run_yandex_ai_studio_rag_e2e(
             created_vector_store_ids.add(vector_store.id)
         return vector_store
 
-    monkeypatch.setattr(
-        interaction_module,
-        "get_api_key_client",
-        lambda _credentials, _connection: client,
+    service = build_ai_interaction_service(
+        config,
+        sync_client_factory=lambda _credentials: client,
+        file_uploader=_capture_upload,
     )
-    monkeypatch.setattr(interaction_module, "upload_local_file", _capture_upload)
+    user_dir = service.user_files_dir(user_id)
+    attachment = service.save_attachment(
+        user_id,
+        local_filename,
+        (
+            "Project codename: Day 2 RAG credentialed E2E.\n"
+            "The expected verification phrase is VECTOR_INDEX_RESULT_PART_OK.\n"
+        ).encode(),
+    )
     monkeypatch.setattr(client.vector_stores, "create", _capture_vector_store)
     try:
         state = ConversationState()

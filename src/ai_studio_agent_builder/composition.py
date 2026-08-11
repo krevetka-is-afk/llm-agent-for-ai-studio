@@ -85,9 +85,36 @@ def build_web_services() -> WebServices:
 
 def build_ai_interaction_service(
     config: AIServiceConfig,
+    *,
+    rag_agent: Any | None = None,
+    one_prompt_agent: Any | None = None,
+    coordinator_agent: Any | None = None,
+    agent_runner_factory: LegacyAgentRunnerFactory | None = None,
+    builder_run_port: BuilderRunPort | None = None,
+    connection_validator: ConnectionValidator | None = None,
+    generated_agent_runner_factory: AgentRunnerFactory | None = None,
+    attachment_store: AttachmentStore | None = None,
+    conversation_session_store: ConversationSessionStore | None = None,
+    sync_client_factory: ClientFactory | None = None,
+    async_client_factory: ClientFactory | None = None,
+    file_uploader: FileUploader | None = None,
 ) -> AIInteractionService:
     return AIInteractionService(
-        build_ai_interaction_components(config),
+        build_ai_interaction_components(
+            config,
+            rag_agent=rag_agent,
+            one_prompt_agent=one_prompt_agent,
+            coordinator_agent=coordinator_agent,
+            agent_runner_factory=agent_runner_factory,
+            builder_run_port=builder_run_port,
+            connection_validator=connection_validator,
+            generated_agent_runner_factory=generated_agent_runner_factory,
+            attachment_store=attachment_store,
+            conversation_session_store=conversation_session_store,
+            sync_client_factory=sync_client_factory,
+            async_client_factory=async_client_factory,
+            file_uploader=file_uploader,
+        ),
     )
 
 

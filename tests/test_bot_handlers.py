@@ -1,17 +1,15 @@
 import asyncio
 from collections.abc import Callable, Coroutine
-from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
 from aiogram import Bot
 
-from ai_studio_agent_builder.config import PathConfig
+from ai_studio_agent_builder.application.interaction import AIInteraction
 from ai_studio_agent_builder.infrastructure.persistence.telegram_user_store import (
     UserStore,
 )
-from ai_interaction_service import AIInteractionService
-from bot_handlers import create_router
+from ai_studio_agent_builder.presentation.telegram.handlers import create_router
 
 
 class FakeBot:
@@ -51,8 +49,7 @@ def test_clear_credentials_router_command_clears_store_and_secret_messages() -> 
     store.set_pending_api_token("42", "replacement", message_id=12)
     router = create_router(
         bot=cast(Bot, bot),
-        ai_service=cast(AIInteractionService, ai_service),
-        paths=PathConfig(uploaded_files_dir=Path("uploads")),
+        ai_service=cast(AIInteraction, ai_service),
         user_store=store,
     )
     callback = cast(

@@ -7,6 +7,17 @@ import pytest
 from openai import OpenAIError
 
 from ai_studio_agent_builder.application.errors import AIStudioRequestError
+from ai_studio_agent_builder.application.dto import AIStudioCredentials
+from ai_studio_agent_builder.application.builder_state import ConversationState
+from ai_studio_agent_builder.application.interaction import (
+    AgentSpecificationImportError,
+    AgentTestInputError,
+    AgentTestRequest,
+    Attachment,
+    InteractionRequest,
+    MAX_ATTACHMENTS_PER_REQUEST,
+    UploadValidationError,
+)
 from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentCitation,
     AgentProviderError,
@@ -21,25 +32,16 @@ from ai_studio_agent_builder.config import (
     PathConfig,
     SessionDBConfig,
 )
-from agent_runtime import ExecutableAgentConfig
-from agent_specification import (
+from ai_studio_agent_builder.composition import build_ai_interaction_service
+from ai_studio_agent_builder.domain.catalog import TemplateId
+from ai_studio_agent_builder.domain.routing import ConversationOptions
+from ai_studio_agent_builder.domain.runtime import ExecutableAgentConfig
+from ai_studio_agent_builder.domain.specification import (
     AgentSpecification,
     KnowledgeSource,
     build_one_prompt_specification,
     build_rag_specification,
 )
-from component_catalog import TemplateId
-from ai_interaction_service import (
-    AIInteractionService,
-    AgentSpecificationImportError,
-    AgentTestInputError,
-    AgentTestRequest,
-    Attachment,
-    InteractionRequest,
-    MAX_ATTACHMENTS_PER_REQUEST,
-    UploadValidationError,
-)
-from context import AIStudioCredentials, ConversationOptions, ConversationState
 
 
 class FakeAgent:
@@ -215,7 +217,7 @@ def test_service_routes_to_agent_selected_by_conversation_state(tmp_path: Path) 
     coordinator = FakeAgent()
     rag = FakeAgent()
     one_prompt = FakeAgent()
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=coordinator,
         rag_agent=rag,
@@ -249,7 +251,7 @@ def test_service_routes_to_agent_selected_by_conversation_state(tmp_path: Path) 
 
 def test_service_routes_through_application_owned_builder_port(tmp_path: Path) -> None:
     builder_run_port = FakeBuilderRunPort()
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         builder_run_port=builder_run_port,
     )
@@ -286,7 +288,7 @@ def test_service_imports_ready_agent_specification_without_calling_an_agent(
     coordinator = FakeAgent()
     rag = FakeAgent()
     one_prompt = FakeAgent()
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=coordinator,
         rag_agent=rag,
@@ -343,7 +345,7 @@ def test_service_reports_invalid_agent_specification_json_without_calling_agent(
     tmp_path: Path,
 ) -> None:
     coordinator = FakeAgent()
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=coordinator,
         rag_agent=FakeAgent(),
@@ -379,7 +381,7 @@ def test_service_reports_non_object_specification_root_without_calling_agent(
     tmp_path: Path,
 ) -> None:
     coordinator = FakeAgent()
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=coordinator,
         rag_agent=FakeAgent(),
@@ -420,7 +422,7 @@ def test_service_switches_sticky_rag_state_when_user_rejects_vector_search(
     coordinator = FakeAgent()
     rag = FakeAgent()
     one_prompt = FakeAgent()
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=coordinator,
         rag_agent=rag,
@@ -463,7 +465,7 @@ def test_service_routes_web_search_without_vector_sources_to_one_prompt(
     coordinator = FakeAgent()
     rag = FakeAgent()
     one_prompt = FakeAgent()
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=coordinator,
         rag_agent=rag,
@@ -495,7 +497,7 @@ def test_service_routes_web_search_without_vector_sources_to_one_prompt(
 
 def test_service_provides_a_shared_user_files_directory(tmp_path: Path) -> None:
     fake_agent = FakeAgent()
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=fake_agent,
         rag_agent=fake_agent,
@@ -509,7 +511,7 @@ def test_service_provides_a_shared_user_files_directory(tmp_path: Path) -> None:
 
 def test_service_returns_an_authoritative_vector_index_part(tmp_path: Path) -> None:
     rag = IndexCreatingFakeAgent()
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=FakeAgent(),
         rag_agent=rag,
@@ -554,7 +556,7 @@ def test_service_keeps_uploaded_files_available_for_next_rag_turn(
     tmp_path: Path,
 ) -> None:
     rag = FakeAgent()
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=FakeAgent(),
         rag_agent=rag,
@@ -607,7 +609,7 @@ def test_service_commits_and_exports_only_finalized_specification(
     tmp_path: Path,
 ) -> None:
     one_prompt = FinalizingFakeAgent()
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=FakeAgent(),
         rag_agent=FakeAgent(),
@@ -641,7 +643,7 @@ def test_service_commits_and_exports_only_finalized_specification(
 
 def test_service_saves_upload_in_the_user_directory(tmp_path: Path) -> None:
     fake_agent = FakeAgent()
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=fake_agent,
         rag_agent=fake_agent,
@@ -661,7 +663,7 @@ def test_service_saves_upload_in_the_user_directory(tmp_path: Path) -> None:
 
 
 def test_service_sanitizes_unsafe_display_filename(tmp_path: Path) -> None:
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=FakeAgent(),
         rag_agent=FakeAgent(),
@@ -683,7 +685,7 @@ def test_service_builds_a_single_request_for_multiple_uploaded_files(
     tmp_path: Path,
 ) -> None:
     coordinator = FakeAgent()
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=coordinator,
         rag_agent=FakeAgent(),
@@ -713,7 +715,7 @@ def test_service_reuses_uploaded_files_after_coordinator_delegates_to_rag(
 ) -> None:
     coordinator = DelegatingFakeAgent()
     rag = FakeAgent()
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=coordinator,
         rag_agent=rag,
@@ -747,7 +749,7 @@ def test_service_reuses_uploaded_files_after_coordinator_delegates_to_rag(
 
 
 def test_service_commits_conversation_state_only_after_success(tmp_path: Path) -> None:
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=DelegatingFakeAgent(),
         rag_agent=FailingFakeAgent(),
@@ -774,7 +776,7 @@ def test_service_commits_conversation_state_only_after_success(tmp_path: Path) -
 
 
 def test_service_maps_provider_failure_to_application_error(tmp_path: Path) -> None:
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=ProviderFailingFakeAgent(),
         rag_agent=FakeAgent(),
@@ -811,10 +813,10 @@ def test_connection_validation_maps_provider_failure_to_application_error(
         responses=SimpleNamespace(create=reject_connection),
     )
     monkeypatch.setattr(
-        "ai_interaction_service.get_api_key_client",
+        "ai_studio_agent_builder.composition.get_api_key_client",
         lambda credentials, config: client,
     )
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=FakeAgent(),
         rag_agent=FakeAgent(),
@@ -835,7 +837,7 @@ def test_connection_validation_maps_provider_failure_to_application_error(
 def test_service_does_not_commit_specification_draft_after_failure(
     tmp_path: Path,
 ) -> None:
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=SpecDelegatingFakeAgent(),
         rag_agent=FailingFakeAgent(),
@@ -866,7 +868,7 @@ def test_service_context_uses_request_id_without_exposing_api_key(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     agent = FakeAgent()
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=agent,
         rag_agent=agent,
@@ -899,17 +901,11 @@ def test_service_context_uses_request_id_without_exposing_api_key(
 
 
 def test_service_uploads_files_before_running_rag_after_delegation(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path,
 ) -> None:
     coordinator = DelegatingFakeAgent()
     rag = FakeAgent()
-    service = AIInteractionService(
-        _service_config(tmp_path),
-        coordinator_agent=coordinator,
-        rag_agent=rag,
-        one_prompt_agent=FakeAgent(),
-    )
-    files_dir = service.user_files_dir("42")
+    files_dir = tmp_path / "files" / "42"
     files_dir.mkdir(parents=True)
     (files_dir / "first.pdf").write_bytes(b"first")
     (files_dir / "second.pdf").write_bytes(b"second")
@@ -921,7 +917,13 @@ def test_service_uploads_files_before_running_rag_after_delegation(
         uploaded.append(filename)
         return f"file-{filename}"
 
-    monkeypatch.setattr("ai_interaction_service.upload_local_file", fake_upload_file)
+    service = build_ai_interaction_service(
+        _service_config(tmp_path),
+        coordinator_agent=coordinator,
+        rag_agent=rag,
+        one_prompt_agent=FakeAgent(),
+        file_uploader=fake_upload_file,
+    )
 
     asyncio.run(
         service.interact(
@@ -953,7 +955,7 @@ def test_service_uploads_files_before_running_rag_after_delegation(
 def test_service_rejects_non_current_request_paths_before_upload(
     tmp_path: Path,
 ) -> None:
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=FakeAgent(),
         rag_agent=FakeAgent(),
@@ -980,7 +982,7 @@ def test_service_rejects_non_current_request_paths_before_upload(
 
 
 def test_service_rejects_preview_artifacts_before_upload(tmp_path: Path) -> None:
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=FakeAgent(),
         rag_agent=FakeAgent(),
@@ -1007,7 +1009,7 @@ def test_service_rejects_preview_artifacts_before_upload(tmp_path: Path) -> None
 
 
 def test_service_limits_attachments_per_request(tmp_path: Path) -> None:
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=FakeAgent(),
         rag_agent=FakeAgent(),
@@ -1039,7 +1041,7 @@ def test_service_limits_attachments_per_request(tmp_path: Path) -> None:
 
 def test_service_disables_sensitive_tracing(tmp_path: Path) -> None:
     rag = FakeAgent()
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=FakeAgent(),
         rag_agent=rag,
@@ -1068,7 +1070,7 @@ def test_service_disables_sensitive_tracing(tmp_path: Path) -> None:
 
 
 def test_reset_conversation_removes_saved_uploads(tmp_path: Path) -> None:
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=FakeAgent(),
         rag_agent=FakeAgent(),
@@ -1107,7 +1109,7 @@ def test_service_runs_serialized_specification_without_mutating_builder_state(
         factory_calls.append((client, folder_id))
         return runner
 
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=FakeAgent(),
         rag_agent=FakeAgent(),
@@ -1171,7 +1173,7 @@ def test_service_strictly_parses_specification_before_creating_runner(
         factory_calls.append((client, folder_id))
         return FakeGeneratedAgentRunner()
 
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=FakeAgent(),
         rag_agent=FakeAgent(),
@@ -1206,7 +1208,7 @@ def test_service_strictly_parses_specification_before_creating_runner(
 def test_service_rejects_invalid_agent_test_input(
     tmp_path: Path, user_input: str
 ) -> None:
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=FakeAgent(),
         rag_agent=FakeAgent(),
@@ -1239,7 +1241,7 @@ def test_service_hides_unexpected_runner_error_details(
     runner = FakeGeneratedAgentRunner(
         error=RuntimeError("api_key=AQAAAA-secret-provider-body")
     )
-    service = AIInteractionService(
+    service = build_ai_interaction_service(
         _service_config(tmp_path),
         coordinator_agent=FakeAgent(),
         rag_agent=FakeAgent(),

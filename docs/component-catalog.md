@@ -2,7 +2,8 @@
 
 Каталог компонентов описывает только те шаблоны и элементы, которые Agent
 Builder имеет право включать в экспортируемую `AgentSpecification`. Фактическая
-реализация находится в `src/component_catalog.py`.
+реализация находится в
+`src/ai_studio_agent_builder/domain/catalog.py`.
 
 ## Шаблоны
 

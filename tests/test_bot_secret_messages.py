@@ -1,6 +1,8 @@
 import asyncio
 
-from bot_handlers import _delete_secret_messages
+from ai_studio_agent_builder.presentation.telegram.handlers import (
+    _delete_secret_messages,
+)
 
 
 class FakeBot:

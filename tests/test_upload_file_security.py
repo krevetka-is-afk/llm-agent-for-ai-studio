@@ -1,7 +1,7 @@
 import pytest
 from typing import BinaryIO
 
-import custom_agents.tools.upload_files as upload_files_module
+import ai_studio_agent_builder.infrastructure.yandex_ai_studio.files_gateway as files_gateway_module
 from ai_studio_agent_builder.application.file_policy import (
     MAX_UPLOAD_BYTES,
     UnsafeUploadPathError,
@@ -87,4 +87,4 @@ def test_rag_agent_has_no_model_facing_upload_file_tool():
         "finish_dialog",
     }
     assert "upload_file" not in RAG_AGENT_INSTRUCTIONS
-    assert not hasattr(upload_files_module, "upload_file")
+    assert not hasattr(files_gateway_module, "upload_file")

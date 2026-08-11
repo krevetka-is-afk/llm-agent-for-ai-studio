@@ -7,15 +7,23 @@ from uuid import uuid4
 import pytest
 from openai.types import vector_store_create_params
 
-from agent_specification import (
+from ai_studio_agent_builder.application.dto import AIStudioCredentials
+from ai_studio_agent_builder.application.interaction import (
+    AgentTestRequest,
+    AgentTestResult,
+)
+from ai_studio_agent_builder.application.interaction_facade import (
+    AIInteractionService,
+)
+from ai_studio_agent_builder.builder.agents.tools.vector_index import (
+    DEFAULT_CHUNKING_STRATEGY,
+    _wait_for_vector_store_completed,
+)
+from ai_studio_agent_builder.composition import build_ai_interaction_service
+from ai_studio_agent_builder.domain.specification import (
     KnowledgeSource,
     build_one_prompt_specification,
     build_rag_specification,
-)
-from ai_interaction_service import (
-    AIInteractionService,
-    AgentTestRequest,
-    AgentTestResult,
 )
 from ai_studio_agent_builder.config import (
     AIServiceConfig,
@@ -25,13 +33,11 @@ from ai_studio_agent_builder.config import (
     PathConfig,
     SessionDBConfig,
 )
-from context import AIStudioCredentials, get_api_key_client
+from ai_studio_agent_builder.infrastructure.yandex_ai_studio.client_factory import (
+    get_api_key_client,
+)
 from ai_studio_agent_builder.infrastructure.yandex_ai_studio.files_gateway import (
     upload_local_file,
-)
-from ai_studio_agent_builder.builder.agents.tools.vector_index import (
-    DEFAULT_CHUNKING_STRATEGY,
-    _wait_for_vector_store_completed,
 )
 
 
@@ -93,7 +99,7 @@ def test_generated_one_prompt_runs_through_responses_api(tmp_path: Path) -> None
 
 async def _run_one_prompt(tmp_path: Path) -> None:
     credentials = _credentials()
-    service = AIInteractionService(_service_config(tmp_path))
+    service = build_ai_interaction_service(_service_config(tmp_path))
     specification = build_one_prompt_specification(
         purpose="Verify generated-agent runtime",
         instructions="Answer the user's request directly and concisely.",
@@ -118,7 +124,7 @@ def test_generated_web_search_runs_with_native_tool(tmp_path: Path) -> None:
 
 async def _run_web_search(tmp_path: Path) -> None:
     credentials = _credentials()
-    service = AIInteractionService(_service_config(tmp_path))
+    service = build_ai_interaction_service(_service_config(tmp_path))
     specification = build_one_prompt_specification(
         purpose="Answer questions using current public information",
         instructions=(
@@ -146,7 +152,7 @@ def test_generated_rag_runs_with_file_search(tmp_path: Path) -> None:
 async def _run_rag(tmp_path: Path) -> None:
     credentials = _credentials()
     config = _service_config(tmp_path)
-    service = AIInteractionService(config)
+    service = build_ai_interaction_service(config)
     client = get_api_key_client(credentials, config.connection)
     source_dir = tmp_path / "rag-source"
     source_dir.mkdir()

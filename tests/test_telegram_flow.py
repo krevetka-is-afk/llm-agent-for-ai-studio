@@ -1,6 +1,8 @@
 import asyncio
 
-from telegram_flow import PerUserRequestGate
+from ai_studio_agent_builder.presentation.telegram.request_gate import (
+    PerUserRequestGate,
+)
 
 
 def test_same_user_requests_are_serialized() -> None:

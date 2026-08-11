@@ -4,8 +4,9 @@
 создаваемого пользователем агента и отделён от runtime-объектов запроса
 `InteractionRequest`, `RequestContext` и внутреннего состояния coordinator.
 
-Фактическая модель находится в `src/agent_specification.py`, каталог шаблонов и
-компонентов — в `src/component_catalog.py`.
+Фактическая модель находится в
+`src/ai_studio_agent_builder/domain/specification.py`, каталог шаблонов и
+компонентов — в `src/ai_studio_agent_builder/domain/catalog.py`.
 
 ## Назначение
 

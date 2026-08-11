@@ -14,10 +14,9 @@
 - [ADR-0002: provider isolation](adr/0002-provider-isolation.md);
 - [ADR-0003: ownership жизненного цикла файлов](adr/0003-file-lifecycle-ownership.md).
 
-Domain, application, builder, infrastructure и Streamlit runtime уже размещены
-в installable package. Оставшиеся flat-модули являются временными compatibility
-entrypoints для Telegram и старых импортов; новая production-логика размещается
-только в целевых модулях из `target-package-layout.md`.
+Весь Python-код, включая Streamlit, Telegram и экспериментальный OAuth,
+находится в installable package `ai_studio_agent_builder`. Flat-модули и второе
+дерево импортов удалены; runtime запускается только через package entrypoints.
 
 ## Основной поток
 
@@ -65,25 +64,19 @@ entrypoints для Telegram и старых импортов; новая product
 
 ## Границы модулей
 
-- `credentials.py` — модели credentials и фабрики sync/async OpenAI clients.
-- `conversation_state.py` — mutable route, draft/latest specification,
-  ожидающие RAG-файлы и транзакционные `copy()`/`commit_from()`.
-- `routing.py` — детерминированное распознавание только явного выбора между
-  one-prompt и vector RAG; ambiguous intent не классифицирует.
-- `user_store.py` — экспериментальное in-memory хранилище Telegram-пользователей.
-- `request_context.py` — least-privilege context, доступный агентам и tools.
-- `component_catalog.py` — каталог шаблонов `one_prompt`/`rag` и компонентов
-  `system_prompt`, `web_search`, `vector_index`, `knowledge_search`.
-- `agent_specification.py` — переносимое JSON-описание создаваемого агента,
-  строгий `from_record()`, статусы `draft`/`needs_clarification`/`ready` и
-  детерминированная валидация.
-- `agent_runtime.py` — чистая компиляция готовой доменной спецификации в
-  версионированный `ExecutableAgentConfig`.
-- `agent_runner.py` — provider-neutral port запуска, preview, citations и
-  безопасная taxonomy runtime-ошибок.
-- `yandex_responses_runner.py` — Responses API adapter, provider model URI,
-  File Search preflight и нормализация ответа.
-- `context.py` — временный compatibility shim для стабильности старых импортов.
+- `application/dto.py` и `infrastructure/yandex_ai_studio/client_factory.py` —
+  модели credentials и фабрики sync/async OpenAI clients;
+- `application/builder_state.py` — mutable route, draft/latest specification,
+  ожидающие RAG-файлы и транзакционные `copy()`/`commit_from()`;
+- `domain/routing.py` — детерминированное распознавание только явного выбора
+  между one-prompt и vector RAG;
+- `builder/context.py` — least-privilege context, доступный агентам и tools;
+- `domain/catalog.py`, `specification.py`, `runtime.py` — каталог компонентов,
+  переносимая спецификация и чистый compiler в `ExecutableAgentConfig`;
+- `application/ports/agent_runner.py` — provider-neutral port запуска, preview,
+  citations и безопасная taxonomy runtime-ошибок;
+- `infrastructure/yandex_ai_studio/responses_runner.py` — Responses API adapter,
+  File Search preflight и нормализация ответа;
 - `application/builder_service.py` — routing, import спецификации и
   transaction boundary разговора;
 - `application/preview_service.py` — compile/test use case готовой
@@ -91,12 +84,12 @@ entrypoints для Telegram и старых импортов; новая product
 - `application/file_lifecycle.py` — lifecycle conversation uploads и session
   cleanup через ports;
 - `application/interaction_facade.py` — тонкий presentation-facing facade;
-- `ai_interaction_service.py` — временный compatibility constructor без
-  production orchestration.
-- `result_assembly.py` — authoritative tool results, `AgentSpecificationResultPart`
-  и их текстовая проекция.
-- `custom_agents/tools/agent_specification.py` — детерминированное обновление и
-  финализация спецификации через function tools.
+- `builder/result_assembly.py` — authoritative tool results,
+  `AgentSpecificationResultPart` и их текстовая проекция;
+- `builder/agents/tools/agent_specification.py` — детерминированное обновление и
+  финализация спецификации через function tools;
+- `infrastructure/persistence/telegram_user_store.py` — экспериментальное
+  in-memory хранилище Telegram-пользователей.
 
 Поддерживаемый Streamlit entrypoint — `ai_studio_agent_builder.entrypoints.web`,
 а детали presentation разделены:

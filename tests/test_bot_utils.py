@@ -1,4 +1,6 @@
-from bot_utils import sanitize_download_filename
+from ai_studio_agent_builder.presentation.telegram.media import (
+    sanitize_download_filename,
+)
 
 
 def test_telegram_filename_is_reduced_to_a_safe_basename() -> None:

@@ -1,28 +1,5 @@
-from context import (
-    AIStudioCredentials,
-    ConversationOptions,
-    ConversationState,
-    RequestContext,
-    UserCredentials,
-    UserStore,
-    get_api_key_client,
-    get_async_api_key_client,
-)
-from ai_studio_agent_builder.builder.context import (
-    RequestContext as PackagedRequestContext,
-)
-
-
-def test_context_keeps_public_compatibility_exports() -> None:
-    assert AIStudioCredentials
-    assert UserCredentials
-    assert ConversationOptions
-    assert ConversationState
-    assert UserStore
-    assert RequestContext
-    assert RequestContext is PackagedRequestContext
-    assert callable(get_api_key_client)
-    assert callable(get_async_api_key_client)
+from ai_studio_agent_builder.application.builder_state import ConversationState
+from ai_studio_agent_builder.domain.routing import ConversationOptions
 
 
 def test_conversation_state_defaults_to_coordinator() -> None:

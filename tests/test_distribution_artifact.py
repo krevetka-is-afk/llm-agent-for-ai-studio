@@ -15,7 +15,7 @@ REQUIRED_PACKAGE_FILES = {
     f"{PACKAGE_ROOT}entrypoints/web.py",
     f"{PACKAGE_ROOT}experimental/oauth/app.py",
 }
-LEGACY_WHEEL_PATHS = {
+LEGACY_SOURCE_PATHS = {
     "ai_interaction_service.py",
     "app.py",
     "custom_agents/",
@@ -54,7 +54,7 @@ def test_distribution_contains_the_package_and_imports_without_checkout(
     assert not any(
         path == legacy_path or path.startswith(legacy_path)
         for path in wheel_files
-        for legacy_path in LEGACY_WHEEL_PATHS
+        for legacy_path in LEGACY_SOURCE_PATHS
     )
 
     with tarfile.open(source_distribution, mode="r:gz") as archive:
@@ -64,6 +64,11 @@ def test_distribution_contains_the_package_and_imports_without_checkout(
     assert {
         f"src/{package_file}" for package_file in REQUIRED_PACKAGE_FILES
     } <= source_files
+    assert not any(
+        path == f"src/{legacy_path}" or path.startswith(f"src/{legacy_path}")
+        for path in source_files
+        for legacy_path in LEGACY_SOURCE_PATHS
+    )
 
     environment = os.environ.copy()
     environment.pop("PYTHONPATH", None)

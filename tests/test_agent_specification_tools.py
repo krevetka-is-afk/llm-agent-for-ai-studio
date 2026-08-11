@@ -1,7 +1,5 @@
 import json
 
-from agent_specification import AgentSpecificationStatus
-from component_catalog import TemplateId
 from ai_studio_agent_builder.application.builder_state import (
     ConversationOptions,
     ConversationState,
@@ -13,6 +11,8 @@ from ai_studio_agent_builder.builder.agents.tools.agent_specification import (
     _finalize_agent_specification_impl,
     _update_agent_specification_impl,
 )
+from ai_studio_agent_builder.domain.catalog import TemplateId
+from ai_studio_agent_builder.domain.specification import AgentSpecificationStatus
 
 
 def test_update_agent_specification_tracks_missing_fields() -> None:

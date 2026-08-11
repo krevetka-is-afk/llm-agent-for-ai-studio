@@ -2,9 +2,9 @@
 
 ## Решение
 
-Production-код переносится из flat `src/*.py` в installable package
-`ai_studio_agent_builder`. Миграция инкрементальная и не меняет пользовательское
-поведение или JSON-контракт `AgentSpecification 1.0`.
+Production-код перенесён из flat `src/*.py` в installable package
+`ai_studio_agent_builder`. Завершённая инкрементальная миграция не изменила
+пользовательское поведение или JSON-контракт `AgentSpecification 1.0`.
 
 ```text
 src/ai_studio_agent_builder/
@@ -118,7 +118,7 @@ UI, Agents SDK implementation, Yandex adapters, stores и experimental modules
 не являются стабильным public API. `__init__.py` не должен реэкспортировать
 внутренние реализации ради удобства.
 
-## Последовательность миграции
+## Выполненная последовательность миграции
 
 1. Добавить PEP 517 build backend и пустой package skeleton.
 2. Перенести domain/catalog/specification/runtime/routing без изменения логики.

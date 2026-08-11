@@ -12,8 +12,8 @@ from ai_studio_agent_builder.presentation.streamlit import user_guidance
 from ai_studio_agent_builder.presentation.streamlit.developer_bundle import (
     build_developer_bundle,
 )
-from agent_runtime import compile_agent_specification
-from agent_specification import (
+from ai_studio_agent_builder.domain.runtime import compile_agent_specification
+from ai_studio_agent_builder.domain.specification import (
     AgentSpecification,
     KnowledgeSource,
     build_one_prompt_specification,

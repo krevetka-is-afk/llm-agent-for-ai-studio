@@ -11,8 +11,8 @@ uv build --wheel --sdist
 uv run pre-commit run --all-files
 ```
 
-Тесты фиксируют runtime entrypoints, Docker/Compose contract, compatibility
-imports, transactional conversation state, явные routing overrides и различие
+Тесты фиксируют runtime entrypoints, Docker/Compose contract, единственное
+package-дерево, transactional conversation state, явные routing overrides и различие
 между web search и vector RAG, добавление/сохранение/удаление публичного
 `web_search` в one-prompt-спецификации, передачу `max_turns`, Telegram
 serialization/secret TTL, UI helpers, tooltip contracts, developer ZIP без
