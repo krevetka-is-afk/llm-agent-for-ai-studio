@@ -19,7 +19,13 @@ from ai_studio_agent_builder.application.ports import agent_runner
 from ai_studio_agent_builder.builder import context as builder_context
 from ai_studio_agent_builder.builder import result_assembly
 from ai_studio_agent_builder.builder.agents import sdk_event_adapter
-from ai_studio_agent_builder.domain import catalog, routing, runtime, specification
+from ai_studio_agent_builder.domain import (
+    catalog,
+    routing,
+    runtime,
+    specification,
+    specification_codec,
+)
 from ai_studio_agent_builder.infrastructure.yandex_ai_studio import (
     client_factory,
     files_gateway,
@@ -35,9 +41,33 @@ def test_public_api_reexports_stable_domain_contracts() -> None:
     assert public_api.TemplateId is catalog.TemplateId
     assert public_api.ToolDescriptor is specification.ToolDescriptor
     assert public_api.compile_agent_specification is runtime.compile_agent_specification
+    assert (
+        public_api.dump_agent_specification
+        is specification_codec.dump_agent_specification
+    )
+    assert (
+        public_api.dumps_agent_specification
+        is specification_codec.dumps_agent_specification
+    )
+    assert (
+        public_api.load_agent_specification
+        is specification_codec.load_agent_specification
+    )
+    assert (
+        public_api.loads_agent_specification
+        is specification_codec.loads_agent_specification
+    )
 
 
 def test_legacy_flat_imports_reference_packaged_contracts() -> None:
+    assert (
+        legacy_specification.InvalidSpecificationRootError
+        is specification_codec.InvalidSpecificationRootError
+    )
+    assert (
+        legacy_specification.loads_agent_specification
+        is specification_codec.loads_agent_specification
+    )
     assert (
         legacy_result_assembly.AgentRunCollector is sdk_event_adapter.AgentRunCollector
     )

@@ -321,6 +321,45 @@ def test_service_reports_invalid_agent_specification_json_without_calling_agent(
     assert coordinator.calls == []
 
 
+def test_service_reports_non_object_specification_root_without_calling_agent(
+    tmp_path: Path,
+) -> None:
+    coordinator = FakeAgent()
+    service = AIInteractionService(
+        _service_config(tmp_path),
+        coordinator_agent=coordinator,
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+    )
+    saved = service.save_attachment(
+        "42",
+        "agent-specification.json",
+        b"[]",
+        caption="Создай агента из этой спецификации",
+    )
+
+    with pytest.raises(
+        AgentSpecificationImportError,
+        match="Корень файла спецификации должен быть JSON-объектом",
+    ):
+        asyncio.run(
+            service.interact(
+                InteractionRequest(
+                    user_id="42",
+                    text="Создай агента из этой спецификации",
+                    credentials=AIStudioCredentials(
+                        api_key="AQAAAA-key", folder_id="folder"
+                    ),
+                    conversation_state=ConversationState(),
+                    user_files_dir=service.user_files_dir("42"),
+                    attachments=(saved,),
+                )
+            )
+        )
+
+    assert coordinator.calls == []
+
+
 def test_service_switches_sticky_rag_state_when_user_rejects_vector_search(
     tmp_path: Path,
 ) -> None:

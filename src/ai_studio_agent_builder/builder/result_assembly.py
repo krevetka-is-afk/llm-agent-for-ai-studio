@@ -5,6 +5,7 @@ from typing import Any, Literal, TypeAlias
 
 from ..domain.routing import ConversationOptions
 from ..domain.specification import AgentSpecification
+from ..domain.specification_codec import dump_agent_specification
 
 
 @dataclass(frozen=True)
@@ -177,7 +178,7 @@ def result_part_to_record(part: ResultPart) -> dict[str, Any]:
     if isinstance(part, AgentSpecificationResultPart):
         return {
             "kind": part.kind,
-            "specification": part.specification.to_record(),
+            "specification": dump_agent_specification(part.specification),
         }
     return {
         "kind": part.kind,

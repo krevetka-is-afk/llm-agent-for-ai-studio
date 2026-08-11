@@ -1,10 +1,12 @@
-import json
 from dataclasses import replace
 from typing import Any
 
 from agents import RunContextWrapper, function_tool
 
 from ai_studio_agent_builder.builder.context import RequestContext
+from ai_studio_agent_builder.domain.specification_codec import (
+    dumps_agent_specification,
+)
 from agent_specification import build_web_search_tool_descriptor
 
 
@@ -22,11 +24,7 @@ def _clean_text_tuple(values: list[str] | None) -> tuple[str, ...] | None:
 
 
 def _specification_response(specification: Any) -> str:
-    return json.dumps(
-        specification.to_record(),
-        ensure_ascii=False,
-        sort_keys=True,
-    )
+    return dumps_agent_specification(specification, indent=None)
 
 
 def _update_agent_specification_impl(

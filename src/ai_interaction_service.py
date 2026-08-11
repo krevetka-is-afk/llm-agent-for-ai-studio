@@ -1,6 +1,5 @@
 import asyncio
 import hashlib
-import json
 import logging
 import shutil
 import time
@@ -41,6 +40,16 @@ from ai_studio_agent_builder.domain.routing import (
     ConversationOptions,
     resolve_explicit_route,
 )
+from ai_studio_agent_builder.domain.specification import (
+    AgentSpecification,
+    InvalidSpecificationRecordError,
+)
+from ai_studio_agent_builder.domain.specification_codec import (
+    InvalidSpecificationJSONError,
+    InvalidSpecificationRootError,
+    load_agent_specification,
+    loads_agent_specification,
+)
 from ai_studio_agent_builder.infrastructure.yandex_ai_studio.client_factory import (
     get_api_key_client,
     get_async_api_key_client,
@@ -55,10 +64,6 @@ from agent_runtime import (
     AgentRuntimeCompilationError,
     ExecutableAgentConfig,
     compile_agent_specification,
-)
-from agent_specification import (
-    AgentSpecification,
-    InvalidSpecificationRecordError,
 )
 from custom_agents.coordinator_agent import build_coordinator_agent
 from custom_agents.one_prompt_agent import build_one_prompt_agent
@@ -223,7 +228,7 @@ class AIInteractionService:
         )
         started_at = time.monotonic()
         try:
-            specification = AgentSpecification.from_record(request.specification_record)
+            specification = load_agent_specification(request.specification_record)
             executable_config = self.prepare_agent_runtime(
                 request.specification_record,
                 specification=specification,
@@ -281,7 +286,7 @@ class AIInteractionService:
         *,
         specification: AgentSpecification | None = None,
     ) -> ExecutableAgentConfig:
-        trusted_specification = specification or AgentSpecification.from_record(
+        trusted_specification = specification or load_agent_specification(
             specification_record
         )
         return compile_agent_specification(
@@ -446,18 +451,20 @@ class AIInteractionService:
             ) from exc
 
         try:
-            record = json.loads(content)
-        except json.JSONDecodeError as exc:
+            specification = loads_agent_specification(content)
+        except InvalidSpecificationJSONError as exc:
+            location = (
+                f": строка {exc.lineno}, столбец {exc.colno}"
+                if exc.lineno is not None and exc.colno is not None
+                else ""
+            )
             raise AgentSpecificationImportError(
-                "Файл спецификации содержит некорректный JSON: "
-                f"строка {exc.lineno}, столбец {exc.colno}."
+                f"Файл спецификации содержит некорректный JSON{location}."
             ) from exc
-        if not isinstance(record, Mapping):
+        except InvalidSpecificationRootError as exc:
             raise AgentSpecificationImportError(
                 "Корень файла спецификации должен быть JSON-объектом."
-            )
-        try:
-            specification = AgentSpecification.from_record(record)
+            ) from exc
         except InvalidSpecificationRecordError as exc:
             raise AgentSpecificationImportError(
                 f"Файл не соответствует схеме AgentSpecification 1.0: {exc}"

@@ -8,6 +8,12 @@ from .domain.specification import (
     KnowledgeSource,
     ToolDescriptor,
 )
+from .domain.specification_codec import (
+    dump_agent_specification,
+    dumps_agent_specification,
+    load_agent_specification,
+    loads_agent_specification,
+)
 
 __all__ = [
     "AgentSpecification",
@@ -17,4 +23,8 @@ __all__ = [
     "TemplateId",
     "ToolDescriptor",
     "compile_agent_specification",
+    "dump_agent_specification",
+    "dumps_agent_specification",
+    "load_agent_specification",
+    "loads_agent_specification",
 ]
