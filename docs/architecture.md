@@ -1,5 +1,23 @@
 # Архитектура MVP
 
+Статус: текущая реализация с утверждённой целевой архитектурой для подготовки
+публичного `v0.1.0`.
+
+Подробные архитектурные артефакты:
+
+- [System context](architecture/system-context.md);
+- [Container view](architecture/container-view.md);
+- [Ключевые sequence flows](architecture/sequences.md);
+- [Жизненный цикл файлов и данных](architecture/file-data-lifecycle.md);
+- [Целевая структура Python package](architecture/target-package-layout.md);
+- [ADR-0001: package boundaries](adr/0001-package-boundaries.md);
+- [ADR-0002: provider isolation](adr/0002-provider-isolation.md);
+- [ADR-0003: ownership жизненного цикла файлов](adr/0003-file-lifecycle-ownership.md).
+
+Текущие flat-модули ниже остаются фактическим описанием до завершения
+инкрементальной package-миграции. Новая production-логика должна размещаться в
+целевых модулях из `target-package-layout.md`, а не увеличивать flat `src/*.py`.
+
 ## Основной поток
 
 1. Web UI или Telegram adapter формирует `InteractionRequest` с уникальным
@@ -104,7 +122,6 @@ temperature и output budget не смешиваются с подтверждё
 
 ## Осознанно отложено
 
-- полный перенос flat modules в единый installable package;
 - постоянное хранение спецификаций за пределами текущей пользовательской сессии;
 - постоянное хранилище Telegram accounts и миграции;
 - интеграция OAuth Gateway в основной credential flow;
@@ -114,3 +131,7 @@ temperature и output budget не смешиваются с подтверждё
 
 Эти изменения не нужны для текущего MVP и расширили бы blast radius перед
 релизом.
+
+Перенос flat modules в installable package больше не отложен: он выполняется
+перед Code Interpreter как отдельная, сохраняющая поведение миграция. Причины и
+границы решения зафиксированы в [ADR-0001](adr/0001-package-boundaries.md).
