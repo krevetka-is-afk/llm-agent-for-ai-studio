@@ -20,6 +20,7 @@ flowchart TB
         preview_service["AgentPreviewService"]
         conversation_files["ConversationFileService"]
         preview_input_files["PreviewInputFileLifecycle"]
+        preview_output_files["PreviewOutputFileLifecycle"]
         ports["Application ports"]
     end
 
@@ -47,11 +48,13 @@ flowchart TB
     builder_service --> domain
     preview_service --> domain
     preview_service --> preview_input_files
+    preview_service --> preview_output_files
     builder_service --> conversation_files
     builder_service --> ports
     preview_service --> ports
     conversation_files --> ports
     preview_input_files --> ports
+    preview_output_files --> ports
     agents --> assembly
     agents -. "implements BuilderRunPort" .-> ports
     yandex -. "implements" .-> ports

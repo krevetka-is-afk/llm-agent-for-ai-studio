@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
@@ -179,6 +181,11 @@ def test_runner_extracts_usage_and_known_citations() -> None:
         },
         "output": [
             {
+                "type": "code_interpreter_call",
+                "container_id": "container-1",
+                "status": "completed",
+            },
+            {
                 "content": [
                     {
                         "annotations": [
@@ -192,11 +199,17 @@ def test_runner_extracts_usage_and_known_citations() -> None:
                                 "file_id": "file-1",
                                 "filename": "guide.pdf",
                             },
+                            {
+                                "type": "container_file_citation",
+                                "container_id": "container-1",
+                                "file_id": "file-output-1",
+                                "filename": "result.csv",
+                            },
                             {"type": "future_annotation", "secret": "ignored"},
                         ]
                     }
                 ]
-            }
+            },
         ],
     }
     runner = YandexResponsesAgentRunner(FakeClient(response=response), folder_id="f")
@@ -210,6 +223,11 @@ def test_runner_extracts_usage_and_known_citations() -> None:
         ("url", "Yandex docs"),
         ("file", "guide.pdf"),
     ]
+    assert [
+        (artifact.file_id, artifact.filename, artifact.container_id)
+        for artifact in preview.generated_artifacts
+    ] == [("file-output-1", "result.csv", "container-1")]
+    assert preview.container_ids == ("container-1",)
 
 
 def test_runner_ignores_unknown_annotation_shapes() -> None:
@@ -225,6 +243,25 @@ def test_runner_ignores_unknown_annotation_shapes() -> None:
 
     assert preview.citations == ()
     assert preview.input_tokens is None
+
+
+def test_runner_normalizes_anonymized_code_interpreter_contract_fixture() -> None:
+    fixture_path = (
+        Path(__file__).parent
+        / "fixtures"
+        / "code_interpreter"
+        / "yandex_response_contract.json"
+    )
+    response = json.loads(fixture_path.read_text(encoding="utf-8"))
+    runner = YandexResponsesAgentRunner(FakeClient(response=response), folder_id="f")
+
+    preview = runner.run(_config(), "Question")
+
+    assert preview.citations == ()
+    assert preview.generated_artifacts[0].file_id == "<file_id>"
+    assert preview.generated_artifacts[0].filename == "result.csv"
+    assert preview.generated_artifacts[0].container_id == "<container_id>"
+    assert preview.container_ids == ("<container_id>",)
 
 
 def test_runner_normalizes_timeout_and_unknown_provider_errors() -> None:

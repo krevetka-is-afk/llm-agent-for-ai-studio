@@ -14,6 +14,7 @@ from .application.dto import AIStudioCredentials
 from .application.file_lifecycle import (
     ConversationFileService,
     PreviewInputFileLifecycle,
+    PreviewOutputFileLifecycle,
 )
 from .application.interaction_facade import (
     AIInteractionComponents,
@@ -27,6 +28,7 @@ from .application.ports.conversation_storage import (
     ConversationSessionStore,
 )
 from .application.ports.file_resource_gateway import FileResourceGatewayFactory
+from .application.ports.generated_artifact_store import GeneratedArtifactStore
 from .application.preview_service import AgentPreviewService
 from .application.settings import AIServiceConfig, AppConfig
 from .builder.agents.coordinator_agent import build_coordinator_agent
@@ -102,6 +104,7 @@ def build_ai_interaction_service(
     generated_agent_runner_factory: AgentRunnerFactory | None = None,
     file_resource_gateway_factory: FileResourceGatewayFactory | None = None,
     attachment_store: AttachmentStore | None = None,
+    generated_artifact_store: GeneratedArtifactStore | None = None,
     conversation_session_store: ConversationSessionStore | None = None,
     sync_client_factory: ClientFactory | None = None,
     async_client_factory: ClientFactory | None = None,
@@ -119,6 +122,7 @@ def build_ai_interaction_service(
             generated_agent_runner_factory=generated_agent_runner_factory,
             file_resource_gateway_factory=file_resource_gateway_factory,
             attachment_store=attachment_store,
+            generated_artifact_store=generated_artifact_store,
             conversation_session_store=conversation_session_store,
             sync_client_factory=sync_client_factory,
             async_client_factory=async_client_factory,
@@ -139,6 +143,7 @@ def build_ai_interaction_components(
     generated_agent_runner_factory: AgentRunnerFactory | None = None,
     file_resource_gateway_factory: FileResourceGatewayFactory | None = None,
     attachment_store: AttachmentStore | None = None,
+    generated_artifact_store: GeneratedArtifactStore | None = None,
     conversation_session_store: ConversationSessionStore | None = None,
     sync_client_factory: ClientFactory | None = None,
     async_client_factory: ClientFactory | None = None,
@@ -178,6 +183,9 @@ def build_ai_interaction_components(
     attachment_store = attachment_store or LocalAttachmentStore(
         config.paths.uploaded_files_dir
     )
+    generated_artifact_store = generated_artifact_store or LocalAttachmentStore(
+        config.paths.uploaded_files_dir
+    )
     file_resource_gateway_factory = (
         file_resource_gateway_factory
         or YandexFileResourceGatewayFactory(sync_client_factory)
@@ -201,10 +209,15 @@ def build_ai_interaction_components(
                 attachment_store,
                 file_resource_gateway_factory,
             ),
+            PreviewOutputFileLifecycle(
+                generated_artifact_store,
+                file_resource_gateway_factory,
+            ),
         ),
         files=ConversationFileService(
             attachment_store,
             conversation_session_store,
+            generated_artifact_store,
         ),
         connection_validator=connection_validator,
     )

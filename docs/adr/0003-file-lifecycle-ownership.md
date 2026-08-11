@@ -24,8 +24,9 @@ lifecycle:
 5. удаляет partial local output;
 6. выполняет cleanup всех известных remote resources в `finally`.
 
-CI-4 добавляет output lifecycle в application layer под тем же ownership
-контрактом, не перенося download или cleanup в UI/runner.
+CI-4 реализует `PreviewOutputFileLifecycle` под тем же ownership-контрактом:
+runner возвращает typed remote references, application выполняет bounded
+streaming download и cleanup, UI получает только local handles.
 
 Infrastructure `FileResourceGateway` реализует атомарные provider operations.
 Runner только возвращает artifact references. UI отображает local artifact DTO

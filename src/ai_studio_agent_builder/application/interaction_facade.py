@@ -51,6 +51,9 @@ class AIInteractionService:
             caption=caption,
         )
 
+    def read_generated_file(self, user_id: str, local_name: str) -> bytes:
+        return self._components.files.read_generated_file(user_id, local_name)
+
     async def validate_connection(self, credentials: AIStudioCredentials) -> None:
         await self._components.connection_validator.validate(credentials)
 

@@ -15,6 +15,13 @@ class AgentCitation:
 
 
 @dataclass(frozen=True)
+class RemoteArtifactReference:
+    file_id: str
+    filename: str
+    container_id: str | None = None
+
+
+@dataclass(frozen=True)
 class AgentRunPreview:
     response_id: str
     output_text: str
@@ -22,6 +29,8 @@ class AgentRunPreview:
     input_tokens: int | None = None
     output_tokens: int | None = None
     total_tokens: int | None = None
+    generated_artifacts: tuple[RemoteArtifactReference, ...] = ()
+    container_ids: tuple[str, ...] = ()
 
 
 class AgentRunner(Protocol):
@@ -72,5 +81,6 @@ __all__ = [
     "AgentRunner",
     "AgentRunnerError",
     "AgentRunnerFactory",
+    "RemoteArtifactReference",
     "VectorStoreUnavailableError",
 ]

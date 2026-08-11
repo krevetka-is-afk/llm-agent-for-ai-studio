@@ -10,6 +10,7 @@ from ...application.ports.agent_runner import (
     AgentProviderTimeoutError,
     AgentRunPreview,
     AgentRunner,
+    RemoteArtifactReference,
     VectorStoreUnavailableError,
 )
 from ...domain.runtime import ExecutableAgentConfig
@@ -96,42 +97,94 @@ def _normalize_response(response: Any) -> AgentRunPreview:
         input_tokens=_optional_int(_value(usage, "input_tokens")),
         output_tokens=_optional_int(_value(usage, "output_tokens")),
         total_tokens=_optional_int(_value(usage, "total_tokens")),
+        generated_artifacts=_extract_generated_artifacts(response),
+        container_ids=_extract_container_ids(response),
     )
 
 
 def _extract_citations(response: Any) -> tuple[AgentCitation, ...]:
     citations: list[AgentCitation] = []
     seen: set[tuple[Any, ...]] = set()
+    for annotation in _response_annotations(response):
+        citation = _citation_from_annotation(annotation)
+        if citation is None:
+            continue
+        fingerprint = (
+            citation.kind,
+            citation.title,
+            citation.url,
+            citation.file_id,
+            citation.filename,
+        )
+        if fingerprint not in seen:
+            seen.add(fingerprint)
+            citations.append(citation)
+    return tuple(citations)
+
+
+def _extract_generated_artifacts(
+    response: Any,
+) -> tuple[RemoteArtifactReference, ...]:
+    references: list[RemoteArtifactReference] = []
+    for annotation in _response_annotations(response):
+        if _value(annotation, "type") != "container_file_citation":
+            continue
+        file_id = _optional_string(_value(annotation, "file_id"))
+        filename = _optional_string(_value(annotation, "filename"))
+        if not file_id or not filename:
+            continue
+        references.append(
+            RemoteArtifactReference(
+                file_id=file_id,
+                filename=filename,
+                container_id=_optional_string(_value(annotation, "container_id")),
+            )
+        )
+    return tuple(references)
+
+
+def _extract_container_ids(response: Any) -> tuple[str, ...]:
+    container_ids: list[str] = []
     output = _value(response, "output")
-    if not isinstance(output, Sequence) or isinstance(output, str | bytes | bytearray):
+    if isinstance(output, Sequence) and not isinstance(
+        output,
+        str | bytes | bytearray,
+    ):
+        for item in output:
+            if _value(item, "type") != "code_interpreter_call":
+                continue
+            container_id = _optional_string(_value(item, "container_id"))
+            if container_id and container_id not in container_ids:
+                container_ids.append(container_id)
+    for reference in _extract_generated_artifacts(response):
+        if reference.container_id and reference.container_id not in container_ids:
+            container_ids.append(reference.container_id)
+    return tuple(container_ids)
+
+
+def _response_annotations(response: Any) -> tuple[Any, ...]:
+    annotations: list[Any] = []
+    output = _value(response, "output")
+    if not isinstance(output, Sequence) or isinstance(
+        output,
+        str | bytes | bytearray,
+    ):
         return ()
     for item in output:
         content = _value(item, "content")
         if not isinstance(content, Sequence) or isinstance(
-            content, str | bytes | bytearray
+            content,
+            str | bytes | bytearray,
         ):
             continue
         for content_item in content:
-            annotations = _value(content_item, "annotations")
-            if not isinstance(annotations, Sequence) or isinstance(
-                annotations, str | bytes | bytearray
+            item_annotations = _value(content_item, "annotations")
+            if isinstance(item_annotations, Sequence) and not isinstance(
+                item_annotations,
+                str | bytes | bytearray,
             ):
-                continue
-            for annotation in annotations:
-                citation = _citation_from_annotation(annotation)
-                if citation is None:
-                    continue
-                fingerprint = (
-                    citation.kind,
-                    citation.title,
-                    citation.url,
-                    citation.file_id,
-                    citation.filename,
-                )
-                if fingerprint not in seen:
-                    seen.add(fingerprint)
-                    citations.append(citation)
-    return tuple(citations)
+                annotations.extend(item_annotations)
+    return tuple(annotations)
 
 
 def _citation_from_annotation(annotation: Any) -> AgentCitation | None:
@@ -142,7 +195,7 @@ def _citation_from_annotation(annotation: Any) -> AgentCitation | None:
             title=_optional_string(_value(annotation, "title")),
             url=_optional_string(_value(annotation, "url")),
         )
-    if annotation_type in {"file_citation", "container_file_citation", "file_path"}:
+    if annotation_type in {"file_citation", "file_path"}:
         filename = _optional_string(_value(annotation, "filename"))
         return AgentCitation(
             kind="file",

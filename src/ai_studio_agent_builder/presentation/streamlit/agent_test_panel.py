@@ -24,6 +24,7 @@ from ai_studio_agent_builder.domain.specification import (
 )
 
 from .user_guidance import render_agent_next_steps
+from .attachments import render_generated_preview
 
 
 PREVIEW_STATE_PREFIX = "agent-test-preview:"
@@ -54,18 +55,29 @@ RUNTIME_CONFIG_HELP = (
     "в файл не входят."
 )
 MAX_REFERENCE_LABEL_LENGTH = 48
+GENERATED_FILE_WARNING_MESSAGES = {
+    "too_many": "Часть созданных файлов не показана: превышен лимит количества.",
+    "too_large": "Часть созданных файлов не сохранена: превышен лимит размера.",
+    "download_failed": "Не удалось скачать один или несколько созданных файлов.",
+    "cleanup_failed": (
+        "Не удалось полностью очистить временные файлы в AI Studio; "
+        "они будут удалены по TTL провайдера."
+    ),
+}
 
 RuntimeConfigCallback = Callable[[Mapping[str, Any]], str]
 AgentTestCallback = Callable[
     [Mapping[str, Any], str, str],
     AgentTestResult,
 ]
+GeneratedFileReader = Callable[[str], bytes]
 
 
 @dataclass(frozen=True)
 class AgentSpecificationActions:
     runtime_config_json: RuntimeConfigCallback
     test_agent: AgentTestCallback | None = None
+    generated_file_reader: GeneratedFileReader | None = None
 
 
 @dataclass(frozen=True)
@@ -202,7 +214,11 @@ def render_agent_test_panel(
                     st.session_state[state_key] = cached_preview
 
     if isinstance(cached_preview, AgentPreviewState):
-        render_agent_preview(cached_preview.result)
+        render_agent_preview(
+            cached_preview.result,
+            generated_file_reader=actions.generated_file_reader,
+            key_prefix=key_prefix,
+        )
         render_agent_next_steps(
             specification,
             runtime_json,
@@ -228,7 +244,12 @@ def render_agent_test_panel(
         )
 
 
-def render_agent_preview(result: AgentTestResult | AgentRunPreview) -> None:
+def render_agent_preview(
+    result: AgentTestResult | AgentRunPreview,
+    *,
+    generated_file_reader: GeneratedFileReader | None = None,
+    key_prefix: str = "agent-preview",
+) -> None:
     st.markdown("#### Результат тестирования")
     if result.output_text:
         st.markdown(result.output_text)
@@ -238,10 +259,8 @@ def render_agent_preview(result: AgentTestResult | AgentRunPreview) -> None:
     if result.citations:
         st.markdown("**Источники ответа**", help=SOURCES_HELP)
         for number, citation in enumerate(result.citations, start=1):
-            title = (
-                citation.title or citation.filename or citation.file_id or "Источник"
-            )
-            reference = citation.url or citation.filename or citation.file_id
+            title = citation.title or citation.filename or "Источник"
+            reference = citation.url or citation.filename
             st.markdown(
                 citation_markdown(
                     number,
@@ -249,6 +268,44 @@ def render_agent_preview(result: AgentTestResult | AgentRunPreview) -> None:
                     reference,
                 )
             )
+
+    generated_files = getattr(result, "generated_files", ())
+    generated_file_warnings = getattr(result, "generated_file_warnings", ())
+    if generated_files:
+        st.markdown("**Файлы, созданные агентом**")
+        if generated_file_reader is None:
+            st.info("Скачивание созданных файлов в этом представлении недоступно.")
+        else:
+            for index, generated_file in enumerate(generated_files):
+                try:
+                    data = generated_file_reader(generated_file.local_name)
+                except Exception:
+                    st.warning(
+                        f"Файл «{generated_file.display_name}» больше недоступен."
+                    )
+                    continue
+                st.caption(
+                    f"📎 {generated_file.display_name} · "
+                    f"{generated_file.size_bytes:,} байт"
+                )
+                st.download_button(
+                    "Скачать созданный файл",
+                    data=data,
+                    file_name=generated_file.display_name,
+                    mime=generated_file.mime_type,
+                    key=f"{key_prefix}-generated-file-{index}",
+                )
+                if generated_file.inline_preview_allowed:
+                    with st.expander(
+                        f"Просмотреть {generated_file.display_name}",
+                        expanded=False,
+                    ):
+                        render_generated_preview(data, generated_file.mime_type)
+
+    for warning in generated_file_warnings:
+        message = GENERATED_FILE_WARNING_MESSAGES.get(warning.code)
+        if message:
+            st.warning(message)
 
     token_metrics = [
         ("Входные токены", result.input_tokens, INPUT_TOKENS_HELP),

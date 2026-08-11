@@ -59,7 +59,7 @@ sequenceDiagram
     UI-->>User: text, citations, usage
 ```
 
-## Реализованный Code Interpreter input preview (CI-3)
+## Реализованный Code Interpreter preview (CI-3/CI-4)
 
 ```mermaid
 sequenceDiagram
@@ -90,14 +90,18 @@ sequenceDiagram
     Runner->>API: Responses.create with auto container
     API-->>Runner: raw response + citations
     Runner-->>Preview: AgentRunPreview
+    loop each accepted generated artifact
+        Preview->>Files: materialize remote reference
+        Files->>Gateway: stream file content in bounded chunks
+        Gateway->>API: Files.content streaming response
+        Files->>Files: atomic local write + MIME safety classification
+    end
+    Files->>Gateway: delete known output files and containers
     Preview->>Files: leave context
     Files->>Gateway: delete all known remote input refs
-    Preview-->>UI: AgentTestResult
-    UI-->>User: text, citations and usage
+    Preview-->>UI: AgentTestResult + local generated file handles
+    UI-->>User: text, citations, usage and safe downloads
 ```
-
-Скачивание generated artifacts добавляется отдельно в CI-4. Оно использует ту
-же ownership policy, но не меняет input binding и базовый runtime config.
 
 ## Failure semantics Code Interpreter
 

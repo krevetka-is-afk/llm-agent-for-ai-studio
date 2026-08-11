@@ -136,6 +136,61 @@ render_result_parts(
     )
 
 
+def test_result_view_renders_generated_file_download_without_provider_ids() -> None:
+    app = AppTest.from_string(
+        """
+from ai_studio_agent_builder.application.interaction import AgentTestResult, GeneratedFile
+from ai_studio_agent_builder.presentation.streamlit.agent_test_panel import AgentSpecificationActions
+from ai_studio_agent_builder.presentation.streamlit.result_view import render_result_parts
+
+def test_agent(specification, user_input, request_id):
+    return AgentTestResult(
+        response_id="resp-test",
+        output_text="Файл готов",
+        citations=(),
+        generated_files=(
+            GeneratedFile(
+                local_name="stored-result.csv",
+                display_name="result.csv",
+                mime_type="text/csv",
+                size_bytes=19,
+                inline_preview_allowed=True,
+            ),
+        ),
+    )
+
+actions = AgentSpecificationActions(
+    runtime_config_json=lambda specification: '{"schema_version":"1.0"}',
+    test_agent=test_agent,
+    generated_file_reader=lambda local_name: b"metric,value\\nresult,100\\n",
+)
+render_result_parts(
+    [{
+        "kind": "agent_specification",
+        "specification": {"template": "one_prompt", "status": "ready"},
+    }],
+    key_prefix="generated-artifact",
+    agent_actions=actions,
+)
+"""
+    ).run()
+
+    app.text_area[0].set_value("Создай CSV")
+    app.button[0].click()
+    app.run()
+
+    assert not app.exception
+    assert any("Файлы, созданные агентом" in item.value for item in app.markdown)
+    assert any("result.csv" in item.value for item in app.caption)
+    rendered_text = "\n".join(
+        str(item.value)
+        for collection in (app.markdown, app.caption, app.warning, app.info)
+        for item in collection
+    )
+    assert "file-output" not in rendered_text
+    assert "container-" not in rendered_text
+
+
 def test_result_view_hides_test_action_when_disconnected() -> None:
     app = AppTest.from_string(
         """

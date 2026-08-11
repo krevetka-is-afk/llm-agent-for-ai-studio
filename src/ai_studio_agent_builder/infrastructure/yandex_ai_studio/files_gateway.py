@@ -1,3 +1,5 @@
+from collections.abc import Iterator
+from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Any, BinaryIO, Protocol
 
@@ -12,15 +14,36 @@ from ...application.ports.agent_runner import (
 from ...application.ports.file_resource_gateway import FileResourceGateway
 
 
+class _StreamingBinaryResponse(Protocol):
+    def iter_bytes(self, chunk_size: int | None = None) -> Iterator[bytes]: ...
+
+
+class _StreamingFilesResource(Protocol):
+    def content(
+        self,
+        file_id: str,
+    ) -> AbstractContextManager[_StreamingBinaryResponse]: ...
+
+
 class _FilesResource(Protocol):
     def create(self, *, file: BinaryIO, purpose: str) -> Any: ...
 
     def delete(self, file_id: str) -> Any: ...
 
+    @property
+    def with_streaming_response(self) -> _StreamingFilesResource: ...
+
+
+class _ContainersResource(Protocol):
+    def delete(self, container_id: str) -> Any: ...
+
 
 class _UploadClient(Protocol):
     @property
     def files(self) -> _FilesResource: ...
+
+    @property
+    def containers(self) -> _ContainersResource: ...
 
 
 def upload_local_file(client: _UploadClient, base_dir: Path, filename: str) -> str:
@@ -69,9 +92,37 @@ class YandexFileResourceGateway(FileResourceGateway):
             purpose="user_data",
         )
 
+    def iter_file_bytes(
+        self,
+        file_id: str,
+        *,
+        chunk_size: int,
+    ) -> Iterator[bytes]:
+        try:
+            with self._client.files.with_streaming_response.content(
+                file_id
+            ) as response:
+                yield from response.iter_bytes(chunk_size=chunk_size)
+        except (APITimeoutError, TimeoutError) as exc:
+            raise AgentProviderTimeoutError() from exc
+        except APIError as exc:
+            raise _provider_error(exc) from exc
+        except Exception as exc:
+            raise AgentProviderError() from exc
+
     def delete_file(self, file_id: str) -> None:
         try:
             self._client.files.delete(file_id)
+        except (APITimeoutError, TimeoutError) as exc:
+            raise AgentProviderTimeoutError() from exc
+        except APIError as exc:
+            raise _provider_error(exc) from exc
+        except Exception as exc:
+            raise AgentProviderError() from exc
+
+    def delete_container(self, container_id: str) -> None:
+        try:
+            self._client.containers.delete(container_id)
         except (APITimeoutError, TimeoutError) as exc:
             raise AgentProviderTimeoutError() from exc
         except APIError as exc:

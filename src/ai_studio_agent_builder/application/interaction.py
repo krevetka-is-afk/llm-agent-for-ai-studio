@@ -3,7 +3,7 @@
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 from uuid import uuid4
 
 from ai_studio_agent_builder.domain.routing import ConversationOptions
@@ -17,6 +17,9 @@ from .ports.agent_runner import AgentCitation
 MAX_ATTACHMENTS_PER_REQUEST = 5
 MAX_TOTAL_UPLOAD_BYTES = 25 * 1024 * 1024
 MAX_AGENT_TEST_INPUT_LENGTH = 10_000
+MAX_GENERATED_FILES_PER_REQUEST = 10
+MAX_GENERATED_FILE_BYTES = 10 * 1024 * 1024
+MAX_TOTAL_GENERATED_BYTES = 25 * 1024 * 1024
 UPLOAD_RETENTION_POLICY = (
     "User upload directories are request-scoped for model access and are removed "
     "when the user resets the conversation."
@@ -41,6 +44,28 @@ class Attachment:
     display_name: str | None = None
     caption: str | None = None
     file_id: str | None = None
+
+
+@dataclass(frozen=True)
+class GeneratedFile:
+    local_name: str
+    display_name: str
+    mime_type: str
+    size_bytes: int
+    inline_preview_allowed: bool
+
+
+GeneratedFileWarningCode = Literal[
+    "too_many",
+    "too_large",
+    "download_failed",
+    "cleanup_failed",
+]
+
+
+@dataclass(frozen=True)
+class GeneratedFileWarning:
+    code: GeneratedFileWarningCode
 
 
 @dataclass(frozen=True)
@@ -82,6 +107,8 @@ class AgentTestResult:
     input_tokens: int | None = None
     output_tokens: int | None = None
     total_tokens: int | None = None
+    generated_files: tuple[GeneratedFile, ...] = ()
+    generated_file_warnings: tuple[GeneratedFileWarning, ...] = ()
 
 
 class AIInteraction(Protocol):
@@ -96,6 +123,8 @@ class AIInteraction(Protocol):
         content: bytes,
         caption: str | None = None,
     ) -> Attachment: ...
+
+    def read_generated_file(self, user_id: str, local_name: str) -> bytes: ...
 
     async def validate_connection(self, credentials: AIStudioCredentials) -> None: ...
 
@@ -121,10 +150,16 @@ __all__ = [
     "AgentTestRequest",
     "AgentTestResult",
     "Attachment",
+    "GeneratedFile",
+    "GeneratedFileWarning",
+    "GeneratedFileWarningCode",
     "InteractionRequest",
     "InteractionResult",
     "MAX_AGENT_TEST_INPUT_LENGTH",
     "MAX_ATTACHMENTS_PER_REQUEST",
+    "MAX_GENERATED_FILE_BYTES",
+    "MAX_GENERATED_FILES_PER_REQUEST",
+    "MAX_TOTAL_GENERATED_BYTES",
     "MAX_TOTAL_UPLOAD_BYTES",
     "UPLOAD_RETENTION_POLICY",
     "UploadValidationError",

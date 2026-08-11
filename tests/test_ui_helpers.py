@@ -28,6 +28,7 @@ from ai_studio_agent_builder.presentation.streamlit.agent_test_panel import (
     specification_fingerprint,
 )
 from ai_studio_agent_builder.presentation.streamlit.attachments import (
+    generated_preview_kind_for_mime,
     preview_kind_for_mime,
 )
 from ai_studio_agent_builder.presentation.streamlit.chat_flow import (
@@ -59,6 +60,18 @@ def test_attachment_record_preserves_saved_and_original_filename() -> None:
 
 def test_pdf_preview_is_download_only() -> None:
     assert preview_kind_for_mime("application/pdf") == "download_only"
+
+
+def test_generated_artifact_preview_uses_strict_mime_allowlist() -> None:
+    assert generated_preview_kind_for_mime("image/png") == "image"
+    assert generated_preview_kind_for_mime("text/csv") == "text"
+    for mime_type in (
+        "image/svg+xml",
+        "text/html",
+        "application/xml",
+        "application/octet-stream",
+    ):
+        assert generated_preview_kind_for_mime(mime_type) == "download_only"
 
 
 def test_chat_flow_builds_fallback_content_for_multiple_files() -> None:
@@ -158,6 +171,7 @@ def test_chat_flow_builds_callbacks_without_exposing_connection_to_result_view()
     class FakeService:
         def __init__(self) -> None:
             self.test_request: AgentTestRequest | None = None
+            self.generated_file_reads: list[tuple[str, str]] = []
 
         def prepare_agent_runtime(self, specification):
             return SimpleNamespace(to_json=lambda: '{"model_name":"test-model"}')
@@ -169,6 +183,10 @@ def test_chat_flow_builds_callbacks_without_exposing_connection_to_result_view()
                 output_text="Answer",
                 citations=(),
             )
+
+        def read_generated_file(self, user_id: str, local_name: str) -> bytes:
+            self.generated_file_reads.append((user_id, local_name))
+            return b"generated"
 
     service = FakeService()
     disconnected = build_agent_specification_actions(
@@ -195,3 +213,6 @@ def test_chat_flow_builds_callbacks_without_exposing_connection_to_result_view()
     assert service.test_request.user_id == "web-user"
     assert service.test_request.request_id == "request-1"
     assert service.test_request.credentials.folder_id == "folder-1"
+    assert connected.generated_file_reader is not None
+    assert connected.generated_file_reader("stored.csv") == b"generated"
+    assert service.generated_file_reads == [("web-user", "stored.csv")]

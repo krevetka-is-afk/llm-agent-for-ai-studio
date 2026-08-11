@@ -44,6 +44,8 @@ def test_code_interpreter_fixture_is_anonymized_and_covers_artifact_contract() -
                 "filename",
                 "start_index",
             ],
+            "container_id": "<container_id>",
+            "file_id": "<file_id>",
             "filename": "result.csv",
         }
     ]

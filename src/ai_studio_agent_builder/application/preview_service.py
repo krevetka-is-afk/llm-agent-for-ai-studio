@@ -9,11 +9,14 @@ from typing import Any
 
 from ai_studio_agent_builder.application.file_lifecycle import (
     PreviewInputFileLifecycle,
+    PreviewOutputFileLifecycle,
 )
 from ai_studio_agent_builder.application.interaction import (
     AgentTestInputError,
     AgentTestRequest,
     AgentTestResult,
+    GeneratedFile,
+    GeneratedFileWarning,
     MAX_AGENT_TEST_INPUT_LENGTH,
 )
 from ai_studio_agent_builder.application.ports.agent_runner import (
@@ -46,10 +49,12 @@ class AgentPreviewService:
         runtime_settings: AgentRuntimeSettings,
         runner_factory: AgentRunnerFactory,
         input_file_lifecycle: PreviewInputFileLifecycle,
+        output_file_lifecycle: PreviewOutputFileLifecycle,
     ) -> None:
         self._runtime_settings = runtime_settings
         self._runner_factory = runner_factory
         self._input_file_lifecycle = input_file_lifecycle
+        self._output_file_lifecycle = output_file_lifecycle
 
     async def test_agent_specification(
         self,
@@ -87,7 +92,7 @@ class AgentPreviewService:
                 specification.template.value,
                 native_tool_types,
             )
-            preview = await asyncio.to_thread(
+            preview, generated_files, generated_file_warnings = await asyncio.to_thread(
                 self._run_preview,
                 request,
                 executable_config,
@@ -116,20 +121,33 @@ class AgentPreviewService:
             preview.response_id,
             _duration_ms(started_at),
         )
-        return _agent_test_result(preview)
+        return _agent_test_result(
+            preview,
+            generated_files=generated_files,
+            generated_file_warnings=generated_file_warnings,
+        )
 
     def _run_preview(
         self,
         request: AgentTestRequest,
         executable_config: ExecutableAgentConfig,
         user_input: str,
-    ) -> AgentRunPreview:
+    ) -> tuple[
+        AgentRunPreview,
+        tuple[GeneratedFile, ...],
+        tuple[GeneratedFileWarning, ...],
+    ]:
         with self._input_file_lifecycle.bind_inputs(
             request,
             executable_config,
         ) as request_config:
             runner = self._runner_factory.create(request.credentials)
-            return runner.run(request_config, user_input)
+            preview = runner.run(request_config, user_input)
+            generated_files, warnings = self._output_file_lifecycle.materialize_outputs(
+                request,
+                preview,
+            )
+            return preview, generated_files, warnings
 
     def prepare_agent_runtime(
         self,
@@ -146,7 +164,12 @@ class AgentPreviewService:
         )
 
 
-def _agent_test_result(preview: AgentRunPreview) -> AgentTestResult:
+def _agent_test_result(
+    preview: AgentRunPreview,
+    *,
+    generated_files: tuple[GeneratedFile, ...],
+    generated_file_warnings: tuple[GeneratedFileWarning, ...],
+) -> AgentTestResult:
     return AgentTestResult(
         response_id=preview.response_id,
         output_text=preview.output_text,
@@ -154,6 +177,8 @@ def _agent_test_result(preview: AgentRunPreview) -> AgentTestResult:
         input_tokens=preview.input_tokens,
         output_tokens=preview.output_tokens,
         total_tokens=preview.total_tokens,
+        generated_files=generated_files,
+        generated_file_warnings=generated_file_warnings,
     )
 
 

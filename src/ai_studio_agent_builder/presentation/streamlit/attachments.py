@@ -12,6 +12,12 @@ from ai_studio_agent_builder.application.interaction import AIInteraction
 
 MAX_TEXT_PREVIEW_BYTES = 100_000
 PreviewKind = Literal["image", "audio", "video", "text", "download_only", "none"]
+GENERATED_INLINE_IMAGE_MIME_TYPES = frozenset(
+    {"image/gif", "image/jpeg", "image/png", "image/webp"}
+)
+GENERATED_INLINE_TEXT_MIME_TYPES = frozenset(
+    {"application/json", "text/csv", "text/plain"}
+)
 
 
 def preview_kind_for_mime(mime_type: str) -> PreviewKind:
@@ -29,6 +35,15 @@ def preview_kind_for_mime(mime_type: str) -> PreviewKind:
     }:
         return "text"
     return "none"
+
+
+def generated_preview_kind_for_mime(mime_type: str) -> PreviewKind:
+    """Use a strict allowlist for untrusted Code Interpreter output."""
+    if mime_type in GENERATED_INLINE_IMAGE_MIME_TYPES:
+        return "image"
+    if mime_type in GENERATED_INLINE_TEXT_MIME_TYPES:
+        return "text"
+    return "download_only"
 
 
 def render_attachment(
@@ -90,4 +105,20 @@ def render_attachment_preview(data: bytes, mime_type: str) -> None:
         st.info(
             "Предпросмотр для этого формата недоступен. "
             "Скачайте файл, чтобы открыть его."
+        )
+
+
+def render_generated_preview(data: bytes, mime_type: str) -> None:
+    preview_kind = generated_preview_kind_for_mime(mime_type)
+    if preview_kind == "image":
+        st.image(data)
+    elif preview_kind == "text":
+        preview = data[:MAX_TEXT_PREVIEW_BYTES].decode("utf-8", errors="replace")
+        st.code(preview)
+        if len(data) > MAX_TEXT_PREVIEW_BYTES:
+            st.caption("Показаны первые 100 000 байт. Полную версию можно скачать.")
+    else:
+        st.info(
+            "Автопросмотр этого созданного файла отключён для безопасности. "
+            "Скачайте его, чтобы открыть вручную."
         )

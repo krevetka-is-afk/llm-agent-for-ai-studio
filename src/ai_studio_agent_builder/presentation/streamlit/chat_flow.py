@@ -365,4 +365,8 @@ def build_agent_specification_actions(
             specification
         ).to_json(),
         test_agent=test_callback,
+        generated_file_reader=lambda local_name: ai_service.read_generated_file(
+            connection_id,
+            local_name,
+        ),
     )

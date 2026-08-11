@@ -57,10 +57,13 @@ handles и квоты, регистрирует remote reference сразу по
 создаёт request-scoped копию runtime config и выполняет cleanup в `finally`
 независимо от того, дошёл ли flow до Responses request.
 
+`PreviewOutputFileLifecycle` дедуплицирует provider references, потоково
+сохраняет bounded local copies и очищает известные output files/containers.
+Runner только нормализует references и не выполняет файловый I/O.
+
 `ConversationFileService` отдельно владеет сохранением и retention локальных
-conversation files. Output artifacts добавляются в CI-4 как отдельная
-application responsibility под общей политикой ADR-0003; они не расширяют
-runner файловым I/O.
+conversation/generated files, а presentation читает outputs только по
+user-scoped local handle.
 
 Provider gateway отвечает только за отдельные create/read/delete операции и
 нормализацию ошибок. UI не удаляет remote resources, а runner не пишет bytes на
@@ -81,14 +84,18 @@ Provider gateway отвечает только за отдельные create/re
 - не более 5 входных файлов;
 - не более 10 MiB на один входной файл;
 - не более 25 MiB суммарно на входной request;
-- выходные лимиты фиксируются отдельно: рекомендуемый старт — 10 файлов и
-  25 MiB суммарно;
+- не более 10 выходных файлов;
+- не более 10 MiB на один выходной файл и 25 MiB суммарно;
 - basename нормализуется, traversal/symlink запрещены, collision создаёт новое
   уникальное имя;
 - declared MIME и размер являются hints, а не доказательством;
-- output читается chunked с per-file/total counters; отсутствие или ложный
+- output читается по 64 KiB с per-file/total counters; отсутствие или ложный
   `Content-Length` не отключает лимиты;
 - HTML, SVG, XML, executable и неизвестные MIME — download-only.
+
+Локальная запись выполняется через unique temporary file с atomic rename.
+Превышение лимита или ошибка stream закрывает iterator и удаляет partial file;
+существующий файл никогда не перезаписывается.
 
 ## Runtime binding
 

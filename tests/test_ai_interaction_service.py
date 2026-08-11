@@ -24,6 +24,7 @@ from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentProviderError,
     AgentProviderTimeoutError,
     AgentRunPreview,
+    RemoteArtifactReference,
 )
 from ai_studio_agent_builder.application.ports.builder_run import BuilderRunOutcome
 from ai_studio_agent_builder.config import (
@@ -186,12 +187,17 @@ class FakeFileResourceGateway:
         remote_ids: tuple[str, ...] = ("file-request-1", "file-request-2"),
         upload_error_at: int | None = None,
         cleanup_error: bool = False,
+        artifact_payloads: dict[str, tuple[bytes, ...]] | None = None,
+        download_error_ids: frozenset[str] = frozenset(),
     ) -> None:
         self.remote_ids = remote_ids
         self.upload_error_at = upload_error_at
         self.cleanup_error = cleanup_error
+        self.artifact_payloads = artifact_payloads or {}
+        self.download_error_ids = download_error_ids
         self.uploads: list[tuple[Path, str]] = []
         self.deleted: list[str] = []
+        self.deleted_containers: list[str] = []
 
     def upload_user_file(self, base_dir: Path, filename: str) -> str:
         self.uploads.append((base_dir, filename))
@@ -201,6 +207,16 @@ class FakeFileResourceGateway:
 
     def delete_file(self, file_id: str) -> None:
         self.deleted.append(file_id)
+        if self.cleanup_error:
+            raise AgentProviderError()
+
+    def iter_file_bytes(self, file_id: str, *, chunk_size: int):
+        if file_id in self.download_error_ids:
+            raise AgentProviderError()
+        yield from self.artifact_payloads[file_id]
+
+    def delete_container(self, container_id: str) -> None:
+        self.deleted_containers.append(container_id)
         if self.cleanup_error:
             raise AgentProviderError()
 
@@ -1613,6 +1629,342 @@ def test_service_preserves_success_when_remote_input_cleanup_fails(
     log_text = "\n".join(record.getMessage() for record in caplog.records)
     assert "file-request-1" not in log_text
     assert attachment.filename not in log_text
+
+
+def test_service_downloads_generated_artifacts_without_exposing_provider_ids(
+    tmp_path: Path,
+) -> None:
+    preview = AgentRunPreview(
+        response_id="resp-artifacts",
+        output_text="Created files",
+        generated_artifacts=(
+            RemoteArtifactReference(
+                file_id="file-output-csv",
+                filename="../result.csv",
+                container_id="container-run",
+            ),
+            RemoteArtifactReference(
+                file_id="file-output-png",
+                filename="chart.png",
+                container_id="container-run",
+            ),
+            RemoteArtifactReference(
+                file_id="file-output-csv",
+                filename="duplicate.csv",
+                container_id="container-run",
+            ),
+        ),
+        container_ids=("container-run",),
+    )
+    gateway = FakeFileResourceGateway(
+        artifact_payloads={
+            "file-output-csv": (b"metric,value\n", b"result,100\n"),
+            "file-output-png": (b"\x89PNG\r\n",),
+        }
+    )
+    service = build_ai_interaction_service(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+        agent_runner_factory=lambda client, folder_id: FakeGeneratedAgentRunner(
+            preview
+        ),
+        file_resource_gateway_factory=FakeFileResourceGatewayFactory(gateway),
+    )
+
+    result = asyncio.run(
+        service.test_agent_specification(
+            AgentTestRequest(
+                user_id="42",
+                credentials=AIStudioCredentials(
+                    api_key="AQAAAA-secret",
+                    folder_id="folder-1",
+                ),
+                specification_record=_code_interpreter_specification_record(),
+                user_input="Create the outputs",
+            )
+        )
+    )
+
+    assert [file.display_name for file in result.generated_files] == [
+        "result.csv",
+        "chart.png",
+    ]
+    assert [file.mime_type for file in result.generated_files] == [
+        "text/csv",
+        "image/png",
+    ]
+    assert all(file.inline_preview_allowed for file in result.generated_files)
+    assert (
+        service.read_generated_file("42", result.generated_files[0].local_name)
+        == b"metric,value\nresult,100\n"
+    )
+    assert result.generated_files[0].local_name != result.generated_files[1].local_name
+    assert result.generated_file_warnings == ()
+    assert gateway.deleted == ["file-output-csv", "file-output-png"]
+    assert gateway.deleted_containers == ["container-run"]
+    assert "file-output" not in repr(result)
+    assert "container-run" not in repr(result)
+
+
+def test_service_stops_oversized_artifact_stream_and_continues_other_outputs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(file_lifecycle_module, "MAX_GENERATED_FILE_BYTES", 5)
+    preview = AgentRunPreview(
+        response_id="resp-artifacts",
+        output_text="Created files",
+        generated_artifacts=(
+            RemoteArtifactReference("file-large", "large.csv", "container-run"),
+            RemoteArtifactReference("file-small", "small.txt", "container-run"),
+        ),
+        container_ids=("container-run",),
+    )
+    gateway = FakeFileResourceGateway(
+        artifact_payloads={
+            "file-large": (b"123", b"456"),
+            "file-small": (b"ok",),
+        }
+    )
+    service = build_ai_interaction_service(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+        agent_runner_factory=lambda client, folder_id: FakeGeneratedAgentRunner(
+            preview
+        ),
+        file_resource_gateway_factory=FakeFileResourceGatewayFactory(gateway),
+    )
+
+    result = asyncio.run(
+        service.test_agent_specification(
+            AgentTestRequest(
+                user_id="42",
+                credentials=AIStudioCredentials(
+                    api_key="AQAAAA-secret",
+                    folder_id="folder-1",
+                ),
+                specification_record=_code_interpreter_specification_record(),
+                user_input="Create the outputs",
+            )
+        )
+    )
+
+    assert [file.display_name for file in result.generated_files] == ["small.txt"]
+    assert [warning.code for warning in result.generated_file_warnings] == ["too_large"]
+    generated_dir = service.user_files_dir("42") / ".generated"
+    assert all(not path.name.endswith(".partial") for path in generated_dir.iterdir())
+    assert gateway.deleted == ["file-large", "file-small"]
+
+
+def test_service_enforces_total_generated_artifact_limit_during_stream(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(file_lifecycle_module, "MAX_TOTAL_GENERATED_BYTES", 5)
+    preview = AgentRunPreview(
+        response_id="resp-artifacts",
+        output_text="Created files",
+        generated_artifacts=(
+            RemoteArtifactReference("file-first", "first.txt", "container-run"),
+            RemoteArtifactReference("file-second", "second.txt", "container-run"),
+        ),
+        container_ids=("container-run",),
+    )
+    gateway = FakeFileResourceGateway(
+        artifact_payloads={"file-first": (b"123",), "file-second": (b"456",)}
+    )
+    service = build_ai_interaction_service(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+        agent_runner_factory=lambda client, folder_id: FakeGeneratedAgentRunner(
+            preview
+        ),
+        file_resource_gateway_factory=FakeFileResourceGatewayFactory(gateway),
+    )
+
+    result = asyncio.run(
+        service.test_agent_specification(
+            AgentTestRequest(
+                user_id="42",
+                credentials=AIStudioCredentials(
+                    api_key="AQAAAA-secret",
+                    folder_id="folder-1",
+                ),
+                specification_record=_code_interpreter_specification_record(),
+                user_input="Create the outputs",
+            )
+        )
+    )
+
+    assert [file.display_name for file in result.generated_files] == ["first.txt"]
+    assert [warning.code for warning in result.generated_file_warnings] == ["too_large"]
+    generated_dir = service.user_files_dir("42") / ".generated"
+    assert all(not path.name.endswith(".partial") for path in generated_dir.iterdir())
+
+
+def test_service_bounds_output_count_and_download_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(file_lifecycle_module, "MAX_GENERATED_FILES_PER_REQUEST", 2)
+    preview = AgentRunPreview(
+        response_id="resp-artifacts",
+        output_text="Created files",
+        generated_artifacts=(
+            RemoteArtifactReference("file-broken", "broken.csv", "container-run"),
+            RemoteArtifactReference("file-ok", "ok.csv", "container-run"),
+            RemoteArtifactReference("file-skipped", "skipped.csv", "container-run"),
+        ),
+        container_ids=("container-run",),
+    )
+    gateway = FakeFileResourceGateway(
+        artifact_payloads={"file-ok": (b"ok",), "file-skipped": (b"skip",)},
+        download_error_ids=frozenset({"file-broken"}),
+    )
+    service = build_ai_interaction_service(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+        agent_runner_factory=lambda client, folder_id: FakeGeneratedAgentRunner(
+            preview
+        ),
+        file_resource_gateway_factory=FakeFileResourceGatewayFactory(gateway),
+    )
+
+    result = asyncio.run(
+        service.test_agent_specification(
+            AgentTestRequest(
+                user_id="42",
+                credentials=AIStudioCredentials(
+                    api_key="AQAAAA-secret",
+                    folder_id="folder-1",
+                ),
+                specification_record=_code_interpreter_specification_record(),
+                user_input="Create the outputs",
+            )
+        )
+    )
+
+    assert [file.display_name for file in result.generated_files] == ["ok.csv"]
+    assert [warning.code for warning in result.generated_file_warnings] == [
+        "too_many",
+        "download_failed",
+    ]
+    assert gateway.deleted == ["file-broken", "file-ok", "file-skipped"]
+
+
+def test_service_marks_unsafe_generated_mime_types_download_only(
+    tmp_path: Path,
+) -> None:
+    references = tuple(
+        RemoteArtifactReference(
+            f"file-{index}",
+            filename,
+            "container-run",
+        )
+        for index, filename in enumerate(
+            ("vector.svg", "report.html", "data.xml", "binary.unknownext")
+        )
+    )
+    gateway = FakeFileResourceGateway(
+        artifact_payloads={reference.file_id: (b"content",) for reference in references}
+    )
+    preview = AgentRunPreview(
+        response_id="resp-artifacts",
+        output_text="Created files",
+        generated_artifacts=references,
+        container_ids=("container-run",),
+    )
+    service = build_ai_interaction_service(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+        agent_runner_factory=lambda client, folder_id: FakeGeneratedAgentRunner(
+            preview
+        ),
+        file_resource_gateway_factory=FakeFileResourceGatewayFactory(gateway),
+    )
+
+    result = asyncio.run(
+        service.test_agent_specification(
+            AgentTestRequest(
+                user_id="42",
+                credentials=AIStudioCredentials(
+                    api_key="AQAAAA-secret",
+                    folder_id="folder-1",
+                ),
+                specification_record=_code_interpreter_specification_record(),
+                user_input="Create the outputs",
+            )
+        )
+    )
+
+    assert all(not file.inline_preview_allowed for file in result.generated_files)
+
+
+def test_service_keeps_generated_file_when_remote_output_cleanup_fails(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    preview = AgentRunPreview(
+        response_id="resp-artifacts",
+        output_text="Created files",
+        generated_artifacts=(
+            RemoteArtifactReference(
+                "file-output-secret",
+                "result.csv",
+                "container-secret",
+            ),
+        ),
+        container_ids=("container-secret",),
+    )
+    gateway = FakeFileResourceGateway(
+        artifact_payloads={"file-output-secret": (b"result",)},
+        cleanup_error=True,
+    )
+    service = build_ai_interaction_service(
+        _service_config(tmp_path),
+        coordinator_agent=FakeAgent(),
+        rag_agent=FakeAgent(),
+        one_prompt_agent=FakeAgent(),
+        agent_runner_factory=lambda client, folder_id: FakeGeneratedAgentRunner(
+            preview
+        ),
+        file_resource_gateway_factory=FakeFileResourceGatewayFactory(gateway),
+    )
+
+    result = asyncio.run(
+        service.test_agent_specification(
+            AgentTestRequest(
+                user_id="42",
+                credentials=AIStudioCredentials(
+                    api_key="AQAAAA-secret",
+                    folder_id="folder-1",
+                ),
+                specification_record=_code_interpreter_specification_record(),
+                user_input="Create the output",
+            )
+        )
+    )
+
+    assert (
+        service.read_generated_file("42", result.generated_files[0].local_name)
+        == b"result"
+    )
+    assert [warning.code for warning in result.generated_file_warnings] == [
+        "cleanup_failed"
+    ]
+    log_text = "\n".join(record.getMessage() for record in caplog.records)
+    assert "file-output-secret" not in log_text
+    assert "container-secret" not in log_text
 
 
 def test_service_strictly_parses_specification_before_creating_runner(

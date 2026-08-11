@@ -34,6 +34,8 @@
                 "filename",
                 "start_index"
               ],
+              "container_id": "<container_id>",
+              "file_id": "<file_id>",
               "filename": "result.csv"
             }
           ]

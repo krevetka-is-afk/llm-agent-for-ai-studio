@@ -32,10 +32,50 @@ class _FakeFilesClient:
     def delete(self, file_id: str):
         self.deleted.append(file_id)
 
+    @property
+    def with_streaming_response(self):
+        return self
+
+    def content(self, file_id: str):
+        return _FakeBinaryContentContext((b"first", b"second"))
+
+
+class _FakeBinaryContent:
+    def __init__(self, chunks: tuple[bytes, ...]) -> None:
+        self.chunks = chunks
+        self.closed = False
+
+    def iter_bytes(self, *, chunk_size: int):
+        assert chunk_size == 4
+        yield from self.chunks
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _FakeBinaryContentContext:
+    def __init__(self, chunks: tuple[bytes, ...]) -> None:
+        self.response = _FakeBinaryContent(chunks)
+
+    def __enter__(self) -> _FakeBinaryContent:
+        return self.response
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.response.close()
+
+
+class _FakeContainersClient:
+    def __init__(self) -> None:
+        self.deleted: list[str] = []
+
+    def delete(self, container_id: str):
+        self.deleted.append(container_id)
+
 
 class _FakeClient:
     def __init__(self) -> None:
         self.files: _FakeFilesClient = _FakeFilesClient()
+        self.containers = _FakeContainersClient()
 
 
 def test_upload_local_file_rejects_absolute_and_parent_paths(tmp_path):
@@ -90,10 +130,14 @@ def test_code_interpreter_gateway_uses_user_data_and_deletes_remote_file(tmp_pat
     gateway = YandexFileResourceGateway(client)
 
     file_id = gateway.upload_user_file(tmp_path, "input.csv")
+    chunks = tuple(gateway.iter_file_bytes(file_id, chunk_size=4))
     gateway.delete_file(file_id)
+    gateway.delete_container("container-safe")
 
     assert client.files.purposes == ["user_data"]
+    assert chunks == (b"first", b"second")
     assert client.files.deleted == ["file-safe"]
+    assert client.containers.deleted == ["container-safe"]
 
 
 def test_rag_agent_has_no_model_facing_upload_file_tool():
