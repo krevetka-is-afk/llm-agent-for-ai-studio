@@ -14,15 +14,17 @@
 - [ADR-0002: provider isolation](adr/0002-provider-isolation.md);
 - [ADR-0003: ownership жизненного цикла файлов](adr/0003-file-lifecycle-ownership.md).
 
-Текущие flat-модули ниже остаются фактическим описанием до завершения
-инкрементальной package-миграции. Новая production-логика должна размещаться в
-целевых модулях из `target-package-layout.md`, а не увеличивать flat `src/*.py`.
+Domain, application, builder, infrastructure и Streamlit runtime уже размещены
+в installable package. Оставшиеся flat-модули являются временными compatibility
+entrypoints для Telegram и старых импортов; новая production-логика размещается
+только в целевых модулях из `target-package-layout.md`.
 
 ## Основной поток
 
 1. Web UI или Telegram adapter формирует `InteractionRequest` с уникальным
    `request_id`.
-2. `AIInteractionService` создаёт clients Yandex AI Studio на границе сервиса.
+2. Composition root создаёт Yandex AI Studio adapters и внедряет их через
+   application-owned ports; application services не импортируют provider SDK.
 3. Агент получает `RequestContext` без API-ключа: только client, folder ID,
    директорию файлов, серверный реестр разрешённых файлов и рабочую копию
    состояния. Модель не выбирает и не передаёт `file_id` в RAG tool.
@@ -82,14 +84,22 @@
 - `yandex_responses_runner.py` — Responses API adapter, provider model URI,
   File Search preflight и нормализация ответа.
 - `context.py` — временный compatibility shim для стабильности старых импортов.
-- `ai_interaction_service.py` — application orchestration, uploads, delegation и
-  transaction boundary.
+- `application/builder_service.py` — routing, import спецификации и
+  transaction boundary разговора;
+- `application/preview_service.py` — compile/test use case готовой
+  спецификации;
+- `application/file_lifecycle.py` — lifecycle conversation uploads и session
+  cleanup через ports;
+- `application/interaction_facade.py` — тонкий presentation-facing facade;
+- `ai_interaction_service.py` — временный compatibility constructor без
+  production orchestration.
 - `result_assembly.py` — authoritative tool results, `AgentSpecificationResultPart`
   и их текстовая проекция.
 - `custom_agents/tools/agent_specification.py` — детерминированное обновление и
   финализация спецификации через function tools.
 
-Streamlit entrypoint остаётся `src/ui/app.py`, но детали разделены:
+Поддерживаемый Streamlit entrypoint — `ai_studio_agent_builder.entrypoints.web`,
+а детали presentation разделены:
 
 - `connection.py` — подключение и lifecycle API-ключа;
 - `uploads.py` — чистая валидация upload metadata;

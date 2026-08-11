@@ -6,7 +6,11 @@ from typing import Protocol
 from ai_studio_agent_builder.application.interaction import Attachment
 
 
-class AttachmentStore(Protocol):
+class AttachmentReader(Protocol):
+    def read_text(self, base_dir: Path, filename: str) -> str: ...
+
+
+class AttachmentStore(AttachmentReader, Protocol):
     def directory_for(self, user_id: str) -> Path: ...
 
     def save(
@@ -24,4 +28,4 @@ class ConversationSessionStore(Protocol):
     async def clear(self, user_id: str) -> None: ...
 
 
-__all__ = ["AttachmentStore", "ConversationSessionStore"]
+__all__ = ["AttachmentReader", "AttachmentStore", "ConversationSessionStore"]

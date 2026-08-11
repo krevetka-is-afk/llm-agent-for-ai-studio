@@ -36,20 +36,27 @@ import yandex_responses_runner as legacy_yandex_runner
 import ai_studio_agent_builder as public_api
 from ai_studio_agent_builder import config
 from ai_studio_agent_builder.application import (
+    builder_service,
     builder_state,
     dto,
     errors,
+    file_lifecycle,
     file_policy,
     interaction,
+    interaction_facade,
+    preview_service,
     settings,
 )
 from ai_studio_agent_builder.application.ports import (
     agent_runner,
     api_key_store as api_key_port,
+    builder_run,
+    connection as connection_port,
+    conversation_storage,
 )
 from ai_studio_agent_builder.builder import context as builder_context
 from ai_studio_agent_builder.builder import result_assembly
-from ai_studio_agent_builder.builder.agents import sdk_event_adapter
+from ai_studio_agent_builder.builder.agents import run_adapter, sdk_event_adapter
 from ai_studio_agent_builder.builder.agents import (
     base_agent,
     coordinator_agent,
@@ -72,6 +79,7 @@ from ai_studio_agent_builder.domain import (
 from ai_studio_agent_builder.infrastructure.persistence import (
     agent_sessions,
     api_key_store,
+    local_attachments,
     telegram_user_store,
 )
 from ai_studio_agent_builder.infrastructure.observability import (
@@ -79,6 +87,7 @@ from ai_studio_agent_builder.infrastructure.observability import (
 )
 from ai_studio_agent_builder.infrastructure.yandex_ai_studio import (
     client_factory,
+    connection as provider_connection,
     files_gateway,
     responses_runner,
 )
@@ -124,6 +133,37 @@ def test_public_api_reexports_stable_domain_contracts() -> None:
 
 
 def test_legacy_flat_imports_reference_packaged_contracts() -> None:
+    assert issubclass(
+        legacy_interaction.AIInteractionService,
+        interaction_facade.AIInteractionService,
+    )
+    assert builder_service.BuilderConversationService.__module__.startswith(
+        "ai_studio_agent_builder.application"
+    )
+    assert preview_service.AgentPreviewService.__module__.startswith(
+        "ai_studio_agent_builder.application"
+    )
+    assert file_lifecycle.ConversationFileService.__module__.startswith(
+        "ai_studio_agent_builder.application"
+    )
+    assert builder_run.BuilderRunPort.__module__.startswith(
+        "ai_studio_agent_builder.application"
+    )
+    assert connection_port.ConnectionValidator.__module__.startswith(
+        "ai_studio_agent_builder.application"
+    )
+    assert conversation_storage.AttachmentStore.__module__.startswith(
+        "ai_studio_agent_builder.application"
+    )
+    assert run_adapter.BuilderAgentsRunAdapter.__module__.startswith(
+        "ai_studio_agent_builder.builder"
+    )
+    assert local_attachments.LocalAttachmentStore.__module__.startswith(
+        "ai_studio_agent_builder.infrastructure"
+    )
+    assert provider_connection.YandexConnectionValidator.__module__.startswith(
+        "ai_studio_agent_builder.infrastructure"
+    )
     assert legacy_base_agent.CustomAgent is base_agent.CustomAgent
     assert (
         legacy_coordinator_agent.build_coordinator_agent

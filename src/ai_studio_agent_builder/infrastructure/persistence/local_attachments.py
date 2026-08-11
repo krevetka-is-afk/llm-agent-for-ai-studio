@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from ai_studio_agent_builder.application.file_policy import (
     MAX_UPLOAD_BYTES,
+    resolve_upload_path,
     sanitize_filename,
 )
 from ai_studio_agent_builder.application.interaction import (
@@ -21,6 +22,9 @@ class LocalAttachmentStore:
 
     def directory_for(self, user_id: str) -> Path:
         return self._root_dir / user_id
+
+    def read_text(self, base_dir: Path, filename: str) -> str:
+        return resolve_upload_path(base_dir, filename).read_text(encoding="utf-8")
 
     def save(
         self,
