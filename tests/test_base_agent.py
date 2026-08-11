@@ -6,7 +6,7 @@ from agents import RunConfig
 from openai import OpenAI
 
 from config import ModelConfig
-from conversation_state import ConversationState
+from ai_studio_agent_builder.application.builder_state import ConversationState
 from custom_agents.base_agent import CustomAgent
 from request_context import RequestContext
 

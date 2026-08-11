@@ -4,7 +4,10 @@ from typing import Any
 
 import pytest
 
-from conversation_state import ConversationOptions, ConversationState
+from ai_studio_agent_builder.application.builder_state import (
+    ConversationOptions,
+    ConversationState,
+)
 from custom_agents.tools import vector_index
 
 

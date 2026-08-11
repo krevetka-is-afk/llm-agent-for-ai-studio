@@ -3,7 +3,7 @@ from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from conversation_state import ConversationState
+from ai_studio_agent_builder.application.builder_state import ConversationState
 from ai_studio_agent_builder.application.dto import AIStudioCredentials
 
 

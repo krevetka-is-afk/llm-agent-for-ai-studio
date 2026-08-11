@@ -3,7 +3,7 @@ from pathlib import Path
 
 from openai import OpenAI
 
-from conversation_state import ConversationState
+from ai_studio_agent_builder.application.builder_state import ConversationState
 
 
 @dataclass

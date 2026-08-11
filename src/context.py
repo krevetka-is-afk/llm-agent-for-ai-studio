@@ -1,6 +1,9 @@
 """Compatibility imports for the former mixed application context module."""
 
-from conversation_state import ConversationOptions, ConversationState
+from ai_studio_agent_builder.application.builder_state import (
+    ConversationOptions,
+    ConversationState,
+)
 from credentials import (
     AIStudioCredentials,
     UserCredentials,
