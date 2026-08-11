@@ -16,7 +16,10 @@ package-дерево, transactional conversation state, явные routing overr
 между web search и vector RAG, добавление/сохранение/удаление публичного
 `web_search` в one-prompt-спецификации, передачу `max_turns`, Telegram
 serialization/secret TTL, UI helpers, tooltip contracts, developer ZIP без
-секретов и отсутствие API-ключа в tool context. RAG-регрессии отдельно
+секретов и отсутствие API-ключа в tool context. Code Interpreter-регрессии
+проверяют domain/compiler contract, request-scoped binding, partial-upload
+cleanup, нормализацию artifact references, bounded atomic download, MIME policy,
+cache fingerprint и исполняемый developer example. RAG-регрессии отдельно
 проверяют сохранение доверенных файлов между сообщениями, отсутствие `file_id`
 в tool schema, идемпотентное повторное создание и отбрасывание ошибочного
 tool-output вместо отображения его как ID индекса.
@@ -32,6 +35,11 @@ E2E opt-in состоит из трёх наборов:
 - provider-contract smoke загружает TXT и CSV в auto-container, проверяет
   `code_interpreter_call`, скачивает созданный `result.csv` по
   `container_file_citation` и удаляет input/output files, container и response.
+
+Обычный suite использует обезличенную provider fixture и fake clients. Он
+проверяет control flow и отсутствие секретов/remote IDs, но не доказывает
+доступность tool, модели, квоты или текущую форму ответа Yandex; для этого
+обязателен opt-in smoke ниже.
 
 ```bash
 cp .env.e2e.example .env.e2e

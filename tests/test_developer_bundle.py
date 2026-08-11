@@ -4,6 +4,7 @@ from pathlib import Path
 import runpy
 import sys
 from types import ModuleType, SimpleNamespace
+from typing import Any
 from unittest.mock import MagicMock
 import zipfile
 
@@ -18,6 +19,9 @@ from ai_studio_agent_builder.domain.specification import (
     KnowledgeSource,
     build_one_prompt_specification,
     build_rag_specification,
+)
+from ai_studio_agent_builder.domain.specification_codec import (
+    load_agent_specification,
 )
 
 EXPECTED_FILES = {
@@ -34,6 +38,9 @@ RUNTIME = AgentRuntimeConfig(
 )
 TEST_API_KEY = "AQAAAA-test-developer-bundle-secret"
 TEST_FOLDER_ID = "test-developer-bundle-folder"
+CODE_INTERPRETER_EXAMPLE_DIR = (
+    Path(__file__).parents[1] / "examples" / "code-interpreter"
+)
 
 
 def _one_prompt_specification() -> AgentSpecification:
@@ -60,6 +67,15 @@ def _rag_specification() -> AgentSpecification:
                 reference="file-test-1",
             ),
         ),
+    )
+
+
+def _code_interpreter_specification() -> AgentSpecification:
+    return build_one_prompt_specification(
+        purpose="Анализировать пользовательские таблицы",
+        instructions="Используй Code Interpreter для вычислений и файлов.",
+        expected_result="Ответ и созданный файл с результатом",
+        code_interpreter=True,
     )
 
 
@@ -97,6 +113,9 @@ def test_developer_bundle_contains_runnable_secret_free_handoff(
         example = archive.read("example.py").decode()
         compile(example, "example.py", "exec")
         assert "client.responses.create" in example
+        assert 'purpose="user_data"' in example
+        assert "with_streaming_response.content" in example
+        assert "_cleanup_remote_resources" in example
 
         readme = archive.read("README.md").decode()
         assert "### Bash (Linux, macOS, Git Bash)" in readme
@@ -105,6 +124,8 @@ def test_developer_bundle_contains_runnable_secret_free_handoff(
         assert ".venv/bin/python example.py" in readme
         assert r".\.venv\Scripts\python.exe example.py" in readme
         assert r".venv\Scripts\python.exe example.py" in readme
+        assert "example.py --file data.csv --file instructions.txt" in readme
+        assert "provider TTL 20 минут" in readme
 
         env_example = archive.read(".env.example").decode()
         assert env_example == (
@@ -150,6 +171,7 @@ def test_rag_bundle_example_sends_compiled_request_without_network(
     monkeypatch.setitem(sys.modules, "dotenv", dotenv_module)
     monkeypatch.setenv("YC_AI_STUDIO_API_KEY", TEST_API_KEY)
     monkeypatch.setenv("YC_AI_STUDIO_FOLDER_ID", TEST_FOLDER_ID)
+    monkeypatch.setattr(sys, "argv", ["example.py"])
     monkeypatch.setattr("builtins.input", lambda _: "Что находится в справочнике?")
     monkeypatch.chdir(tmp_path)
 
@@ -180,6 +202,184 @@ def test_rag_bundle_example_sends_compiled_request_without_network(
         json.loads((tmp_path / "agent-specification.json").read_text(encoding="utf-8"))
         == specification
     )
+
+
+def test_code_interpreter_bundle_example_scopes_files_downloads_and_cleans_up(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    bundle, runtime_json, _ = _bundle_for(_code_interpreter_specification())
+    captured: dict[str, Any] = {
+        "deleted_files": [],
+        "deleted_containers": [],
+        "deleted_responses": [],
+        "uploads": [],
+    }
+    input_path = tmp_path / "numbers.csv"
+    input_payload = b"value\n10\n20\n"
+    output_payload = b"metric,value\nsum,30\n"
+    input_path.write_bytes(input_payload)
+
+    with zipfile.ZipFile(io.BytesIO(bundle)) as archive:
+        assert archive.testzip() is None
+        archive.extractall(tmp_path)
+
+    runtime_path = tmp_path / "responses-agent-config.json"
+    runtime_before = runtime_path.read_text(encoding="utf-8")
+
+    class FakeStreamingResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def iter_bytes(self, *, chunk_size):
+            captured["chunk_size"] = chunk_size
+            yield output_payload[:8]
+            yield output_payload[8:]
+
+    class FakeStreamingFiles:
+        def content(self, file_id):
+            captured["downloaded_file_id"] = file_id
+            return FakeStreamingResponse()
+
+    class FakeFiles:
+        with_streaming_response = FakeStreamingFiles()
+
+        def create(self, *, file, purpose):
+            captured["uploads"].append((file.name, file.read(), purpose))
+            return SimpleNamespace(id="input-request-file-id")
+
+        def delete(self, file_id):
+            captured["deleted_files"].append(file_id)
+
+    class FakeContainers:
+        def delete(self, container_id):
+            captured["deleted_containers"].append(container_id)
+
+    class FakeResponses:
+        def create(self, **request):
+            captured["request"] = request
+            return SimpleNamespace(
+                id="response-request-id",
+                output_text="Файл рассчитан",
+                output=[
+                    SimpleNamespace(
+                        type="code_interpreter_call",
+                        container_id="container-request-id",
+                    ),
+                    SimpleNamespace(
+                        type="message",
+                        content=[
+                            SimpleNamespace(
+                                annotations=[
+                                    SimpleNamespace(
+                                        type="container_file_citation",
+                                        file_id="output-request-file-id",
+                                        filename="result.csv",
+                                        container_id="container-request-id",
+                                    )
+                                ]
+                            )
+                        ],
+                    ),
+                ],
+            )
+
+        def delete(self, response_id):
+            captured["deleted_responses"].append(response_id)
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            captured["client"] = kwargs
+            self.files = FakeFiles()
+            self.containers = FakeContainers()
+            self.responses = FakeResponses()
+
+    openai_module = ModuleType("openai")
+    setattr(openai_module, "OpenAI", FakeOpenAI)
+    dotenv_module = ModuleType("dotenv")
+    setattr(dotenv_module, "load_dotenv", lambda: None)
+
+    monkeypatch.setitem(sys.modules, "openai", openai_module)
+    monkeypatch.setitem(sys.modules, "dotenv", dotenv_module)
+    monkeypatch.setenv("YC_AI_STUDIO_API_KEY", TEST_API_KEY)
+    monkeypatch.setenv("YC_AI_STUDIO_FOLDER_ID", TEST_FOLDER_ID)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["example.py", "--prompt", "Посчитай сумму", "--file", str(input_path)],
+    )
+    monkeypatch.chdir(tmp_path)
+
+    runpy.run_path(str(tmp_path / "example.py"), run_name="__main__")
+
+    output = capsys.readouterr().out
+    assert "Файл рассчитан" in output
+    assert "Создан файл: generated/result.csv" in output
+    assert (tmp_path / "generated" / "result.csv").read_bytes() == output_payload
+    assert captured["uploads"] == [(str(input_path), input_payload, "user_data")]
+    assert captured["downloaded_file_id"] == "output-request-file-id"
+    assert captured["chunk_size"] == 64 * 1024
+    assert captured["deleted_files"] == [
+        "input-request-file-id",
+        "output-request-file-id",
+    ]
+    assert captured["deleted_containers"] == ["container-request-id"]
+    assert captured["deleted_responses"] == ["response-request-id"]
+
+    request = captured["request"]
+    assert request["tools"] == [
+        {
+            "type": "code_interpreter",
+            "container": {
+                "type": "auto",
+                "memory_limit": "1g",
+                "network_policy": {"type": "disabled"},
+                "file_ids": ["input-request-file-id"],
+            },
+        }
+    ]
+    assert runtime_path.read_text(encoding="utf-8") == runtime_before == runtime_json
+    assert "input-request-file-id" not in runtime_before
+    assert "output-request-file-id" not in runtime_before
+    assert "container-request-id" not in runtime_before
+
+    with zipfile.ZipFile(io.BytesIO(bundle)) as archive:
+        combined = b"\n".join(archive.read(name) for name in archive.namelist())
+    assert input_payload not in combined
+    assert b"input-request-file-id" not in combined
+    assert b"output-request-file-id" not in combined
+    assert b"container-request-id" not in combined
+
+
+def test_repository_code_interpreter_exports_match_the_runtime_compiler() -> None:
+    specification_record = json.loads(
+        (CODE_INTERPRETER_EXAMPLE_DIR / "agent-specification.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    expected_runtime = json.loads(
+        (CODE_INTERPRETER_EXAMPLE_DIR / "responses-agent-config.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    specification = load_agent_specification(specification_record)
+    compiled_runtime = json.loads(
+        compile_agent_specification(specification, runtime=RUNTIME).to_json()
+    )
+
+    assert compiled_runtime == expected_runtime
+    serialized_exports = json.dumps(
+        {"specification": specification_record, "runtime": expected_runtime}
+    )
+    assert "file_ids" not in serialized_exports
+    assert "container_id" not in serialized_exports
+    assert "api_key" not in serialized_exports
+    assert TEST_FOLDER_ID not in serialized_exports
 
 
 def test_next_steps_download_button_serves_generated_zip(monkeypatch) -> None:

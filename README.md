@@ -6,7 +6,9 @@ MVP ассистента, который помогает спроектиров
 stateless тестовый запрос через Responses API и скачать как исходную
 спецификацию, так и исполняемый runtime config. One-prompt может включать
 встроенный `web_search`, а RAG-вариант использует созданный vector store через
-нативный `file_search`.
+нативный `file_search`. Оба шаблона могут дополнительно получить переносимую
+возможность `code_interpreter`: пользователь явно выбирает файлы для каждого
+preview, а созданные артефакты доступны для безопасного скачивания.
 
 Основной пользовательский интерфейс — Streamlit Web UI. Telegram-бот и OAuth
 Gateway сохранены как экспериментальные адаптеры и не запускаются по умолчанию.
@@ -45,6 +47,13 @@ context он не передаётся.
 4. по no-code инструкции перенести готовые настройки в Agent Atelier;
 5. скачать `responses-agent-config.json` или ZIP-пакет для разработчика.
 
+Для Code Interpreter файлы карточки preview не смешиваются с файлами
+Builder-чата. Каждый запуск имеет собственный upload/download lifecycle:
+входы проходят лимиты, временные remote IDs добавляются только в копию запроса,
+выходы потоково сохраняются в `.local/`, а известные remote resources удаляются
+best effort. API-ключи, folder ID, пользовательские bytes и временные
+file/container IDs в экспорт и ZIP не попадают.
+
 Готовую `agent-specification.json` также можно приложить в чат с запросом
 «создай агента из этой спецификации». Приложение строго проверит JSON и схему,
 импортирует карточку без повторного создания RAG-индекса; доступность указанного
@@ -76,6 +85,7 @@ src/
 - [Требования к MVP](docs/requirements.md)
 - [AgentSpecification](docs/agent-specification.md)
 - [Исполнение спецификации через Responses API](docs/agent-runtime.md)
+- [Пример Code Interpreter](examples/code-interpreter/README.md)
 - [Каталог компонентов](docs/component-catalog.md)
 - [Тестирование и credentialed E2E](docs/testing.md)
 - [Docker и deployment](docs/deployment.md)

@@ -2,8 +2,9 @@
 
 Документ фиксирует проверяемые требования к MVP Agent Builder для практики.
 Текущий результат MVP — переносимая `AgentSpecification`, проверяемая
-runtime-конфигурация для Responses API, stateless test run и, для RAG-сценария,
-созданный vector store в Yandex AI Studio. MVP не является полноценным
+runtime-конфигурация для Responses API, stateless test run с опциональным Code
+Interpreter и, для RAG-сценария, созданный vector store в Yandex AI Studio. MVP
+не является полноценным
 marketplace компонентов и не создаёт отдельную постоянную remote agent entity.
 
 ## Цель и место в AI Studio
@@ -24,11 +25,13 @@ vector stores и API-совместимый интерфейс; Agent Builder у
 - one-prompt template;
 - опциональный built-in `web_search` для one-prompt;
 - RAG template с загрузкой файлов и созданием vector index;
+- опциональный `code_interpreter` для обоих шаблонов с явной загрузкой файлов
+  на каждый preview и скачиванием созданных артефактов;
 - минимальный каталог компонентов;
 - `AgentSpecification` с JSON-экспортом;
 - строгий импорт сериализованной спецификации и компиляция в runtime config;
 - stateless тестирование готового агента через Responses API;
-- отображение ответа, citations, usage и `response_id`;
+- отображение ответа, citations, usage, `response_id` и generated files;
 - JSON-экспорт фактически проверенной runtime-конфигурации;
 - детерминированная валидация обязательных полей;
 - локальные tests, lint, typecheck и opt-in credentialed E2E.
@@ -42,6 +45,8 @@ vector stores и API-совместимый интерфейс; Agent Builder у
 - multi-replica coordination;
 - долговременная история тестовых запросов и streaming-ответы;
 - автоматическое восстановление удалённого или истёкшего vector store;
+- explicit Code Interpreter containers, доступ в сеть и передача secrets в
+  sandbox;
 - создание отдельной remote agent entity сверх system prompt/vector index.
 
 ## Акторы
@@ -52,7 +57,7 @@ vector stores и API-совместимый интерфейс; Agent Builder у
   агентов, создаёт AI Studio resources, собирает typed result, компилирует
   runtime-конфигурацию и выполняет stateless preview.
 - AI Studio — выполняет model calls и Responses API calls, хранит файлы и
-  создаёт vector stores.
+  создаёт vector stores и временные Code Interpreter containers.
 - Разработчик/проверяющий — запускает tests, анализирует документацию и
   воспроизводит MVP.
 
@@ -101,6 +106,15 @@ UI показывает typed result parts: vector index, agent specification и
 `response_id`. Пользователь может открыть и скачать тот же runtime JSON, который
 использовался для запуска. Тест не меняет состояние диалога Agent Builder.
 
+### UC-07. Анализ файлов через Code Interpreter
+
+Пользователь подтверждает необходимость вычислений или преобразования файлов.
+Система добавляет переносимый `code_interpreter` descriptor, компилирует его в
+безопасный auto-container, а в карточке preview предлагает заново выбрать до
+пяти входных файлов. Remote IDs существуют только в границах одного запроса.
+Созданные файлы скачиваются потоково с лимитами, отображаются по локальным
+handles и удаляются с провайдера вместе с inputs/container в `finally`.
+
 ## Функциональные требования
 
 | ID | Требование | Acceptance criteria |
@@ -114,14 +128,17 @@ UI показывает typed result parts: vector index, agent specification и
 | FR-07 | Система должна валидировать обязательные поля спецификации детерминированно. | Пустая/неполная spec получает `needs_clarification`; валидатор возвращает все `missing_fields`. |
 | FR-08 | RAG-спецификация должна содержать knowledge source и публичный `knowledge_search` tool, связанный с `index_id`. | Полная RAG spec содержит `knowledge_sources`, `parameters.index_id` и `tools[].tool_id == "knowledge_search"` с тем же `index_id`. |
 | FR-09 | Система должна экспортировать спецификацию в JSON без секретов. | UI показывает download button; `to_record()` заменяет значения secret-like parameter keys на `[REDACTED]`, а валидатор не допускает такую spec в статус `ready`. |
-| FR-10 | Внутренние orchestration tools не должны выдаваться за прикладные tools будущего агента. | В catalog/docs `delegate_*`, `finish_dialog`, `create_search_index`, `update_agent_specification` и `finalize_agent_specification` отделены от public `knowledge_search` и `web_search`. |
+| FR-10 | Внутренние orchestration tools не должны выдаваться за прикладные tools будущего агента. | В catalog/docs `delegate_*`, `finish_dialog`, `create_search_index`, `update_agent_specification` и `finalize_agent_specification` отделены от public `knowledge_search`, `web_search` и `code_interpreter`. |
 | FR-11 | One-prompt-спецификация должна отражать подтверждённую потребность в веб-поиске. | `web_search=true` идемпотентно добавляет публичный descriptor с `search_context_size=medium`; `None` сохраняет выбор, `false` удаляет его; `knowledge_sources` остаётся пустым. |
 | FR-12 | Система должна строго восстанавливать доменную спецификацию из сериализованной записи перед исполнением. | Неизвестные поля, некорректные типы, неподдерживаемая версия схемы и неготовый статус приводят к контролируемой ошибке до обращения к провайдеру. |
-| FR-13 | Система должна детерминированно компилировать готовую спецификацию в runtime config. | One-prompt без tools создаёт пустой список tools; `web_search` преобразуется в built-in Web Search; `knowledge_search` преобразуется в `file_search` с тем же `index_id`. |
-| FR-14 | Пользователь должен иметь возможность stateless-проверки готового агента. | UI принимает отдельный test prompt, выполняет один Responses API call и показывает output text, citations, usage и `response_id`. |
-| FR-15 | Система должна экспортировать без секретов именно ту runtime-конфигурацию, которая используется для теста. | Test callback и runtime JSON callback используют общий `prepare_agent_runtime()`; экспорт не содержит API key и folder URI. |
+| FR-13 | Система должна детерминированно компилировать готовую спецификацию в runtime config. | One-prompt без tools создаёт пустой список tools; `web_search` преобразуется в built-in Web Search; `knowledge_search` — в `file_search` с тем же `index_id`; `code_interpreter` — в безопасный auto-container без `file_ids`. |
+| FR-14 | Пользователь должен иметь возможность stateless-проверки готового агента. | UI принимает отдельный test prompt и, при наличии capability, файлы; выполняет один Responses API call и показывает output text, citations, usage, `response_id` и локальные generated files. |
+| FR-15 | Система должна экспортировать без секретов базовую runtime-конфигурацию теста. | Test callback и runtime JSON callback используют общий `prepare_agent_runtime()`; request-scoped `file_ids` добавляются только к копии после экспорта, а API key и folder URI отсутствуют. |
 | FR-16 | RAG-runtime должен проверять доступность vector store до генерации ответа. | Для каждого `file_search.vector_store_id` выполняется retrieve; отсутствующий, недоступный или неготовый ресурс возвращает безопасную прикладную ошибку. |
 | FR-17 | Система должна объяснять дальнейший путь нетехническому пользователю. | Sidebar и готовая карточка содержат no-code шаги и официальные ссылки Agent Atelier; после теста UI показывает готовые настройки для ручного переноса и отдельный ZIP-пакет для разработчика. |
+| FR-18 | Спецификация должна переносимо описывать Code Interpreter без provider state. | `code_interpreter` содержит только `memory_limit=1g` и `network_policy=disabled`; compiler создаёт auto-container без `file_ids` и отклоняет неизвестные значения. |
+| FR-19 | Preview Code Interpreter должен принимать явные request-scoped файлы и возвращать локальные generated artifacts. | UI показывает uploader только для соответствующей capability; inputs загружаются с `purpose=user_data`, IDs привязываются к копии runtime, outputs скачиваются потоково, а известные input/output files и containers очищаются на success/error/timeout. |
+| FR-20 | Developer ZIP должен воспроизводить полный Code Interpreter lifecycle без чувствительных данных. | `example.py` поддерживает повторяемый `--file`, upload, request-scoped binding, bounded download и cleanup; ZIP не содержит credentials, пользовательские bytes и временные file/container/response IDs. |
 
 ## Нефункциональные требования
 
@@ -138,9 +155,11 @@ UI показывает typed result parts: vector index, agent specification и
 | NFR-09 | Внутренний model/tool flow должен иметь ограниченный, настраиваемый бюджет turns. | `ModelConfig.max_turns` передаётся в SDK Runner; значение по умолчанию и production config равны 20. |
 | NFR-10 | Тест готового агента не должен изменять основной диалог или черновик спецификации. | Preview выполняется отдельным application-service method без `ConversationState.commit_from()`. |
 | NFR-11 | Runtime-ошибки и credentials должны оставаться внутри доверенной границы сервиса. | Result view получает callbacks без API key; provider exceptions преобразуются в bounded сообщения без stack trace и secret details. |
-| NFR-12 | Preview должен сохраняться между rerun UI только для неизменённой спецификации. | Результат хранится под ключом карточки и сбрасывается при изменении canonical fingerprint спецификации. |
-| NFR-13 | Технические данные должны быть понятны без знания API. | UI использует человеческие подписи и hover-help для citations, token usage, `response_id`, runtime config, template и Vector Store ID; developer ZIP явно отделён от основного no-code пути. |
+| NFR-12 | Preview должен сохраняться между rerun UI только для неизменённой спецификации и inputs. | Результат хранится под ключом карточки и сбрасывается при изменении canonical fingerprint спецификации или выбранных файлов. |
+| NFR-13 | Технические данные должны быть понятны без знания API. | UI использует человеческие подписи и hover-help для citations, token usage, `response_id`, runtime config, template, Vector Store ID и Code Interpreter lifecycle; developer ZIP явно отделён от основного no-code пути. |
 | NFR-14 | Многошаговый RAG flow не должен зависеть от повторной передачи файла пользователем или выбора `file_id` моделью. | Загруженный файл остаётся доступен после уточнения имени индекса; повторное создание переиспользует существующий индекс; внутренние идентификаторы не включаются в prompt агента. |
+| NFR-15 | Code Interpreter file lifecycle должен иметь ограниченный blast radius. | До provider call применяются лимиты 5 inputs, 10 MiB на файл и 25 MiB суммарно; outputs ограничены 10 файлами, 10 MiB на файл и 25 MiB суммарно, сохраняются атомарно, partial удаляется. |
+| NFR-16 | Кэш preview не должен переиспользоваться для другого набора файлов. | Fingerprint включает canonical spec и name/MIME/size/content digest каждого выбранного input; изменение набора очищает результат. |
 
 ## Трассировка
 
@@ -166,6 +185,9 @@ UI показывает typed result parts: vector index, agent specification и
 | FR-15 | `application/preview_service.py`, `domain/runtime.py`, `presentation/streamlit/agent_test_panel.py` | `tests/test_ai_interaction_service.py`, `tests/test_agent_runtime.py`, `tests/test_ui_smoke.py` |
 | FR-16 | `infrastructure/yandex_ai_studio/responses_runner.py` | `tests/test_yandex_responses_runner.py`, `tests/e2e/test_yandex_ai_studio_agent_runtime_e2e.py` |
 | FR-17 | `presentation/streamlit/user_guidance.py`, `developer_bundle.py`, `agent_test_panel.py` | `tests/test_ui_smoke.py`, `tests/test_developer_bundle.py`; Playwright visual smoke |
+| FR-18 | `domain/catalog.py`, `domain/specification.py`, `domain/runtime.py` | `tests/test_agent_specification.py`, `tests/test_agent_runtime.py` |
+| FR-19 | `application/file_lifecycle.py`, `preview_service.py`, `infrastructure/yandex_ai_studio/files_gateway.py`, `responses_runner.py`, `presentation/streamlit/agent_test_panel.py` | `tests/test_upload_file_security.py`, `tests/test_generated_artifact_storage.py`, `tests/test_yandex_responses_runner.py`, `tests/test_ui_helpers.py` |
+| FR-20 | `presentation/streamlit/developer_bundle.py` | `tests/test_developer_bundle.py` |
 | NFR-01 | `builder/context.py`, `domain/specification.py` | `tests/test_context.py`, `tests/test_agent_specification.py` |
 | NFR-02 | `presentation/streamlit/chat_flow.py`, `agent_test_panel.py`, `infrastructure/yandex_ai_studio/responses_runner.py` | `tests/test_ui_helpers.py`, `tests/test_yandex_responses_runner.py` |
 | NFR-03 | `application/builder_state.py`, `builder_service.py` | `tests/test_builder_state.py`, `tests/test_ai_interaction_service.py` |
@@ -180,3 +202,5 @@ UI показывает typed result parts: vector index, agent specification и
 | NFR-12 | `presentation/streamlit/agent_test_panel.py` | `tests/test_ui_helpers.py`, `tests/test_ui_smoke.py` |
 | NFR-13 | `presentation/streamlit/agent_test_panel.py`, `result_view.py`, `user_guidance.py` | `tests/test_ui_smoke.py`; Playwright tooltip/visual smoke |
 | NFR-14 | `application/builder_state.py`, `builder_service.py`, `builder/agents/tools/vector_index.py`, `builder/result_assembly.py` | `tests/test_builder_state.py`, `tests/test_ai_interaction_service.py`, `tests/test_vector_index.py`, `tests/test_result_assembly.py` |
+| NFR-15 | `application/interaction.py`, `file_lifecycle.py`, `file_policy.py`, `infrastructure/persistence/local_attachments.py` | `tests/test_upload_file_security.py`, `tests/test_generated_artifact_storage.py` |
+| NFR-16 | `presentation/streamlit/agent_test_panel.py` | `tests/test_ui_helpers.py`, `tests/test_ui_smoke.py` |

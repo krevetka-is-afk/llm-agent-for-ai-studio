@@ -92,8 +92,11 @@ JSON-сериализации.
 
 После этого pure compiler создаёт отдельный `ExecutableAgentConfig`. Доменный
 `knowledge_search` становится нативным Responses API `file_search`, а
-`web_search` сохраняется как built-in tool. Runtime model и параметры генерации
-берутся из конфигурации приложения, а не из доменной спецификации.
+`web_search` сохраняется как built-in tool. `code_interpreter` становится
+auto-container с `memory_limit=1g` и выключенной сетью; request-scoped
+`file_ids` добавляются позже и никогда не сериализуются в spec. Runtime model и
+параметры генерации берутся из конфигурации приложения, а не из доменной
+спецификации.
 
 Полный контракт описан в [agent-runtime.md](agent-runtime.md).
 
@@ -119,6 +122,27 @@ JSON-сериализации.
   "status": "ready"
 }
 ```
+
+## Пример capability Code Interpreter
+
+Один и тот же descriptor разрешён в `one_prompt` и `rag`:
+
+```json
+{
+  "tool_id": "code_interpreter",
+  "title": "Code Interpreter",
+  "description": "Runs Python in an isolated Yandex AI Studio container.",
+  "parameters": {
+    "memory_limit": "1g",
+    "network_policy": "disabled"
+  }
+}
+```
+
+Спецификация намеренно не хранит `file_ids`, `container_id`, sandbox secrets,
+пользовательские bytes или generated artifacts. Неизвестный параметр,
+memory tier кроме `1g` или network policy кроме `disabled` делает импорт
+неготовым до provider call.
 
 ## Пример RAG-спецификации
 
@@ -177,5 +201,7 @@ JSON-сериализации.
 - LLM формулирует уточняющие вопросы по `missing_fields`, но статус готовности
   определяется валидатором приложения и function-tool финализацией.
 - Произвольные внешние function/MCP tools и marketplace компонентов находятся
-  вне MVP; встроенный `web_search` поддерживается явно.
+  вне MVP; встроенные `web_search` и `code_interpreter` поддерживаются явно.
+- Code Interpreter ограничен auto-container с 1 GiB и выключенной сетью;
+  explicit container, network allowlist и secrets не входят в schema `1.0`.
 - Тестовый Responses API запуск stateless и не создаёт постоянный `agent_id`.

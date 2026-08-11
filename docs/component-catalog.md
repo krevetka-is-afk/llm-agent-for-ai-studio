@@ -20,9 +20,11 @@ prompt.
 
 Компоненты:
 
-- `system_prompt`.
+- `system_prompt`;
 - опциональный `web_search` для запросов, которым нужны актуальные данные из
-  открытого интернета.
+  открытого интернета;
+- опциональный `code_interpreter` для вычислений, анализа и преобразования
+  явно выбранных файлов.
 
 База знаний для этого шаблона не требуется. Обычный one-prompt остаётся без
 tools; `web_search` добавляется только при явной потребности пользователя.
@@ -45,7 +47,8 @@ tools; `web_search` добавляется только при явной пот
 
 - `system_prompt`;
 - `vector_index`;
-- `knowledge_search`.
+- `knowledge_search`;
+- опциональный `code_interpreter`.
 
 ## Публичные компоненты создаваемого агента
 
@@ -55,6 +58,17 @@ tools; `web_search` добавляется только при явной пот
 | `vector_index` | Knowledge base | Да, как `knowledge_sources` | Vector store AI Studio, созданный из загруженных файлов. |
 | `knowledge_search` | Tool | Да, как публичный прикладной tool | Поиск по связанному `index_id`. |
 | `web_search` | Tool | Да, как публичный встроенный tool | Поиск актуальной информации в интернете через Yandex AI Studio Responses API; vector index не требуется. |
+| `code_interpreter` | Tool | Да, как переносимая capability | Python-вычисления и создание файлов в изолированном auto-container; spec содержит только `1g` и disabled network, но не file/container IDs. |
+
+`file_search` и Code Interpreter решают разные задачи:
+
+| | File Search | Code Interpreter |
+| --- | --- | --- |
+| Основная цель | Найти релевантные фрагменты в постоянной базе знаний. | Выполнить код, расчёт или преобразование файлов. |
+| Состояние в spec | `index_id` является подтверждённой ссылкой RAG. | Только capability и безопасные параметры. |
+| Пользовательские файлы | Индексируются в Vector Store. | Явно выбираются заново для каждого preview. |
+| Remote IDs | `vector_store_id` переносится по RAG-контракту. | `file_id`/`container_id` никогда не экспортируются. |
+| Результат | Текст и file citations. | Текст и локальные downloadable artifacts. |
 
 ## Внутренние tools конструктора
 
@@ -82,6 +96,6 @@ tools; `web_search` добавляется только при явной пот
 ## Границы MVP
 
 Каталог не является marketplace. Текущий объём ограничен двумя шаблонами и
-минимальными компонентами, необходимыми для задания практики: prompt, база
-знаний, `knowledge_search` и встроенный `web_search`. Произвольные function/MCP
-tools остаются за границами MVP.
+минимальными компонентами: prompt, база знаний, `knowledge_search`, встроенный
+`web_search` и безопасный `code_interpreter`. Произвольные function/MCP tools,
+доступ Code Interpreter в сеть и explicit containers остаются за границами MVP.

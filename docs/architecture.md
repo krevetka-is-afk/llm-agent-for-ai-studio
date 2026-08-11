@@ -57,11 +57,19 @@
     `AgentSpecification` из result-part записи и повторно вычисляет readiness.
 13. Чистый compiler преобразует доменные `web_search`/`knowledge_search` в
     provider-neutral `ExecutableAgentConfig` с нативными
-    `web_search`/`file_search`.
-14. `YandexResponsesAgentRunner` добавляет folder ID только при формировании
-    model URI, выполняет Vector Store preflight и вызывает Responses API.
-15. Ответ, citations и usage возвращаются в UI как stateless preview; builder
-    conversation state при этом не изменяется.
+    `web_search`/`file_search`, а `code_interpreter` — в безопасный auto-container
+    без request-scoped IDs.
+14. Для Code Interpreter application file lifecycle проверяет выбранные именно
+    для preview локальные inputs, загружает их и добавляет IDs только в копию
+    runtime config.
+15. `YandexResponsesAgentRunner` добавляет folder ID только при формировании
+    model URI, выполняет Vector Store preflight и вызывает Responses API. Runner
+    нормализует provider output, но не читает и не пишет bytes.
+16. Application lifecycle потоково сохраняет bounded generated artifacts по
+    локальным handles и в `finally` удаляет известные input/output files и
+    containers.
+17. Ответ, citations, usage и локальные generated files возвращаются в UI как
+    stateless preview; builder conversation state при этом не изменяется.
 
 ## Границы модулей
 
@@ -82,8 +90,11 @@
   transaction boundary разговора;
 - `application/preview_service.py` — compile/test use case готовой
   спецификации;
-- `application/file_lifecycle.py` — lifecycle conversation uploads и session
-  cleanup через ports;
+- `application/file_lifecycle.py` — request-scoped upload/binding, bounded
+  output materialization и remote cleanup через ports;
+- `application/ports/file_resource_gateway.py` и
+  `generated_artifact_store.py` — provider/filesystem boundaries без утечки
+  remote state в presentation;
 - `application/interaction_facade.py` — тонкий presentation-facing facade;
 - `builder/result_assembly.py` — authoritative tool results,
   `AgentSpecificationResultPart` и их текстовая проекция;
@@ -101,7 +112,8 @@
 - `result_view.py` — карточки типизированных результатов: vector index,
   AgentSpecification и JSON download;
 - `agent_test_panel.py` — stateless test form, fingerprinted preview, citations,
-  usage и runtime-config download;
+  usage, отдельный preview uploader, generated downloads и runtime-config
+  download;
 - `chat_flow.py` — history, submission, interaction flow и callback boundary,
   через которую result view получает запуск без прямого доступа к credentials.
 
@@ -112,7 +124,9 @@ MVP возвращает не только markdown-текст модели, н�
 system instructions, expected result и, при необходимости, публичный built-in
 tool descriptor `web_search`. Для `rag` дополнительно фиксируются knowledge
 sources, созданный `index_id`, ограничение TTL индекса и публичный tool descriptor
-`knowledge_search`.
+`knowledge_search`. Для обоих шаблонов `code_interpreter` фиксирует только
+capability с безопасными параметрами; file/container IDs относятся к одному
+preview request и в domain artifact не входят.
 
 Детерминированная валидация отделена от LLM-поведения. Если обязательные поля
 отсутствуют, спецификация получает статус `needs_clarification`; готовой она
