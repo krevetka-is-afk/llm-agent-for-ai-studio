@@ -5,19 +5,22 @@ from cryptography.fernet import Fernet
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from ai_interaction_service import (
+from ai_studio_agent_builder.application.interaction import (
+    Attachment,
     MAX_ATTACHMENTS_PER_REQUEST,
     MAX_TOTAL_UPLOAD_BYTES,
     UploadValidationError,
 )
 from ai_studio_agent_builder.application.file_policy import MAX_UPLOAD_BYTES
-from ui.agent_test_panel import (
+from ai_studio_agent_builder.presentation.streamlit.agent_test_panel import (
     RESPONSE_ID_HELP,
     TEST_INPUT_HELP,
     TOTAL_TOKENS_HELP,
 )
-from ui.app import _attachment_record, _validate_uploaded_files
-from ai_interaction_service import Attachment
+from ai_studio_agent_builder.presentation.streamlit.uploads import (
+    attachment_record as _attachment_record,
+    validate_uploaded_files as _validate_uploaded_files,
+)
 
 
 def test_web_ui_starts_in_disconnected_state(tmp_path: Path, monkeypatch) -> None:
@@ -40,7 +43,7 @@ def test_web_ui_starts_in_disconnected_state(tmp_path: Path, monkeypatch) -> Non
 def test_result_view_renders_multiple_agent_downloads_without_id_collision() -> None:
     app = AppTest.from_string(
         """
-from ui.result_view import render_result_parts
+from ai_studio_agent_builder.presentation.streamlit.result_view import render_result_parts
 
 specification = {
     "kind": "agent_specification",
@@ -62,9 +65,9 @@ def test_result_view_renders_independent_agent_test_panels_and_persists_preview(
 ):
     app = AppTest.from_string(
         """
-from ai_interaction_service import AgentTestResult
-from ui.agent_test_panel import AgentSpecificationActions
-from ui.result_view import render_result_parts
+from ai_studio_agent_builder.application.interaction import AgentTestResult
+from ai_studio_agent_builder.presentation.streamlit.agent_test_panel import AgentSpecificationActions
+from ai_studio_agent_builder.presentation.streamlit.result_view import render_result_parts
 
 def runtime_json(specification):
     return '{"schema_version":"1.0","model_name":"test-model"}'
@@ -134,8 +137,8 @@ render_result_parts(
 def test_result_view_hides_test_action_when_disconnected() -> None:
     app = AppTest.from_string(
         """
-from ui.agent_test_panel import AgentSpecificationActions
-from ui.result_view import render_result_parts
+from ai_studio_agent_builder.presentation.streamlit.agent_test_panel import AgentSpecificationActions
+from ai_studio_agent_builder.presentation.streamlit.result_view import render_result_parts
 
 actions = AgentSpecificationActions(
     runtime_config_json=lambda specification: '{"schema_version":"1.0"}',
@@ -160,8 +163,8 @@ render_result_parts(
 def test_result_view_keeps_json_card_but_hides_runtime_for_malformed_spec() -> None:
     app = AppTest.from_string(
         """
-from ui.agent_test_panel import AgentSpecificationActions
-from ui.result_view import render_result_parts
+from ai_studio_agent_builder.presentation.streamlit.agent_test_panel import AgentSpecificationActions
+from ai_studio_agent_builder.presentation.streamlit.result_view import render_result_parts
 
 def reject_runtime(specification):
     raise ValueError("raw malformed details")

@@ -8,6 +8,10 @@ from unittest.mock import MagicMock
 import zipfile
 
 from ai_studio_agent_builder.config import AgentRuntimeConfig
+from ai_studio_agent_builder.presentation.streamlit import user_guidance
+from ai_studio_agent_builder.presentation.streamlit.developer_bundle import (
+    build_developer_bundle,
+)
 from agent_runtime import compile_agent_specification
 from agent_specification import (
     AgentSpecification,
@@ -15,9 +19,6 @@ from agent_specification import (
     build_one_prompt_specification,
     build_rag_specification,
 )
-from ui import user_guidance
-from ui.developer_bundle import build_developer_bundle
-
 
 EXPECTED_FILES = {
     ".env.example",

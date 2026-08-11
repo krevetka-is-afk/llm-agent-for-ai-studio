@@ -10,7 +10,6 @@ import pytest
 
 import ai_interaction_service as interaction_module
 from ai_interaction_service import AIInteractionService, InteractionRequest
-from ai_studio_agent_builder.builder.result_assembly import VectorIndexResultPart
 from ai_studio_agent_builder.config import (
     AgentRuntimeConfig,
     AIServiceConfig,
@@ -202,21 +201,21 @@ async def _run_yandex_ai_studio_rag_e2e(
         assert result.selected_agent is ConversationOptions.RAG
         assert result.responded_by is ConversationOptions.RAG
         assert result.next_state is ConversationOptions.RAG
-        vector_parts = [
-            part for part in result.parts if isinstance(part, VectorIndexResultPart)
-        ]
+        vector_parts = [part for part in result.parts if part["kind"] == "vector_index"]
         assert len(vector_parts) == 1
         vector_part = vector_parts[0]
-        assert vector_part.index_name == index_name
-        assert vector_part.index_id
-        assert vector_part.index_id in created_vector_store_ids
-        assert vector_part.expires_after_days == 1
+        assert vector_part["index_name"] == index_name
+        assert vector_part["index_id"]
+        assert vector_part["index_id"] in created_vector_store_ids
+        assert vector_part["expires_after_days"] == 1
         assert len(uploaded_file_ids) == 1
-        assert tuple(file.file_id for file in vector_part.files) == (
+        assert tuple(file["file_id"] for file in vector_part["files"]) == (
             uploaded_file_ids[0],
         )
-        assert tuple(file.filename for file in vector_part.files) == (local_filename,)
-        assert vector_part.index_id in result.text
+        assert tuple(file["filename"] for file in vector_part["files"]) == (
+            local_filename,
+        )
+        assert vector_part["index_id"] in result.text
         assert index_name in result.text
         assert credentials.api_key not in result.text
         assert credentials.folder_id not in result.text

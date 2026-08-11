@@ -12,11 +12,6 @@ from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentProviderError,
     AgentRunPreview,
 )
-from ai_studio_agent_builder.builder.result_assembly import (
-    AgentSpecificationResultPart,
-    IndexedFileResult,
-    VectorIndexResultPart,
-)
 from ai_studio_agent_builder.config import (
     AIServiceConfig,
     AgentRuntimeConfig,
@@ -287,8 +282,8 @@ def test_service_imports_ready_agent_specification_without_calling_an_agent(
     assert coordinator.calls == []
     assert rag.calls == []
     assert one_prompt.calls == []
-    assert isinstance(result.parts[0], AgentSpecificationResultPart)
-    assert result.parts[0].specification == specification
+    assert result.parts[0]["kind"] == "agent_specification"
+    assert result.parts[0]["specification"] == specification.to_record()
     assert state.latest_agent_specification == specification
     assert result.next_state is ConversationOptions.RAG
     assert "PDF повторно загружать не требуется" in result.text
@@ -494,12 +489,13 @@ def test_service_returns_an_authoritative_vector_index_part(tmp_path: Path) -> N
         )
     )
 
-    assert result.parts[0] == VectorIndexResultPart(
-        index_name="knowledge",
-        index_id="index-1",
-        files=(IndexedFileResult("first.pdf", "file-first"),),
-        expires_after_days=1,
-    )
+    assert result.parts[0] == {
+        "kind": "vector_index",
+        "index_name": "knowledge",
+        "index_id": "index-1",
+        "expires_after_days": 1,
+        "files": [{"filename": "first.pdf", "file_id": "file-first"}],
+    }
     assert len(result.parts) == 1
     assert rag.calls[0]["context"].allowed_file_ids == frozenset({"file-first"})
 
@@ -584,12 +580,11 @@ def test_service_commits_and_exports_only_finalized_specification(
     )
 
     assert len(result.parts) == 1
-    assert isinstance(result.parts[0], AgentSpecificationResultPart)
-    assert result.parts[0].specification.purpose == "Draft concise support replies"
-    assert [tool.tool_id for tool in result.parts[0].specification.tools] == [
-        "web_search"
-    ]
-    assert state.latest_agent_specification == result.parts[0].specification
+    specification_record = result.parts[0]["specification"]
+    assert specification_record["purpose"] == "Draft concise support replies"
+    assert [tool["tool_id"] for tool in specification_record["tools"]] == ["web_search"]
+    assert state.latest_agent_specification is not None
+    assert state.latest_agent_specification.to_record() == specification_record
     assert result.next_state is ConversationOptions.COORDINATOR
     assert state.state is ConversationOptions.COORDINATOR
 

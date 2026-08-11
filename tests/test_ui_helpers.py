@@ -6,6 +6,14 @@ from ai_studio_agent_builder.application.errors import (
     AIStudioRequestError,
     VectorIndexUnavailableError,
 )
+from ai_studio_agent_builder.application.interaction import (
+    AIInteraction,
+    AgentTestInputError,
+    AgentTestRequest,
+    AgentTestResult,
+    Attachment,
+    UploadValidationError,
+)
 from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentProviderError,
     VectorStoreUnavailableError,
@@ -13,25 +21,24 @@ from ai_studio_agent_builder.application.ports.agent_runner import (
 from ai_studio_agent_builder.application.ports.api_key_store import (
     ApiKeyConnection,
 )
-from ai_interaction_service import (
-    AIInteractionService,
-    AgentTestInputError,
-    AgentTestRequest,
-    AgentTestResult,
-    Attachment,
-    UploadValidationError,
-)
-from ui.agent_test_panel import (
+from ai_studio_agent_builder.presentation.streamlit.agent_test_panel import (
     agent_test_error_message,
     citation_markdown,
     preview_state_key,
     specification_fingerprint,
 )
-from ui.attachments import preview_kind_for_mime
-from ui.chat_flow import build_user_content, interaction_error_message
-from ui.chat_flow import build_agent_specification_actions
-from ui.result_view import agent_specification_json
-from ui.uploads import attachment_record
+from ai_studio_agent_builder.presentation.streamlit.attachments import (
+    preview_kind_for_mime,
+)
+from ai_studio_agent_builder.presentation.streamlit.chat_flow import (
+    build_agent_specification_actions,
+    build_user_content,
+    interaction_error_message,
+)
+from ai_studio_agent_builder.presentation.streamlit.result_view import (
+    agent_specification_json,
+)
+from ai_studio_agent_builder.presentation.streamlit.uploads import attachment_record
 
 
 def test_attachment_record_preserves_saved_and_original_filename() -> None:
@@ -165,7 +172,7 @@ def test_chat_flow_builds_callbacks_without_exposing_connection_to_result_view()
 
     service = FakeService()
     disconnected = build_agent_specification_actions(
-        cast(AIInteractionService, cast(Any, service)),
+        cast(AIInteraction, cast(Any, service)),
         None,
         "web-user",
     )
@@ -175,7 +182,7 @@ def test_chat_flow_builds_callbacks_without_exposing_connection_to_result_view()
     }
 
     connected = build_agent_specification_actions(
-        cast(AIInteractionService, cast(Any, service)),
+        cast(AIInteraction, cast(Any, service)),
         ApiKeyConnection(api_key="AQAAAA-secret", folder_id="folder-1"),
         "web-user",
     )

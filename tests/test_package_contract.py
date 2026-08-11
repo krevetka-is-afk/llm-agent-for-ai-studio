@@ -1,4 +1,5 @@
 import agent_runner as legacy_agent_runner
+import ai_interaction_service as legacy_interaction
 import agent_runtime as legacy_runtime
 import agent_specification as legacy_specification
 import component_catalog as legacy_catalog
@@ -12,13 +13,27 @@ import request_context as legacy_request_context
 import result_assembly as legacy_result_assembly
 import routing as legacy_routing
 import session as legacy_agent_sessions
+import ui.agent_test_panel as legacy_agent_test_panel
 import ui.api_key_store as legacy_api_key_store
+import ui.attachments as legacy_attachments
+import ui.chat_flow as legacy_chat_flow
+import ui.connection as legacy_connection
+import ui.developer_bundle as legacy_developer_bundle
+import ui.result_view as legacy_result_view
+import ui.uploads as legacy_uploads
+import ui.user_guidance as legacy_user_guidance
 import user_store as legacy_user_store
 import yandex_responses_runner as legacy_yandex_runner
 
 import ai_studio_agent_builder as public_api
 from ai_studio_agent_builder import config
-from ai_studio_agent_builder.application import builder_state, dto, errors, file_policy
+from ai_studio_agent_builder.application import (
+    builder_state,
+    dto,
+    errors,
+    file_policy,
+    interaction,
+)
 from ai_studio_agent_builder.application.ports import (
     agent_runner,
     api_key_store as api_key_port,
@@ -45,6 +60,16 @@ from ai_studio_agent_builder.infrastructure.yandex_ai_studio import (
     client_factory,
     files_gateway,
     responses_runner,
+)
+from ai_studio_agent_builder.presentation.streamlit import (
+    agent_test_panel,
+    attachments,
+    chat_flow,
+    connection,
+    developer_bundle,
+    result_view,
+    uploads,
+    user_guidance,
 )
 
 
@@ -78,6 +103,35 @@ def test_public_api_reexports_stable_domain_contracts() -> None:
 
 
 def test_legacy_flat_imports_reference_packaged_contracts() -> None:
+    assert legacy_interaction.Attachment is interaction.Attachment
+    assert legacy_interaction.InteractionRequest is interaction.InteractionRequest
+    assert legacy_interaction.InteractionResult is interaction.InteractionResult
+    assert legacy_interaction.AgentTestRequest is interaction.AgentTestRequest
+    assert legacy_interaction.AgentTestResult is interaction.AgentTestResult
+    assert legacy_interaction.UploadValidationError is interaction.UploadValidationError
+    assert (
+        legacy_agent_test_panel.AgentSpecificationActions
+        is agent_test_panel.AgentSpecificationActions
+    )
+    assert legacy_attachments.preview_kind_for_mime is attachments.preview_kind_for_mime
+    assert legacy_chat_flow.build_user_content is chat_flow.build_user_content
+    assert (
+        legacy_connection.credentials_from_connection
+        is connection.credentials_from_connection
+    )
+    assert (
+        legacy_developer_bundle.build_developer_bundle
+        is developer_bundle.build_developer_bundle
+    )
+    assert (
+        legacy_result_view.agent_specification_json
+        is result_view.agent_specification_json
+    )
+    assert legacy_uploads.attachment_record is uploads.attachment_record
+    assert (
+        legacy_user_guidance.render_next_steps_sidebar
+        is user_guidance.render_next_steps_sidebar
+    )
     assert legacy_logging.ContextFormatter is observability.ContextFormatter
     assert legacy_logging.bind_logger is observability.bind_logger
     assert legacy_logging.build_formatter is observability.build_formatter

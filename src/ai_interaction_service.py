@@ -4,7 +4,7 @@ import logging
 import shutil
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -12,7 +12,21 @@ from uuid import uuid4
 from agents import OpenAIProvider, RunConfig
 from openai import OpenAIError
 
+from ai_studio_agent_builder.application import interaction as interaction_contract
 from ai_studio_agent_builder.application.dto import AIStudioCredentials
+from ai_studio_agent_builder.application.interaction import (
+    AgentSpecificationImportError,
+    AgentTestInputError,
+    AgentTestRequest,
+    AgentTestResult,
+    Attachment,
+    InteractionRequest,
+    InteractionResult,
+    MAX_AGENT_TEST_INPUT_LENGTH,
+    MAX_ATTACHMENTS_PER_REQUEST,
+    MAX_TOTAL_UPLOAD_BYTES,
+    UploadValidationError,
+)
 from ai_studio_agent_builder.application.errors import AIStudioRequestError
 from ai_studio_agent_builder.application.file_policy import (
     MAX_UPLOAD_BYTES,
@@ -20,7 +34,6 @@ from ai_studio_agent_builder.application.file_policy import (
     sanitize_filename,
 )
 from ai_studio_agent_builder.application.ports.agent_runner import (
-    AgentCitation,
     AgentProviderError,
     AgentRunPreview,
     AgentRunner,
@@ -37,6 +50,7 @@ from ai_studio_agent_builder.builder.result_assembly import (
     ResultPart,
     merge_agent_runs,
     render_result_text,
+    result_part_to_record,
 )
 from ai_studio_agent_builder.config import AIServiceConfig
 from ai_studio_agent_builder.domain.routing import (
@@ -78,81 +92,14 @@ from custom_agents.rag_agent import build_rag_agent
 
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class Attachment:
-    filename: str
-    display_name: str | None = None
-    caption: str | None = None
-    file_id: str | None = None
-
-
-@dataclass(frozen=True)
-class InteractionRequest:
-    user_id: str
-    text: str | None
-    credentials: AIStudioCredentials
-    conversation_state: ConversationState
-    user_files_dir: Path
-    request_id: str = field(default_factory=lambda: uuid4().hex)
-    attachment: Attachment | None = None
-    attachments: tuple[Attachment, ...] = ()
-
-
-@dataclass(frozen=True)
-class InteractionResult:
-    text: str
-    parts: tuple[ResultPart, ...]
-    selected_agent: ConversationOptions
-    responded_by: ConversationOptions
-    next_state: ConversationOptions
-
-
-@dataclass(frozen=True)
-class AgentTestRequest:
-    user_id: str
-    credentials: AIStudioCredentials
-    specification_record: Mapping[str, Any]
-    user_input: str
-    request_id: str = field(default_factory=lambda: uuid4().hex)
-
-
-@dataclass(frozen=True)
-class AgentTestResult:
-    response_id: str
-    output_text: str
-    citations: tuple[AgentCitation, ...]
-    input_tokens: int | None = None
-    output_tokens: int | None = None
-    total_tokens: int | None = None
+UPLOAD_RETENTION_POLICY = interaction_contract.UPLOAD_RETENTION_POLICY
 
 
 class UnsupportedConversationStateError(RuntimeError):
     pass
 
 
-class UploadValidationError(ValueError):
-    pass
-
-
-class AgentTestInputError(ValueError):
-    pass
-
-
-class AgentSpecificationImportError(ValueError):
-    """Raised when an uploaded AgentSpecification cannot be imported."""
-
-
 AgentRunnerFactory = Callable[[Any, str], AgentRunner]
-
-MAX_ATTACHMENTS_PER_REQUEST = 5
-MAX_TOTAL_UPLOAD_BYTES = 25 * 1024 * 1024
-MAX_AGENT_TEST_INPUT_LENGTH = 10_000
-UPLOAD_RETENTION_POLICY = (
-    "User upload directories are request-scoped for model access and are removed "
-    "when the user resets the conversation."
-)
 
 
 class AIInteractionService:
@@ -420,7 +367,7 @@ class AIInteractionService:
         )
         result = InteractionResult(
             text=render_result_text(parts),
-            parts=parts,
+            parts=tuple(result_part_to_record(part) for part in parts),
             selected_agent=selected_agent,
             responded_by=responded_by,
             next_state=working_state.state,
@@ -534,7 +481,7 @@ class AIInteractionService:
         request.conversation_state.commit_from(state)
         return InteractionResult(
             text=render_result_text(parts),
-            parts=parts,
+            parts=tuple(result_part_to_record(part) for part in parts),
             selected_agent=state.state,
             responded_by=state.state,
             next_state=state.state,
