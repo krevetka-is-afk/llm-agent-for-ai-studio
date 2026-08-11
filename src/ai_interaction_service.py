@@ -41,6 +41,13 @@ from ai_studio_agent_builder.application.ports.agent_runner import (
 )
 from ai_studio_agent_builder.application.builder_state import ConversationState
 from ai_studio_agent_builder.builder.agents.sdk_event_adapter import AgentRunCollector
+from ai_studio_agent_builder.builder.agents.coordinator_agent import (
+    build_coordinator_agent,
+)
+from ai_studio_agent_builder.builder.agents.one_prompt_agent import (
+    build_one_prompt_agent,
+)
+from ai_studio_agent_builder.builder.agents.rag_agent import build_rag_agent
 from ai_studio_agent_builder.builder.context import RequestContext
 from ai_studio_agent_builder.builder.result_assembly import (
     AgentRunResult,
@@ -86,9 +93,6 @@ from agent_runtime import (
     ExecutableAgentConfig,
     compile_agent_specification,
 )
-from custom_agents.coordinator_agent import build_coordinator_agent
-from custom_agents.one_prompt_agent import build_one_prompt_agent
-from custom_agents.rag_agent import build_rag_agent
 
 
 logger = logging.getLogger(__name__)
@@ -113,12 +117,14 @@ class AIInteractionService:
         agent_runner_factory: AgentRunnerFactory | None = None,
     ):
         self._config = config
-        self._rag_agent = rag_agent or build_rag_agent(config.rag_model)
+        self._rag_agent = rag_agent or build_rag_agent(config.rag_model, get_session)
         self._one_prompt_agent = one_prompt_agent or build_one_prompt_agent(
-            config.one_prompt
+            config.one_prompt,
+            get_session,
         )
         self._coordinator_agent = coordinator_agent or build_coordinator_agent(
-            config.consultant
+            config.consultant,
+            get_session,
         )
         self._agent_runner_factory = (
             agent_runner_factory or self._build_yandex_agent_runner

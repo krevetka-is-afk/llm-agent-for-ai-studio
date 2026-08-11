@@ -1,14 +1,14 @@
 import asyncio
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from agents import RunConfig
 from openai import OpenAI
 
 from ai_studio_agent_builder.application.builder_state import ConversationState
+from ai_studio_agent_builder.application.settings import ModelConfig
+from ai_studio_agent_builder.builder.agents.base_agent import CustomAgent
 from ai_studio_agent_builder.builder.context import RequestContext
-from ai_studio_agent_builder.config import ModelConfig
-from custom_agents.base_agent import CustomAgent
 
 
 class EmptyStreamingResult:
@@ -27,7 +27,8 @@ def test_custom_agent_passes_configured_max_turns_to_runner(
         return EmptyStreamingResult()
 
     monkeypatch.setattr(
-        "custom_agents.base_agent.Runner.run_streamed", fake_run_streamed
+        "ai_studio_agent_builder.builder.agents.base_agent.Runner.run_streamed",
+        fake_run_streamed,
     )
     agent = CustomAgent(
         ModelConfig(
@@ -40,6 +41,7 @@ def test_custom_agent_passes_configured_max_turns_to_runner(
         ),
         name="Test Agent",
         instruction="Test instructions",
+        session_factory=lambda user_id, path: cast(Any, object()),
     )
     context = RequestContext(
         user_id="user-1",

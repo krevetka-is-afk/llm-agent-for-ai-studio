@@ -29,7 +29,7 @@ from context import AIStudioCredentials, get_api_key_client
 from ai_studio_agent_builder.infrastructure.yandex_ai_studio.files_gateway import (
     upload_local_file,
 )
-from custom_agents.tools.vector_index import (
+from ai_studio_agent_builder.builder.agents.tools.vector_index import (
     DEFAULT_CHUNKING_STRATEGY,
     _wait_for_vector_store_completed,
 )

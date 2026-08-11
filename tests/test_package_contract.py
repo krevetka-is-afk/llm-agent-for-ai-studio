@@ -6,7 +6,15 @@ import component_catalog as legacy_catalog
 import conversation_state as legacy_builder_state
 import config as legacy_config
 import credentials as legacy_credentials
+import custom_agents.base_agent as legacy_base_agent
+import custom_agents.coordinator_agent as legacy_coordinator_agent
+import custom_agents.one_prompt_agent as legacy_one_prompt_agent
+import custom_agents.rag_agent as legacy_rag_agent
+import custom_agents.tools.agent_specification as legacy_specification_tools
+import custom_agents.tools.delegate_tools as legacy_delegate_tools
+import custom_agents.tools.finish_dialog as legacy_finish_dialog
 import custom_agents.tools.upload_files as legacy_upload_files
+import custom_agents.tools.vector_index as legacy_vector_index
 import file_security as legacy_file_security
 import logging_config as legacy_logging
 import request_context as legacy_request_context
@@ -42,6 +50,18 @@ from ai_studio_agent_builder.application.ports import (
 from ai_studio_agent_builder.builder import context as builder_context
 from ai_studio_agent_builder.builder import result_assembly
 from ai_studio_agent_builder.builder.agents import sdk_event_adapter
+from ai_studio_agent_builder.builder.agents import (
+    base_agent,
+    coordinator_agent,
+    one_prompt_agent,
+    rag_agent,
+)
+from ai_studio_agent_builder.builder.agents.tools import (
+    agent_specification as specification_tools,
+    delegate_tools,
+    finish_dialog,
+    vector_index,
+)
 from ai_studio_agent_builder.domain import (
     catalog,
     routing,
@@ -104,6 +124,23 @@ def test_public_api_reexports_stable_domain_contracts() -> None:
 
 
 def test_legacy_flat_imports_reference_packaged_contracts() -> None:
+    assert legacy_base_agent.CustomAgent is base_agent.CustomAgent
+    assert (
+        legacy_coordinator_agent.build_coordinator_agent
+        is coordinator_agent.build_coordinator_agent
+    )
+    assert (
+        legacy_one_prompt_agent.build_one_prompt_agent
+        is one_prompt_agent.build_one_prompt_agent
+    )
+    assert legacy_rag_agent.build_rag_agent is rag_agent.build_rag_agent
+    assert (
+        legacy_specification_tools.update_agent_specification
+        is specification_tools.update_agent_specification
+    )
+    assert legacy_delegate_tools.delegate_rag is delegate_tools.delegate_rag
+    assert legacy_finish_dialog.finish_dialog is finish_dialog.finish_dialog
+    assert legacy_vector_index.create_search_index is vector_index.create_search_index
     assert config.AIServiceConfig is settings.AIServiceConfig
     assert config.AgentRuntimeConfig is settings.AgentRuntimeConfig
     assert config.ApiKeyStoreConfig is settings.ApiKeyStoreConfig

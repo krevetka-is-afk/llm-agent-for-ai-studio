@@ -6,8 +6,10 @@ from ai_studio_agent_builder.application.builder_state import (
     ConversationOptions,
     ConversationState,
 )
-from custom_agents.one_prompt_agent import ONE_PROMPT_TOOLS_SETUP
-from custom_agents.tools.agent_specification import (
+from ai_studio_agent_builder.builder.agents.one_prompt_agent import (
+    ONE_PROMPT_TOOLS_SETUP,
+)
+from ai_studio_agent_builder.builder.agents.tools.agent_specification import (
     _finalize_agent_specification_impl,
     _update_agent_specification_impl,
 )

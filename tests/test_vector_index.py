@@ -8,7 +8,7 @@ from ai_studio_agent_builder.application.builder_state import (
     ConversationOptions,
     ConversationState,
 )
-from custom_agents.tools import vector_index
+from ai_studio_agent_builder.builder.agents.tools import vector_index
 
 
 class FakeVectorStores:
