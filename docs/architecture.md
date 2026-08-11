@@ -12,7 +12,8 @@
 - [Целевая структура Python package](architecture/target-package-layout.md);
 - [ADR-0001: package boundaries](adr/0001-package-boundaries.md);
 - [ADR-0002: provider isolation](adr/0002-provider-isolation.md);
-- [ADR-0003: ownership жизненного цикла файлов](adr/0003-file-lifecycle-ownership.md).
+- [ADR-0003: ownership жизненного цикла файлов](adr/0003-file-lifecycle-ownership.md);
+- [ADR-0004: проверенный API-контракт Code Interpreter](adr/0004-yandex-code-interpreter-api-contract.md).
 
 Весь Python-код, включая Streamlit, Telegram и экспериментальный OAuth,
 находится в installable package `ai_studio_agent_builder`. Flat-модули и второе

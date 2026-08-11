@@ -1,0 +1,44 @@
+{
+  "status": "completed",
+  "model": "gpt://<folder_id>/gpt-oss-120b",
+  "output_text_contains_marker": true,
+  "output": [
+    {
+      "type": "reasoning"
+    },
+    {
+      "type": "code_interpreter_call",
+      "status": "completed",
+      "container_id": "<container_id>",
+      "code_present": true,
+      "outputs": [
+        {
+          "type": "logs"
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "status": "completed",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "annotations": [
+            {
+              "type": "container_file_citation",
+              "fields": [
+                "container_id",
+                "end_index",
+                "file_id",
+                "filename",
+                "start_index"
+              ],
+              "filename": "result.csv"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
