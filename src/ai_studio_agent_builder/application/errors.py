@@ -5,4 +5,8 @@ class AIStudioRequestError(RuntimeError):
     """Raised when AI Studio rejects or cannot complete an application request."""
 
 
-__all__ = ["AIStudioRequestError"]
+class VectorIndexUnavailableError(RuntimeError):
+    """Raised when a requested vector index cannot become ready in time."""
+
+
+__all__ = ["AIStudioRequestError", "VectorIndexUnavailableError"]

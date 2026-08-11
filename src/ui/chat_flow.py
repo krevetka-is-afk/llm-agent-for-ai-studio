@@ -17,14 +17,16 @@ from ai_interaction_service import (
     InteractionResult,
     UploadValidationError,
 )
-from ai_studio_agent_builder.application.errors import AIStudioRequestError
+from ai_studio_agent_builder.application.errors import (
+    AIStudioRequestError,
+    VectorIndexUnavailableError,
+)
 from ai_studio_agent_builder.application.file_policy import MAX_UPLOAD_BYTES
 from ai_studio_agent_builder.application.ports.api_key_store import (
     ApiKeyConnection,
 )
 from ai_studio_agent_builder.infrastructure.observability.logging import bind_logger
 from context import ConversationState
-from custom_agents.tools.vector_index import VectorIndexPollingError
 from ai_studio_agent_builder.builder.result_assembly import result_part_to_record
 from ui.agent_test_panel import AgentSpecificationActions, AgentTestCallback
 from ui.attachments import render_attachment
@@ -112,7 +114,7 @@ def interaction_error_message(exc: Exception) -> str:
         return str(exc)
     if isinstance(exc, UploadValidationError):
         return str(exc)
-    if isinstance(exc, VectorIndexPollingError):
+    if isinstance(exc, VectorIndexUnavailableError):
         return "AI Studio не завершил создание индекса. Повторите попытку позднее."
     return "Не удалось выполнить запрос к AI Studio. Повторите попытку."
 

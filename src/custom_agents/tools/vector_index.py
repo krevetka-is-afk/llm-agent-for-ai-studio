@@ -6,6 +6,7 @@ from typing import Any
 
 from agents import RunContextWrapper, function_tool
 
+from ai_studio_agent_builder.application.errors import VectorIndexUnavailableError
 from ai_studio_agent_builder.builder.context import (
     BuilderResourceClient,
     RequestContext,
@@ -35,7 +36,7 @@ DEFAULT_CHUNKING_STRATEGY = StaticFileChunkingStrategyObjectParam(
 )
 
 
-class VectorIndexPollingError(RuntimeError):
+class VectorIndexPollingError(VectorIndexUnavailableError):
     """Base class for bounded vector store polling failures."""
 
 
