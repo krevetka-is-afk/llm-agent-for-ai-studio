@@ -1,8 +1,7 @@
 # Каталог компонентов MVP
 
-Каталог компонентов описывает только те шаблоны и элементы, которые Agent
-Builder имеет право включать в экспортируемую `AgentSpecification`. Фактическая
-реализация находится в
+Каталог перечисляет шаблоны и элементы экспортируемой `AgentSpecification`.
+Реализация находится в
 `src/ai_studio_agent_builder/domain/catalog.py`.
 
 ## Шаблоны
@@ -95,7 +94,6 @@ tools; `web_search` добавляется только при явной пот
 
 ## Границы MVP
 
-Каталог не является marketplace. Текущий объём ограничен двумя шаблонами и
-минимальными компонентами: prompt, база знаний, `knowledge_search`, встроенный
-`web_search` и безопасный `code_interpreter`. Произвольные function/MCP tools,
-доступ Code Interpreter в сеть и explicit containers остаются за границами MVP.
+В MVP входят два шаблона: prompt, база знаний, `knowledge_search`, встроенный
+`web_search` и `code_interpreter`. Произвольные function/MCP tools, доступ Code
+Interpreter в сеть и explicit containers не поддерживаются.

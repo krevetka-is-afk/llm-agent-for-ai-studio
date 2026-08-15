@@ -36,10 +36,10 @@ flowchart LR
     github -->|"source, docs, issues"| user
 ```
 
-## Trust boundaries
+## Границы доверия
 
-1. **Browser → application.** Текст, имена, MIME и содержимое файлов являются
-   недоверенными. UI-валидация улучшает UX, но authoritative validation
+1. **Browser → application.** Текст, имена, MIME и содержимое файлов считаются
+   недоверенными. UI проверяет ввод для удобства, а окончательная валидация
    выполняется в application layer.
 2. **LLM/function tools → application.** Аргументы модели недоверенные. Модель не
    выбирает credentials, локальные paths, `file_id`, `container_id` или
@@ -48,9 +48,8 @@ flowchart LR
    provider client и преобразуют provider exceptions/objects во внутренние DTO.
 4. **Remote files → local artifacts.** Filename, MIME, declared size и
    `Content-Length` недоверенные. Лимиты применяются во время потокового чтения.
-5. **Repository → public consumers.** В публикуемую историю не попадают
-   credentials, пользовательские файлы, session DB, логи и внутренние brand
-   assets без отдельного разрешения.
+5. **Repository → users.** В Git-историю не попадают credentials,
+   пользовательские файлы, session DB и локальные логи.
 
 ## Поддерживаемые и экспериментальные поверхности
 

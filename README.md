@@ -1,26 +1,24 @@
 # Agent Builder for Yandex AI Studio
 
-Open-source ассистент ШАД, который помогает спроектировать one-prompt,
-RAG-приложение или сценарий с Code Interpreter и создаёт необходимые ресурсы в
-Yandex AI Studio. Завершённый сценарий
-возвращает валидированную `AgentSpecification`, позволяет выполнить один
-stateless тестовый запрос через Responses API и скачать как исходную
-спецификацию, так и исполняемый runtime config. One-prompt может включать
-встроенный `web_search`, а RAG-вариант использует созданный vector store через
-нативный `file_search`. Оба шаблона могут дополнительно получить переносимую
-возможность `code_interpreter`: пользователь явно выбирает файлы для каждого
-preview, а созданные артефакты доступны для безопасного скачивания.
+Проект сделан в рамках проектного курса ШАДа.
 
-Основной пользовательский интерфейс — Streamlit Web UI. Telegram-бот и OAuth
-Gateway сохранены как экспериментальные адаптеры и не запускаются по умолчанию.
-MVP не создаёт постоянную Agent Atelier entity и не возвращает `agent_id`.
+Сервис помогает собрать и проверить агента для Yandex AI Studio, не редактируя
+JSON вручную.
 
-Проект находится в статусе `0.1.x Alpha`. Названия Yandex AI Studio и Yandex
-Cloud используются для обозначения совместимости. Партнёрская атрибуция и
-визуальные материалы будут опубликованы только после отдельного согласования;
-текущие правила описаны в [гайде по бренду](docs/branding.md).
+## Что умеет
 
-## Быстрый запуск Web UI
+- собирать one-prompt агентов с опциональным `web_search`;
+- создавать RAG-сценарии и подключать загруженные файлы через `file_search`;
+- добавлять Code Interpreter и передавать ему файлы для конкретного запуска;
+- проверять агента одним stateless-запросом через Responses API;
+- экспортировать `AgentSpecification`, runtime config и ZIP для разработчика;
+- импортировать готовую `agent-specification.json` обратно в Builder.
+
+Основной интерфейс — Streamlit Web UI. Telegram-бот и OAuth Gateway оставлены
+как экспериментальные адаптеры и по умолчанию не запускаются. Текущая версия —
+`0.1.x Alpha`.
+
+## Быстрый запуск
 
 Требования: Python 3.13 и `uv`.
 
@@ -30,83 +28,69 @@ cp .env.web.example .env.web
 uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode("ascii"))'
 ```
 
-Скопируйте полученный ключ в `YC_API_KEY_ENCRYPTION_KEY` внутри `.env.web`, затем
-запустите приложение:
+Запишите полученный ключ в `YC_API_KEY_ENCRYPTION_KEY` внутри `.env.web`, затем
+запустите Web UI:
 
 ```bash
 uv run --env-file .env.web streamlit run src/ai_studio_agent_builder/entrypoints/web.py
 ```
 
-Локальные базы и загруженные файлы сохраняются в `.local/`; этот каталог
-исключён из Git. В Docker Compose те же данные сохраняются в volume `web-data`.
-На POSIX-системах файлы ключей и истории создаются с правами `0600`, каталоги
-вложений — `0700`. Неиспользуемые Web-подключения автоматически удаляются из
-зашифрованной базы через 30 дней. Локальные файлы ограничены 100 MiB и 100
-объектами на user scope, а общий storage root — 512 MiB.
+Для подключения нужны API-ключ Yandex AI Studio и ID каталога. Ключ проверяется
+минимальным запросом и хранится локально в зашифрованном виде. Он не передаётся
+модели и не попадает в экспорт.
 
-Пользователь вводит API-ключ Yandex AI Studio и ID каталога. Ключ проверяется
-минимальным запросом и хранится локально в зашифрованном виде; в model/tool
-context он не передаётся.
+Локальные базы и загруженные файлы находятся в `.local/`, который исключён из
+Git. В Docker Compose данные сохраняются в volume `web-data`.
 
-Готовую карточку агента можно:
+## Работа с файлами
 
-1. протестировать на произвольном запросе;
-2. проверить ответ, источники, понятные метрики токенов и `response_id` с
-   tooltip-справкой;
-3. скачать `agent-specification.json`;
-4. по no-code инструкции перенести готовые настройки в Agent Atelier;
-5. скачать `responses-agent-config.json` или ZIP-пакет для разработчика.
+Файлы Builder-чата, RAG и Code Interpreter хранятся раздельно. Для каждого
+preview выбираются собственные входные файлы. Размер и количество входов и
+выходов ограничены, а временные ресурсы Yandex AI Studio удаляются после
+запуска, когда API это позволяет. Для оставшихся provider-ресурсов настроен TTL.
 
-Для Code Interpreter файлы карточки preview не смешиваются с файлами
-Builder-чата. Каждый запуск имеет собственный upload/download lifecycle:
-входы проходят лимиты, временные remote IDs добавляются только в копию запроса,
-выходы потоково сохраняются в `.local/`, а известные remote resources удаляются
-best effort. Defense-in-depth TTL ограничивает жизнь provider input files 48
-часами, а RAG vector stores — одним днём. API-ключи, folder ID, пользовательские
-bytes и временные file/container IDs в экспорт и ZIP не попадают.
+Результаты Code Interpreter сохраняются потоково и доступны для скачивания.
+API-ключи, folder ID, содержимое пользовательских файлов и временные remote IDs
+в JSON и ZIP не включаются.
 
-Готовую `agent-specification.json` также можно приложить в чат с запросом
-«создай агента из этой спецификации». Приложение строго проверит JSON и схему,
-импортирует карточку без повторного создания RAG-индекса; доступность указанного
-vector store проверяется при тестовом запуске.
+Подробнее: [жизненный цикл файлов](docs/architecture/file-data-lifecycle.md) и
+[исполнение спецификации](docs/agent-runtime.md).
 
 ## Архитектура
 
 ```text
 src/
 ├── ai_studio_agent_builder/
-│   ├── domain/                # спецификация, каталог, routing и runtime compiler
-│   ├── application/           # use cases, DTO, errors и порты
-│   ├── builder/               # orchestration builder-агентов и tools
+│   ├── domain/                # спецификация, каталог и runtime compiler
+│   ├── application/           # сценарии, DTO, ошибки и порты
+│   ├── builder/               # Builder-агенты и tools
 │   ├── infrastructure/        # Yandex AI Studio, persistence и observability
 │   ├── presentation/
 │   │   ├── streamlit/         # Web UI
 │   │   └── telegram/          # экспериментальный Telegram adapter
-│   ├── entrypoints/           # тонкие Web/Telegram bootstraps
-│   ├── experimental/oauth/    # изолированный OAuth-прототип
+│   ├── entrypoints/           # Web/Telegram bootstraps
+│   ├── experimental/oauth/    # OAuth-прототип
 │   └── composition.py         # composition root
 ```
 
-Подробности и границы модулей: [docs/architecture.md](docs/architecture.md).
+Границы модулей описаны в [docs/architecture.md](docs/architecture.md).
 
 ## Документация
 
 - [Web UI и подключение](docs/web-ui.md)
 - [Архитектура](docs/architecture.md)
-- [Требования к MVP](docs/requirements.md)
+- [Требования](docs/requirements.md)
 - [AgentSpecification](docs/agent-specification.md)
-- [Исполнение спецификации через Responses API](docs/agent-runtime.md)
-- [Пример Code Interpreter](examples/code-interpreter/README.md)
+- [Responses API runtime](docs/agent-runtime.md)
 - [Каталог компонентов](docs/component-catalog.md)
-- [Тестирование и credentialed E2E](docs/testing.md)
+- [Тестирование](docs/testing.md)
 - [Docker и deployment](docs/deployment.md)
-- [Бренд и внешняя атрибуция](docs/branding.md)
-- [Чек-лист публичного релиза](docs/release-checklist.md)
-- [Отчёт о готовности к публичному релизу](docs/release-readiness.md)
+- [Пример Code Interpreter](examples/code-interpreter/README.md)
+- [Чек-лист релиза](docs/release-checklist.md)
 - [Экспериментальный Telegram-бот](docs/telegram-experimental.md)
 - [Экспериментальный OAuth Gateway](docs/oauth-gateway-experimental.md)
 
-## Проверка перед коммитом
+## Проверки
 
 ```bash
 uv run ruff format --check .
@@ -117,8 +101,8 @@ uv build --wheel --sdist
 uv run pre-commit run --all-files
 ```
 
-Credentialed E2E является opt-in, использует отдельный короткоживущий ключ и
-может расходовать квоту. Обычный `pytest` не обращается к Yandex AI Studio.
+Credentialed E2E запускаются отдельно и могут расходовать квоту Yandex AI
+Studio. Обычный `pytest` не обращается к внешнему API.
 
 ## Docker
 
@@ -127,20 +111,15 @@ cp .env.web.example .env.web
 docker compose up -d --build
 ```
 
-Контейнер запускается от non-root пользователя с read-only root filesystem,
-сброшенными Linux capabilities, healthcheck, лимитом памяти 1 ГБ, лимитом 256
-процессов и `no-new-privileges`. Подробности — в
+Параметры контейнера и deployment-сценарии описаны в
 [docs/deployment.md](docs/deployment.md).
 
 ## Участие в проекте
 
-Перед изменениями прочитайте [CONTRIBUTING.md](CONTRIBUTING.md) и
-[GOVERNANCE.md](GOVERNANCE.md). Ошибки и предложения оформляются через GitHub
-Issues. Уязвимости нельзя публиковать в issues — используйте приватный процесс
-из [SECURITY.md](SECURITY.md).
+Перед изменениями прочитайте [CONTRIBUTING.md](CONTRIBUTING.md). Ошибки и
+предложения принимаются через GitHub Issues. Об уязвимостях сообщайте по
+инструкции из [SECURITY.md](SECURITY.md), не раскрывая детали в публичном issue.
 
 ## Лицензия
 
-Исходный код распространяется по лицензии MIT. Полный текст находится в
-[LICENSE](LICENSE). Лицензия на код не предоставляет прав на товарные знаки или
-на заявления от имени ШАД, Yandex либо Yandex Cloud.
+Код распространяется по лицензии MIT. См. [LICENSE](LICENSE).

@@ -88,19 +88,19 @@ reasoning/tool-call элементов не является стабильно�
    reference. Он не скачивает bytes и не пишет локальные файлы.
 5. Первая версия использует только auto-container, `memory_limit=1g` и
    `network_policy=disabled`. Explicit container, allowlist и secrets не входят
-   в public contract `v0.1.0`.
+   в контракт `v0.1.0`.
 6. Credentialed E2E использует streaming плюс retrieve/poll, как официальный
    пример. Production adapter обязан корректно принимать как уже завершённый,
    так и незавершённый initial response; выбор sync/stream остаётся деталью
    infrastructure.
-7. Provider TTL не заменяет best-effort cleanup в `finally`.
+7. Provider TTL не заменяет cleanup в `finally`.
 
 ## Альтернативы
 
-- Считать совместимость OpenAI SDK доказательством provider support —
-  отклонено: typed request не подтверждает поддержку модели и response shape.
+- Считать совместимость OpenAI SDK доказательством совместимости API —
+  отклонено: typed request не подтверждает поддержку модели и форму ответа.
 - Сразу заменить `gpt-oss-120b` на Qwen — отклонено: текущая модель прошла
-  целевой smoke, а смена модели меняет поведение всего generated runtime.
+  credentialed smoke, а смена модели меняет поведение runtime.
 - Хранить реальные response/file/container IDs в fixture — отклонено: они не
   нужны для контракта и создают утечку provider metadata.
 - Использовать explicit container в preview — отклонено: он требует stateful
@@ -113,5 +113,5 @@ reasoning/tool-call элементов не является стабильно�
 - E2E удаляет все известные input/output files, container и response в
   `finally`;
 - CI-3 и CI-4 должны использовать эту fixture для parser/binding tests;
-- минимальные роли и scope необходимо подтвердить с партнёрской командой
-  Яндекса до публичного production release.
+- минимальные роли и scope нужно сверять с актуальной документацией Yandex AI
+  Studio перед релизом.

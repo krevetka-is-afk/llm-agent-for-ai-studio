@@ -95,11 +95,11 @@ OpenAI Agents SDK events для Builder разбираются только вн
 
 | Контейнер | Владеет | Не владеет |
 | --- | --- | --- |
-| Domain | Спецификациями, validation, provider-neutral runtime/artifact DTO | SDK clients, UI state, disk/network I/O |
+| Domain | Спецификациями, validation и runtime/artifact DTO | SDK clients, UI state, disk/network I/O |
 | Application | Use cases, транзакциями, квотами, orchestration, cleanup policy | Конкретными Builder agents, форматом provider response и рендерингом UI |
 | Builder | Реализацией `BuilderRunPort`, LLM instructions, function tools, сборкой typed result parts | Credentials и произвольными provider IDs |
-| Infrastructure | API clients, provider requests, persistence, нормализацией ошибок | Бизнес-решениями о маршрутизации и readiness |
-| Presentation | Формами, view state, отображением безопасных DTO | Provider clients и authoritative validation |
+| Infrastructure | API clients, provider requests, persistence, нормализацией ошибок | Решениями о маршрутизации и готовности спецификации |
+| Presentation | Формами, view state, отображением безопасных DTO | Provider clients и финальной валидацией |
 | Composition | Созданием и связыванием конкретных реализаций | Доменным поведением |
 
 ## Composition root
@@ -113,4 +113,4 @@ Yandex adapters и application services. Thin Streamlit/Telegram entrypoints
 `BuilderConversationService` вызывает только application-owned
 `BuilderRunPort`. Реализация этого port находится в `builder/agents`, внутри
 использует Agents SDK и `ResultAssembler` и возвращает нормализованный
-`BuilderRunOutcome`. Таким образом application не импортирует builder.
+`BuilderRunOutcome`. Application не импортирует builder.

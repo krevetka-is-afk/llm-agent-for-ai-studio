@@ -38,7 +38,7 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
     [*] --> Referenced: provider returns artifact reference
-    Referenced --> Streaming: begin bounded download
+    Referenced --> Streaming: begin download within limits
     Streaming --> Downloaded: size and integrity accepted
     Streaming --> PartialDeleted: limit, timeout or read error
     Referenced --> RemoteDeleted: result rejected or download skipped
@@ -58,7 +58,7 @@ handles и квоты, регистрирует remote reference сразу по
 независимо от того, дошёл ли flow до Responses request.
 
 `PreviewOutputFileLifecycle` дедуплицирует provider references, потоково
-сохраняет bounded local copies и очищает известные output files/containers.
+сохраняет local copies с лимитами и очищает известные output files/containers.
 Runner только нормализует references и не выполняет файловый I/O.
 
 `ConversationFileService` отдельно владеет сохранением и retention локальных
@@ -128,7 +128,7 @@ preview явно. До чтения bytes проверяются count/per-file/
 Remote auto container имеет provider TTL, но TTL не заменяет cleanup. Preview
 resources удаляются после request, а TTL остаётся fallback на случай ошибки
 cleanup. Stateful RAG inputs живут не более 48 часов, vector store — не более
-одного дня; ошибка build запускает немедленный best-effort cleanup. Локальные
+одного дня; после ошибки build известные ресурсы удаляются сразу. Локальные
 input/output artifacts хранятся только в user-scoped directory до reset.
 Забытые зашифрованные Web-подключения удаляются через 30 дней.
 Экспериментальный Telegram adapter сериализует запросы одного пользователя и

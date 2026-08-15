@@ -119,7 +119,7 @@ Store ID. После успешного теста UI предлагает дв�
 ZIP создаётся в памяти и не содержит API-ключ, folder ID, пользовательские
 файлы, generated artifacts или временные file/container/response IDs. Для Code
 Interpreter `example.py` показывает полный цикл `--file` → upload → привязка к
-копии request → bounded download → cleanup. Ссылки на официальную инструкцию
+копии request → скачивание с лимитами → cleanup. Ссылки на инструкцию
 Agent Atelier доступны как в карточке результата, так и в sidebar.
 
 ## Безопасные ошибки
@@ -133,7 +133,7 @@ UI различает:
 - пустой пользовательский ввод.
 - недопустимое количество/размер/путь входных файлов;
 - ошибку скачивания или превышение лимита generated artifact;
-- неполный best-effort cleanup без показа remote IDs.
+- неполный cleanup без показа remote IDs.
 
 Raw provider body, prompt, system instructions, API-ключ и headers в
 пользовательское сообщение и структурные runtime-логи не включаются.
@@ -180,9 +180,8 @@ credentialed E2E отдельно подтверждает:
   explicit containers, network allowlist и sandbox secrets не поддерживаются;
 - до 5 inputs (10 MiB каждый, 25 MiB суммарно) и до 10 outputs (10 MiB каждый,
   25 MiB суммарно) на preview;
-- стоимость, rate limits и доступность tools определяются текущими квотами и
-  тарифами Yandex AI Studio; перед production deployment их нужно сверить с
-  официальной документацией и партнёрской командой;
+- стоимость, rate limits и доступность tools зависят от квот Yandex AI Studio;
+  перед production deployment сверяйтесь с актуальной документацией;
 - `gpt-oss-120b` прошёл credentialed smoke, но совместимость другой модели с
   Code Interpreter должна подтверждаться отдельным E2E;
 - произвольные function/MCP tools не поддерживаются.

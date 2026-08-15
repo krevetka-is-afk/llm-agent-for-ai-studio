@@ -1,155 +1,87 @@
-# Архитектура MVP
+# Архитектура
 
-Статус: текущая реализация с утверждённой целевой архитектурой для подготовки
-публичного `v0.1.0`.
+Production-код находится в installable package `ai_studio_agent_builder`.
+Приложение разделено на доменную модель, сценарии, Builder, адаптеры и UI.
 
-Подробные архитектурные артефакты:
+Дополнительные схемы:
 
-- [System context](architecture/system-context.md);
-- [Container view](architecture/container-view.md);
-- [Ключевые sequence flows](architecture/sequences.md);
-- [Жизненный цикл файлов и данных](architecture/file-data-lifecycle.md);
-- [Целевая структура Python package](architecture/target-package-layout.md);
-- [ADR-0001: package boundaries](adr/0001-package-boundaries.md);
-- [ADR-0002: provider isolation](adr/0002-provider-isolation.md);
-- [ADR-0003: ownership жизненного цикла файлов](adr/0003-file-lifecycle-ownership.md);
-- [ADR-0004: проверенный API-контракт Code Interpreter](adr/0004-yandex-code-interpreter-api-contract.md).
+- [System context](architecture/system-context.md)
+- [Container view](architecture/container-view.md)
+- [Основные сценарии](architecture/sequences.md)
+- [Жизненный цикл файлов](architecture/file-data-lifecycle.md)
+- [Структура Python package](architecture/target-package-layout.md)
+- [ADR](adr/0001-package-boundaries.md)
 
-Весь Python-код, включая Streamlit, Telegram и экспериментальный OAuth,
-находится в installable package `ai_studio_agent_builder`. Flat-модули и второе
-дерево импортов удалены; runtime запускается только через package entrypoints.
+## Слои
 
-## Основной поток
+| Слой | Ответственность |
+| --- | --- |
+| `domain` | `AgentSpecification`, каталог компонентов, routing и runtime compiler |
+| `application` | Сценарии, DTO, транзакции, файловые политики и порты |
+| `builder` | Coordinator, специализированные агенты, function tools и сборка результата |
+| `infrastructure` | Yandex AI Studio, SQLite, локальные файлы и logging |
+| `presentation` | Streamlit и экспериментальный Telegram adapter |
+| `entrypoints` | Запуск приложения через composition root |
 
-1. Web UI или Telegram adapter формирует `InteractionRequest` с уникальным
-   `request_id`.
-2. Composition root создаёт Yandex AI Studio adapters и внедряет их через
-   application-owned ports; application services не импортируют provider SDK.
-3. Агент получает `RequestContext` без API-ключа: только client, folder ID,
-   директорию файлов, серверный реестр разрешённых файлов и рабочую копию
-   состояния. Модель не выбирает и не передаёт `file_id` в RAG tool.
-4. `routing.py` до model call применяет только высокоуверенные явные решения:
-   отказ от RAG и запрос web-search без vector knowledge направляются в
-   one-prompt, а явный запрос RAG/vector index — в RAG. Неоднозначные запросы
-   остаются coordinator.
-5. Coordinator при необходимости делегирует оставшийся запрос RAG или
-   one-prompt агенту. Каждый запуск ограничен настраиваемым `max_turns` (20 по
-   умолчанию), чтобы сложный tool flow имел запас, но бесконечный цикл оставался
-   ограниченным.
-6. Специализированный агент через `update_agent_specification` обновляет
-   типизированный черновик, а валидатор возвращает полный список недостающих
-   обязательных полей.
-7. One-prompt agent при подтверждённой потребности в актуальных данных добавляет
-   публичный descriptor `web_search`; это не создаёт vector index и не заполняет
-   `knowledge_sources`.
-8. RAG flow сохраняет ещё не проиндексированные файлы в транзакционном состоянии
-   между сообщениями. `create_search_index` получает от модели только имя,
-   использует серверный реестр файлов и после создания авторитетно привязывает
-   `index_id`, файлы и публичный `knowledge_search` к черновику. Повторный вызов
-   возвращает уже привязанный индекс.
-9. `finalize_agent_specification` публикует только структурно готовую
-   спецификацию; обычный markdown модели не интерпретируется как готовый артефакт.
-10. `ResultAssembler` собирает текст, vector index и подтверждённую
-   `AgentSpecification` из tool executions и рабочего состояния.
-11. Route, draft и latest specification коммитятся только после успешной сборки
-    результата.
-12. Для тестового запуска application service строго восстанавливает
-    `AgentSpecification` из result-part записи и повторно вычисляет readiness.
-13. Чистый compiler преобразует доменные `web_search`/`knowledge_search` в
-    provider-neutral `ExecutableAgentConfig` с нативными
-    `web_search`/`file_search`, а `code_interpreter` — в безопасный auto-container
-    без request-scoped IDs.
-14. Для Code Interpreter application file lifecycle проверяет выбранные именно
-    для preview локальные inputs, загружает их и добавляет IDs только в копию
-    runtime config.
-15. `YandexResponsesAgentRunner` добавляет folder ID только при формировании
-    model URI, выполняет Vector Store preflight и вызывает Responses API. Runner
-    нормализует provider output, но не читает и не пишет bytes.
-16. Application lifecycle потоково сохраняет bounded generated artifacts по
-    локальным handles и в `finally` удаляет известные input/output files и
-    containers.
-17. Ответ, citations, usage и локальные generated files возвращаются в UI как
-    stateless preview; builder conversation state при этом не изменяется.
+Направления импортов проверяет `tests/test_architecture.py`. `domain` не зависит
+от SDK и UI; `application` работает с внешними системами только через порты;
+конкретные реализации связываются в `composition.py`.
 
-## Границы модулей
+## Сборка агента
 
-- `application/dto.py` и `infrastructure/yandex_ai_studio/client_factory.py` —
-  модели credentials и фабрики sync/async OpenAI clients;
-- `application/builder_state.py` — mutable route, draft/latest specification,
-  ожидающие RAG-файлы и транзакционные `copy()`/`commit_from()`;
-- `domain/routing.py` — детерминированное распознавание только явного выбора
-  между one-prompt и vector RAG;
-- `builder/context.py` — least-privilege context, доступный агентам и tools;
-- `domain/catalog.py`, `specification.py`, `runtime.py` — каталог компонентов,
-  переносимая спецификация и чистый compiler в `ExecutableAgentConfig`;
-- `application/ports/agent_runner.py` — provider-neutral port запуска, preview,
-  citations и безопасная taxonomy runtime-ошибок;
-- `infrastructure/yandex_ai_studio/responses_runner.py` — Responses API adapter,
-  File Search preflight и нормализация ответа;
-- `application/builder_service.py` — routing, import спецификации и
-  transaction boundary разговора;
-- `application/preview_service.py` — compile/test use case готовой
-  спецификации;
-- `application/file_lifecycle.py` — request-scoped upload/binding, bounded
-  output materialization и remote cleanup через ports;
-- `application/ports/file_resource_gateway.py` и
-  `generated_artifact_store.py` — provider/filesystem boundaries без утечки
-  remote state в presentation;
-- `application/interaction_facade.py` — тонкий presentation-facing facade;
-- `builder/result_assembly.py` — authoritative tool results,
-  `AgentSpecificationResultPart` и их текстовая проекция;
-- `builder/agents/tools/agent_specification.py` — детерминированное обновление и
-  финализация спецификации через function tools;
-- `infrastructure/persistence/telegram_user_store.py` — экспериментальное
-  in-memory хранилище Telegram-пользователей.
+1. UI создаёт `InteractionRequest` и передаёт его в
+   `BuilderConversationService`.
+2. Сервис копирует состояние диалога и выбирает one-prompt, RAG или coordinator.
+3. Builder получает `RequestContext` без API-ключа и обновляет типизированный
+   черновик через function tools.
+4. RAG tool берёт файлы из серверного реестра, создаёт vector store и записывает
+   подтверждённый `index_id` в спецификацию.
+5. `finalize_agent_specification` возвращает результат только после
+   детерминированной валидации.
+6. `ResultAssembler` собирает текст и typed result parts.
+7. Рабочее состояние коммитится только после успешной сборки результата.
 
-Поддерживаемый Streamlit entrypoint — `ai_studio_agent_builder.entrypoints.web`,
-а детали presentation разделены:
+Обычный текст модели не считается готовой спецификацией. Полный поток показан в
+[sequence diagram](architecture/sequences.md).
 
-- `connection.py` — подключение и lifecycle API-ключа;
-- `uploads.py` — чистая валидация upload metadata;
-- `attachments.py` — безопасное отображение и скачивание файлов;
-- `result_view.py` — карточки типизированных результатов: vector index,
-  AgentSpecification и JSON download;
-- `agent_test_panel.py` — stateless test form, fingerprinted preview, citations,
-  usage, отдельный preview uploader, generated downloads и runtime-config
-  download;
-- `chat_flow.py` — history, submission, interaction flow и callback boundary,
-  через которую result view получает запуск без прямого доступа к credentials.
+## Preview
 
-## Формальная спецификация создаваемого агента
+`AgentPreviewService` загружает `AgentSpecification`, проверяет её и компилирует
+в `ExecutableAgentConfig`. Затем `AgentRunner` вызывает Responses API и
+возвращает нормализованный ответ, citations и usage.
 
-MVP возвращает не только markdown-текст модели, но и typed result part
-`agent_specification`. Для `one_prompt` спецификация фиксирует назначение,
-system instructions, expected result и, при необходимости, публичный built-in
-tool descriptor `web_search`. Для `rag` дополнительно фиксируются knowledge
-sources, созданный `index_id`, ограничение TTL индекса и публичный tool descriptor
-`knowledge_search`. Для обоих шаблонов `code_interpreter` фиксирует только
-capability с безопасными параметрами; file/container IDs относятся к одному
-preview request и в domain artifact не входят.
+Для `web_search` compiler добавляет встроенный Web Search. Для RAG он добавляет
+`file_search` с сохранённым `index_id`. Для Code Interpreter базовый config
+содержит auto-container без `file_ids`; выбранные пользователем файлы
+привязываются к копии config непосредственно перед запросом.
 
-Детерминированная валидация отделена от LLM-поведения. Если обязательные поля
-отсутствуют, спецификация получает статус `needs_clarification`; готовой она
-считается только при пустых `missing_fields` и `issues` и после явного вызова
-`finalize_agent_specification`.
+## Файлы и внешние ресурсы
 
-`AgentSpecification` остаётся доменным артефактом, а
-`ExecutableAgentConfig` — отдельным runtime-контрактом. Благодаря этому модель,
-temperature и output budget не смешиваются с подтверждёнными требованиями
-пользователя. Подробнее: [agent-runtime.md](agent-runtime.md).
+Application layer отвечает за лимиты, upload, скачивание результатов и cleanup.
+Runner не читает и не пишет пользовательские файлы.
 
-## Осознанно отложено
+- Builder, RAG и Code Interpreter используют разные наборы файлов.
+- Remote IDs не попадают в `AgentSpecification` и экспорт.
+- Частично записанные файлы удаляются при ошибке или превышении лимита.
+- Известные remote resources удаляются в `finally`; TTL остаётся страховкой на
+  случай недоступности API.
 
-- постоянное хранение спецификаций за пределами текущей пользовательской сессии;
-- постоянное хранилище Telegram accounts и миграции;
-- интеграция OAuth Gateway в основной credential flow;
-- multi-replica coordination и distributed locks.
-- создание постоянной Agent Atelier entity и возврат `agent_id` до появления
-  подтверждённого публичного API.
+Лимиты и состояния ресурсов описаны в
+[file lifecycle](architecture/file-data-lifecycle.md).
 
-Эти изменения не нужны для текущего MVP и расширили бы blast radius перед
-релизом.
+## Интерфейсы
 
-Перенос flat modules в installable package больше не отложен: он выполняется
-перед Code Interpreter как отдельная, сохраняющая поведение миграция. Причины и
-границы решения зафиксированы в [ADR-0001](adr/0001-package-boundaries.md).
+Основной entrypoint — `ai_studio_agent_builder.entrypoints.web`. Telegram и
+OAuth находятся в экспериментальных модулях и не запускаются автоматически.
+
+Стабильная поверхность `0.1.0` ограничена `AgentSpecification`, JSON codec и
+runtime compiler. UI, provider adapters и внутренние Builder tools не входят в
+публичный Python API.
+
+## Не входит в `0.1.0`
+
+- постоянное хранилище спецификаций;
+- создание постоянной Agent Atelier entity и возврат `agent_id`;
+- multi-replica coordination;
+- произвольные function и MCP tools;
+- Code Interpreter с сетью или explicit containers.

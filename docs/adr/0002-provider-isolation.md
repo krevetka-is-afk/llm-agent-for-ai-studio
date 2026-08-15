@@ -21,10 +21,9 @@ API parsing и exception mapping находятся только в
 - safe error taxonomy;
 - normalized resource status.
 
-Runtime compiler остаётся provider-neutral настолько, насколько это позволяет
-текущий продуктовый контракт. Request-scoped binding provider IDs выполняется
-на application/infrastructure boundary и не изменяет базовый экспортируемый
-runtime.
+Runtime compiler не зависит от конкретного провайдера. Provider IDs
+добавляются к копии config для текущего запроса на границе application и
+infrastructure; базовый экспорт не меняется.
 
 OpenAI Agents SDK, используемый для самого Builder, является отдельной adapter
 границей. Импорты его event types разрешены только в `builder/agents/`. Модуль

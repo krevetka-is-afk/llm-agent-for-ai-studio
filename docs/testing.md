@@ -27,18 +27,12 @@ Lock не должен содержать известные уязвимост�
 границы; транзитивные зависимости контролируются committed `uv.lock` и audit в
 обычном CI.
 
-Тесты фиксируют runtime entrypoints, Docker/Compose contract, единственное
-package-дерево, transactional conversation state, явные routing overrides и различие
-между web search и vector RAG, добавление/сохранение/удаление публичного
-`web_search` в one-prompt-спецификации, передачу `max_turns`, Telegram
-serialization/secret TTL, UI helpers, tooltip contracts, developer ZIP без
-секретов и отсутствие API-ключа в tool context. Code Interpreter-регрессии
-проверяют domain/compiler contract, request-scoped binding, partial-upload
-cleanup, нормализацию artifact references, bounded atomic download, MIME policy,
-cache fingerprint и исполняемый developer example. RAG-регрессии отдельно
-проверяют сохранение доверенных файлов между сообщениями, отсутствие `file_id`
-в tool schema, идемпотентное повторное создание и отбрасывание ошибочного
-tool-output вместо отображения его как ID индекса.
+Тесты проверяют entrypoints, Docker/Compose, границы package, транзакционное
+состояние диалога, routing, Web Search, Telegram, UI и экспорт без секретов.
+Регрессии Code Interpreter покрывают привязку файлов к запросу, cleanup после
+частичного upload, скачивание с лимитами, MIME policy, cache fingerprint и
+developer example. RAG-регрессии проверяют сохранение доверенных файлов,
+отсутствие `file_id` в tool schema и повторное использование созданного индекса.
 
 ## Credentialed Yandex AI Studio E2E
 
@@ -84,11 +78,10 @@ uv run --env-file .env.e2e pytest -q \
 Задайте `RUN_YANDEX_AI_STUDIO_E2E=1`, `YC_AI_STUDIO_API_KEY` и
 `YC_AI_STUDIO_FOLDER_ID`. Используйте отдельный короткоживущий ключ с минимальной
 областью `yc.ai.foundationModels.execute` и сервисный аккаунт с ролями
-`ai.assistants.editor` и `ai.languageModels.user`; этот минимальный набор взят из
-официального примера Code Interpreter и должен быть подтверждён с партнёрской
-командой Яндекса перед release. `YC_AI_STUDIO_E2E_KEEP_REMOTE=1` допустим только
-для отладки: оставшиеся ресурсы могут расходовать квоту до ручного удаления или
-TTL.
+`ai.assistants.editor` и `ai.languageModels.user`; перед запуском сверяйте роли
+с актуальной документацией Yandex AI Studio.
+`YC_AI_STUDIO_E2E_KEEP_REMOTE=1` допустим только для отладки: оставшиеся ресурсы
+могут расходовать квоту до ручного удаления или TTL.
 
 Web Search дополнительно помечен
 `yandex_ai_studio_web_search_e2e`, потому что зависит от доступной квоты. Перед
@@ -100,11 +93,11 @@ Web Search дополнительно помечен
 `yandex-ai-studio-e2e` с required reviewers и secrets
 `YC_AI_STUDIO_API_KEY`/`YC_AI_STUDIO_FOLDER_ID`. Workflow не подписан на
 `pull_request`, всегда задаёт `YC_AI_STUDIO_E2E_KEEP_REMOTE=0` и запускает Web
-Search только при явном input `include_web_search=true`. Успешные core и Web
-Search jobs являются обязательным evidence перед тегом `v0.1.0`, но не должны
-становиться автоматическим required check для внешних fork PR без secrets.
+Search только при явном input `include_web_search=true`. Перед тегом `v0.1.0`
+core и Web Search jobs должны пройти успешно. Для внешних fork PR эти jobs не
+делаются обязательными, потому что им недоступны secrets.
 
-## Подтверждённый release evidence
+## Последний полный E2E
 
 11 августа 2026 года полный credentialed suite выполнен локально одноразовым
 override safety-флага без изменения `.env.e2e`:

@@ -94,7 +94,7 @@ sequenceDiagram
     Runner-->>Preview: AgentRunPreview
     loop each accepted generated artifact
         Preview->>Files: materialize remote reference
-        Files->>Gateway: stream file content in bounded chunks
+        Files->>Gateway: stream file content within limits
         Gateway->>API: Files.content streaming response
         Files->>Files: atomic local write + MIME safety classification
     end
@@ -105,7 +105,7 @@ sequenceDiagram
     UI-->>User: text, citations, usage and safe downloads
 ```
 
-## Failure semantics Code Interpreter
+## Ошибки Code Interpreter
 
 - Validation failure: provider не вызывается; локальные временные файлы не
   создаются либо удаляются владельцем request.
@@ -114,5 +114,5 @@ sequenceDiagram
   пользователю возвращается безопасная taxonomy error.
 - Oversized output: чтение останавливается во время stream, partial local file
   удаляется, remote resource переходит в cleanup.
-- Cleanup failure: основной успешный результат не теряется; фиксируется bounded
-  warning/metric без credentials, file IDs и filenames.
+- Cleanup failure: основной результат не теряется; warning и метрики не
+  содержат credentials, file IDs и filenames.

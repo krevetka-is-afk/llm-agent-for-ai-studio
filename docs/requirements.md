@@ -122,7 +122,7 @@ handles и удаляются с провайдера вместе с inputs/con
 | FR-01 | Система должна принимать текстовый запрос пользователя и вложения через Web UI. | Запрос преобразуется в `InteractionRequest`; ограничения количества и размера файлов проверяются до обращения к AI Studio. |
 | FR-02 | Система должна маршрутизировать запрос в coordinator, RAG или one-prompt agent по состоянию диалога и последнему явному выбору пользователя. | Явный отказ от vector RAG переключает sticky RAG route в `ONE_PROMPT`; web search без vector knowledge не считается RAG; ambiguous intent остаётся coordinator. |
 | FR-03 | Система должна создавать RAG vector index только из файлов, зарегистрированных сервисом для текущего RAG-сценария. | `file_id` отсутствует в tool schema; ожидающие файлы сохраняются между сообщениями в `ConversationState`, потребляются после создания индекса, а вызов без файлов возвращает контролируемый `needs_files`. |
-| FR-04 | Система должна собирать authoritative typed result из tool calls, а не только из текста модели. | `ResultAssembler` создаёт `VectorIndexResultPart` только из структурированного успешного `create_search_index` output и не принимает текст ошибки за `index_id`. |
+| FR-04 | Система должна собирать typed result из tool calls, а не только из текста модели. | `ResultAssembler` создаёт `VectorIndexResultPart` только из структурированного успешного `create_search_index` output и не принимает текст ошибки за `index_id`. |
 | FR-05 | Система должна формировать `AgentSpecification` для завершённого результата пользователя. | `AgentSpecificationResultPart` появляется только после успешного вызова `finalize_agent_specification` и готовой валидации. |
 | FR-06 | `AgentSpecification` должна содержать назначение, входы, инструкции, ограничения, источники знаний, tools и expected result. | JSON-экспорт содержит поля `purpose`, `inputs`, `instructions`, `constraints`, `knowledge_sources`, `tools`, `expected_result`. |
 | FR-07 | Система должна валидировать обязательные поля спецификации детерминированно. | Пустая/неполная spec получает `needs_clarification`; валидатор возвращает все `missing_fields`. |
@@ -138,27 +138,27 @@ handles и удаляются с провайдера вместе с inputs/con
 | FR-17 | Система должна объяснять дальнейший путь нетехническому пользователю. | Sidebar и готовая карточка содержат no-code шаги и официальные ссылки Agent Atelier; после теста UI показывает готовые настройки для ручного переноса и отдельный ZIP-пакет для разработчика. |
 | FR-18 | Спецификация должна переносимо описывать Code Interpreter без provider state. | `code_interpreter` содержит только `memory_limit=1g` и `network_policy=disabled`; compiler создаёт auto-container без `file_ids` и отклоняет неизвестные значения. |
 | FR-19 | Preview Code Interpreter должен принимать явные request-scoped файлы и возвращать локальные generated artifacts. | UI показывает uploader только для соответствующей capability; inputs загружаются с `purpose=user_data`, IDs привязываются к копии runtime, outputs скачиваются потоково, а известные input/output files и containers очищаются на success/error/timeout. |
-| FR-20 | Developer ZIP должен воспроизводить полный Code Interpreter lifecycle без чувствительных данных. | `example.py` поддерживает повторяемый `--file`, upload, request-scoped binding, bounded download и cleanup; ZIP не содержит credentials, пользовательские bytes и временные file/container/response IDs. |
+| FR-20 | Developer ZIP должен воспроизводить полный Code Interpreter lifecycle без чувствительных данных. | `example.py` поддерживает повторяемый `--file`, upload, привязку IDs к запросу, скачивание с лимитами и cleanup; ZIP не содержит credentials, пользовательские bytes и временные file/container/response IDs. |
 
 ## Нефункциональные требования
 
 | ID | Требование | Acceptance criteria |
 | --- | --- | --- |
 | NFR-01 | API-ключ не должен попадать в model/tool context, результат или JSON spec. | `RequestContext` не содержит `api_key`; secret-like параметры редактируются при сериализации. |
-| NFR-02 | Ошибки пользователя и AI Studio должны отображаться безопасно. | UI возвращает bounded сообщения без внутренних stack traces и secret details. |
+| NFR-02 | Ошибки пользователя и AI Studio должны отображаться безопасно. | UI возвращает короткие сообщения без внутренних stack traces и secret details. |
 | NFR-03 | Изменение состояния диалога и черновика спецификации должно быть транзакционным. | `ConversationState.commit_from()` вызывается только после успешного agent run и сборки результата; ошибка не коммитит route/draft/latest spec. |
-| NFR-04 | Upload flow должен иметь ограниченный blast radius. | Файлы сохраняются в пользовательской директории, имена санитизируются, лимиты проверяются. |
+| NFR-04 | Ошибка upload не должна затрагивать чужие файлы. | Файлы сохраняются в пользовательской директории, имена санитизируются, лимиты проверяются. |
 | NFR-05 | Результат должен быть воспроизводимым для отчёта и проверки. | Есть docs по архитектуре, схеме spec, каталогу, testing и test results. |
 | NFR-06 | Проверка качества должна быть автоматизируемой. | Поддерживаются `ruff format --check`, `ruff check`, `ty check`, `pytest -q`, `pre-commit`. |
 | NFR-07 | Credentialed E2E не должен запускаться случайно или на недоверенном PR. | Тест помечен `yandex_ai_studio_e2e` и требует explicit env flag; GitHub workflow доступен только через `workflow_dispatch` и protected environment. |
-| NFR-08 | MVP должен оставаться малым и проверяемым. | Новые функции реализованы без новых production dependencies и без marketplace scope. |
+| NFR-08 | MVP должен оставаться малым и проверяемым. | Новые функции реализованы без новых production dependencies и без marketplace. |
 | NFR-09 | Внутренний model/tool flow должен иметь ограниченный, настраиваемый бюджет turns. | `ModelConfig.max_turns` передаётся в SDK Runner; значение по умолчанию и production config равны 20. |
 | NFR-10 | Тест готового агента не должен изменять основной диалог или черновик спецификации. | Preview выполняется отдельным application-service method без `ConversationState.commit_from()`. |
-| NFR-11 | Runtime-ошибки и credentials должны оставаться внутри доверенной границы сервиса. | Result view получает callbacks без API key; provider exceptions преобразуются в bounded сообщения без stack trace и secret details. |
+| NFR-11 | Runtime-ошибки и credentials должны оставаться внутри доверенной границы сервиса. | Result view получает callbacks без API key; provider exceptions преобразуются в короткие сообщения без stack trace и secret details. |
 | NFR-12 | Preview должен сохраняться между rerun UI только для неизменённой спецификации и inputs. | Результат хранится под ключом карточки и сбрасывается при изменении canonical fingerprint спецификации или выбранных файлов. |
 | NFR-13 | Технические данные должны быть понятны без знания API. | UI использует человеческие подписи и hover-help для citations, token usage, `response_id`, runtime config, template, Vector Store ID и Code Interpreter lifecycle; developer ZIP явно отделён от основного no-code пути. |
 | NFR-14 | Многошаговый RAG flow не должен зависеть от повторной передачи файла пользователем или выбора `file_id` моделью. | Загруженный файл остаётся доступен после уточнения имени индекса; повторное создание переиспользует существующий индекс; внутренние идентификаторы не включаются в prompt агента. |
-| NFR-15 | Code Interpreter file lifecycle должен иметь ограниченный blast radius. | До provider call применяются лимиты 5 inputs, 10 MiB на файл и 25 MiB суммарно; outputs ограничены 10 файлами, 10 MiB на файл и 25 MiB суммарно, сохраняются атомарно, partial удаляется. |
+| NFR-15 | Ошибка Code Interpreter не должна оставлять незавершённые файлы или неограниченные ресурсы. | До provider call применяются лимиты 5 inputs, 10 MiB на файл и 25 MiB суммарно; outputs ограничены 10 файлами, 10 MiB на файл и 25 MiB суммарно, сохраняются атомарно, partial удаляется. |
 | NFR-16 | Кэш preview не должен переиспользоваться для другого набора файлов. | Fingerprint включает canonical spec и name/MIME/size/content digest каждого выбранного input; изменение набора очищает результат. |
 | NFR-17 | Публичный release не должен собираться с известными уязвимостями production lock. | Обычный CI выполняет `pip-audit` по frozen export; release gate останавливается при найденной advisory, а исправленные минимальные версии отражены в `pyproject.toml`. |
 
