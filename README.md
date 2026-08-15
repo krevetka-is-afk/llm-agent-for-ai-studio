@@ -1,6 +1,6 @@
-# Shada Agent Builder for Yandex AI Studio
+# Agent Builder for Yandex AI Studio
 
-Open-source ассистент Shada, который помогает спроектировать one-prompt,
+Open-source ассистент ШАД, который помогает спроектировать one-prompt,
 RAG-приложение или сценарий с Code Interpreter и создаёт необходимые ресурсы в
 Yandex AI Studio. Завершённый сценарий
 возвращает валидированную `AgentSpecification`, позволяет выполнить один
@@ -143,4 +143,4 @@ Issues. Уязвимости нельзя публиковать в issues — �
 
 Исходный код распространяется по лицензии MIT. Полный текст находится в
 [LICENSE](LICENSE). Лицензия на код не предоставляет прав на товарные знаки или
-на заявления от имени Shada, Yandex либо Yandex Cloud.
+на заявления от имени ШАД, Yandex либо Yandex Cloud.

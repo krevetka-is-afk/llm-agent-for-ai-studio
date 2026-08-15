@@ -5,19 +5,18 @@ build-backend = "hatchling.build"
 [project]
 name = "llm-agent-for-ai-studio"
 version = "0.1.0"
-description = "Shada assistant for designing and testing agent applications in Yandex AI Studio"
+description = "Assistant for designing and testing agent applications in Yandex AI Studio"
 readme = "README.md"
 requires-python = ">=3.13"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [
-    { name = "Shada contributors" },
+    { name = "Project contributors" },
 ]
 keywords = [
     "agents",
     "code-interpreter",
     "rag",
-    "shada",
     "yandex-ai-studio",
 ]
 classifiers = [
