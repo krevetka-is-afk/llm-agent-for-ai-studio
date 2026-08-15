@@ -8,6 +8,7 @@ from .agent_test_panel import (
     AgentSpecificationActions,
     render_agent_test_panel,
 )
+from .markdown_renderer import render_markdown
 
 
 def render_result_parts(
@@ -33,7 +34,7 @@ def render_result_parts(
         elif kind == "markdown":
             text = part.get("text")
             if isinstance(text, str) and text:
-                st.markdown(text)
+                render_markdown(text)
 
 
 def render_agent_specification_result(

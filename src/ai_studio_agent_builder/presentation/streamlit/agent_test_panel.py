@@ -26,6 +26,7 @@ from ai_studio_agent_builder.domain.specification import (
 )
 
 from .attachments import render_generated_preview
+from .markdown_renderer import render_markdown
 from .uploads import UploadContent, uploaded_files_fingerprint
 from .user_guidance import render_agent_next_steps
 
@@ -289,7 +290,7 @@ def render_agent_preview(
 ) -> None:
     st.markdown("#### Результат тестирования")
     if result.output_text:
-        st.markdown(result.output_text)
+        render_markdown(result.output_text)
     else:
         st.info("Агент завершил запрос без текстового ответа.")
 

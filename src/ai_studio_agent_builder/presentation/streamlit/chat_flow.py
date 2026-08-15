@@ -31,6 +31,7 @@ from ai_studio_agent_builder.application.ports.api_key_store import (
 from .agent_test_panel import AgentSpecificationActions, AgentTestCallback
 from .attachments import render_attachment
 from .connection import credentials_from_connection
+from .markdown_renderer import render_markdown
 from .result_view import render_result_parts
 from .uploads import UploadContent, attachment_record, validate_uploaded_files
 
@@ -176,7 +177,7 @@ def _render_history(
                     agent_actions=agent_actions,
                 )
             else:
-                st.markdown(message["content"])
+                render_markdown(message["content"])
             attachments = message.get("attachments")
             if isinstance(attachments, list):
                 for attachment in attachments:
@@ -257,7 +258,7 @@ def _append_and_render_user_message(
         ]
     st.session_state.messages.append(message)
     with st.chat_message("user"):
-        st.markdown(user_content)
+        render_markdown(user_content)
         for attachment in message.get("attachments", []):
             render_attachment(ai_service, connection_id, attachment)
 
@@ -290,7 +291,7 @@ def _append_and_render_assistant_message(
                     agent_actions=agent_actions,
                 )
             else:
-                st.markdown(answer_text)
+                render_markdown(answer_text)
 
     assistant_message: dict[str, Any] = {
         "id": assistant_message_id,

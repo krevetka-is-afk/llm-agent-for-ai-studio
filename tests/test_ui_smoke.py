@@ -63,6 +63,22 @@ render_result_parts([specification], key_prefix="second-assistant")
     assert not app.exception
 
 
+def test_result_view_normalizes_latex_before_rendering_markdown() -> None:
+    app = AppTest.from_string(
+        r"""
+from ai_studio_agent_builder.presentation.streamlit.result_view import render_result_parts
+
+render_result_parts(
+    [{"kind": "markdown", "text": r"[ \frac{weight}{price} ]"}],
+    key_prefix="assistant",
+)
+"""
+    ).run()
+
+    assert not app.exception
+    assert app.markdown[0].value == "$$\n\\frac{weight}{price}\n$$"
+
+
 def test_result_view_renders_independent_agent_test_panels_and_persists_preview() -> (
     None
 ):

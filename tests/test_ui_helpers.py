@@ -41,6 +41,9 @@ from ai_studio_agent_builder.presentation.streamlit.chat_flow import (
     build_user_content,
     interaction_error_message,
 )
+from ai_studio_agent_builder.presentation.streamlit.markdown_renderer import (
+    normalize_latex_delimiters,
+)
 from ai_studio_agent_builder.presentation.streamlit.result_view import (
     agent_specification_json,
 )
@@ -83,6 +86,48 @@ def test_chat_flow_builds_fallback_content_for_multiple_files() -> None:
     uploads = [SimpleNamespace(name="one.txt"), SimpleNamespace(name="two.txt")]
 
     assert build_user_content("", uploads) == "Прикреплены файлы: one.txt, two.txt"
+
+
+def test_markdown_renderer_normalizes_model_latex_delimiters() -> None:
+    response = r"""Для оценки использовали метрику
+[ \text{score} = \frac{\text{вес (г)} \times \text{ккал}}{\text{цена (₽)}} ]
+
+Inline: \(x^2 + y^2\). Standard block:
+\[
+\sum_{i=1}^{n} i
+\]
+"""
+
+    assert (
+        normalize_latex_delimiters(response)
+        == r"""Для оценки использовали метрику
+$$
+\text{score} = \frac{\text{вес (г)} \times \text{ккал}}{\text{цена (₽)}}
+$$
+
+Inline: $x^2 + y^2$. Standard block:
+$$
+\sum_{i=1}^{n} i
+$$
+"""
+    )
+
+
+def test_markdown_renderer_preserves_non_math_and_existing_dollar_math() -> None:
+    response = r"""Обычные [квадратные скобки] и [ссылка](https://example.com).
+
+Цена $100, формула $x + y$, блок:
+$$
+x = y
+$$
+
+```text
+[ \frac{raw}{latex} ]
+\[raw\]
+```
+"""
+
+    assert normalize_latex_delimiters(response) == response
 
 
 def test_chat_flow_maps_known_and_unknown_errors() -> None:
