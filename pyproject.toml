@@ -1,25 +1,54 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
 [project]
 name = "llm-agent-for-ai-studio"
 version = "0.1.0"
-description = "Add your description here"
+description = "Assistant for designing and testing agent applications in Yandex AI Studio"
 readme = "README.md"
 requires-python = ">=3.13"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Project contributors" },
+]
+keywords = [
+    "agents",
+    "code-interpreter",
+    "rag",
+    "yandex-ai-studio",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
+    "aiohttp>=3.14.3",
     "aiofiles>=25.1.0",
-    "aiogram",
-    "chatkit>=0.0.1",
-    "dotenv>=0.9.9",
-    "langchain-core>=1.3.2",
-    "langchain-openai>=1.2.1",
+    "cryptography>=50.0.0",
     "openai>=2.32.0",
     "openai-agents>=0.14.3",
-    "openai-chatkit>=1.6.3",
-    "pre-commit>=4.6.0",
-    "python-dotenv>=1.2.2",
+    "pyyaml>=6.0.3",
+    "streamlit>=1.59.1",
+    "aiogram>=3.30.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/krevetka-is-afk/llm-agent-for-ai-studio"
+Documentation = "https://github.com/krevetka-is-afk/llm-agent-for-ai-studio/tree/main/docs"
+Repository = "https://github.com/krevetka-is-afk/llm-agent-for-ai-studio.git"
+Issues = "https://github.com/krevetka-is-afk/llm-agent-for-ai-studio/issues"
+Changelog = "https://github.com/krevetka-is-afk/llm-agent-for-ai-studio/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 dev = [
+    "pre-commit>=4.6.0",
     "pytest>=9.0.3",
     "ruff>=0.15.11",
     "ty>=0.0.31",
@@ -28,6 +57,15 @@ dev = [
 [tool.ty.src]
 exclude = ["uv.lock"]
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/ai_studio_agent_builder"]
+
+[tool.hatch.build.targets.sdist]
+only-include = ["src/ai_studio_agent_builder"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = [".", "src"]
+markers = [
+    "yandex_ai_studio_e2e: opt-in credentialed tests that call Yandex AI Studio",
+    "yandex_ai_studio_web_search_e2e: quota-sensitive Web Search E2E",
+]

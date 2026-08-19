@@ -1,4 +1,4 @@
-from src.message_service import MessageService
+from ai_studio_agent_builder.presentation.telegram.messages import MessageService
 
 
 def test_render_command_usage_message_for_missing_argument_contains_usage() -> None:

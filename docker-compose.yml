@@ -1,0 +1,81 @@
+services:
+  oauth-gateway:
+    profiles: ["oauth-experimental"]
+    build: .
+    command: ["python", "-m", "ai_studio_agent_builder.experimental.oauth.app"]
+    env_file: .env.gateway
+    restart: unless-stopped
+    mem_limit: 1g
+    pids_limit: 256
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - oauth-credentials:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8080/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  telegram-bot:
+    profiles: ["telegram-experimental"]
+    build: .
+    command: ["python", "-m", "ai_studio_agent_builder.entrypoints.telegram"]
+    env_file: .env.bot
+    restart: unless-stopped
+    mem_limit: 1g
+    pids_limit: 256
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    volumes:
+      - bot-data:/data
+
+  web-ui:
+    build: .
+    command: ["streamlit", "run", "src/ai_studio_agent_builder/entrypoints/web.py", "--server.address=0.0.0.0", "--server.port=8501", "--browser.gatherUsageStats=false"]
+    env_file: .env.web
+    environment:
+      YC_API_KEY_DB_PATH: /data/api_keys.db
+      UPLOADED_FILES_DIR: /data/uploaded_files
+      CONVERSATION_DB_PATH: /data/conversation.db
+    restart: unless-stopped
+    mem_limit: 1g
+    pids_limit: 256
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    ports:
+      - "127.0.0.1:8501:8501"
+    volumes:
+      - web-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8501/_stcore/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  oauth-credentials:
+  bot-data:
+  web-data:

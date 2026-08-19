@@ -1,19 +1,31 @@
-FROM python:3.12-slim-trixie
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+FROM python:3.13-slim-trixie
+COPY --from=ghcr.io/astral-sh/uv:0.11.16 /uv /uvx /bin/
 
 RUN uv --version
 
-COPY pyproject.toml uv.lock ./
+WORKDIR /app
+COPY pyproject.toml uv.lock README.md ./
 
 ENV UV_NO_DEV=1
 ENV UV_CACHE_DIR=/root/.cache/uv
-RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-install-project
+
+COPY src/ai_studio_agent_builder src/ai_studio_agent_builder
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-editable
 
 ENV PATH="/app/.venv/bin:$PATH"
+ENV PYTHONDONTWRITEBYTECODE=1
 
-WORKDIR app/
-COPY .env .env
-COPY config.yaml config.yaml
-COPY src/ .
+RUN addgroup --system app \
+    && adduser --system --ingroup app app \
+    && mkdir -p /data /app/uploaded_files \
+    && chown -R app:app /app /data
 
-CMD ["uv", "run", "--env-file", ".env", "app.py"]
+COPY --chown=app:app config.yaml config.yaml
+COPY --chown=app:app .streamlit .streamlit
+
+USER app
+
+CMD ["python", "-m", "ai_studio_agent_builder.entrypoints.telegram"]

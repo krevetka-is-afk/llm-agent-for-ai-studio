@@ -2,19 +2,28 @@
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v3.2.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
+      - id: check-toml
       - id: check-added-large-files
+      - id: detect-private-key
 
   - repo: local
     hooks:
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: true
+
       - id: ruff-check
         name: ruff check and fix
         args: [ --fix ]
-        entry: uvx ruff check
+        entry: uv run ruff check
         language: system
         types_or: [python, pyi]
         pass_filenames: true
@@ -24,10 +33,10 @@ repos:
       - id: ty-check
         name: ty check
         description: Type checker
-        entry: uvx ty check
+        entry: uv run ty check
         language: system
-        types_or: [python, pyi]
-        pass_filenames: true
+        pass_filenames: false
+        always_run: true
 
   - repo: local
     hooks:

@@ -1,0 +1,258 @@
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
+
+from openai import APIError, APITimeoutError, NotFoundError
+
+from ...application.dto import AIStudioCredentials
+from ...application.ports.agent_runner import (
+    AgentCitation,
+    AgentProviderError,
+    AgentProviderTimeoutError,
+    AgentRunPreview,
+    AgentRunner,
+    RemoteArtifactReference,
+    VectorStoreUnavailableError,
+)
+from ...domain.runtime import ExecutableAgentConfig
+
+
+READY_VECTOR_STORE_STATUS = "completed"
+UNAVAILABLE_VECTOR_STORE_STATUSES = frozenset(
+    {"in_progress", "expired", "failed", "cancelled"}
+)
+
+
+class YandexResponsesAgentRunner:
+    def __init__(self, client: Any, *, folder_id: str) -> None:
+        self._client = client
+        self._folder_id = folder_id
+
+    def run(
+        self,
+        config: ExecutableAgentConfig,
+        user_input: str,
+    ) -> AgentRunPreview:
+        self._preflight_file_search(config.tools)
+        request: dict[str, Any] = {
+            "model": f"gpt://{self._folder_id}/{config.model_name}",
+            "instructions": config.instructions,
+            "input": user_input,
+            "temperature": config.temperature,
+            "max_output_tokens": config.max_output_tokens,
+        }
+        if config.tools:
+            request["tools"] = list(config.tools)
+        try:
+            response = self._client.responses.create(**request)
+        except (APITimeoutError, TimeoutError) as exc:
+            raise AgentProviderTimeoutError() from exc
+        except APIError as exc:
+            raise _provider_error(exc) from exc
+        except Exception as exc:
+            raise AgentProviderError() from exc
+        return _normalize_response(response)
+
+    def _preflight_file_search(self, tools: tuple[Mapping[str, Any], ...]) -> None:
+        for tool in tools:
+            if tool.get("type") != "file_search":
+                continue
+            vector_store_ids = tool.get("vector_store_ids")
+            if not isinstance(vector_store_ids, Sequence) or isinstance(
+                vector_store_ids, str | bytes | bytearray
+            ):
+                raise VectorStoreUnavailableError("unknown", "invalid_config")
+            for vector_store_id in vector_store_ids:
+                if not isinstance(vector_store_id, str) or not vector_store_id:
+                    raise VectorStoreUnavailableError("unknown", "invalid_config")
+                self._retrieve_vector_store(vector_store_id)
+
+    def _retrieve_vector_store(self, vector_store_id: str) -> None:
+        try:
+            vector_store = self._client.vector_stores.retrieve(vector_store_id)
+        except NotFoundError as exc:
+            raise VectorStoreUnavailableError(vector_store_id, "not_found") from exc
+        except (APITimeoutError, TimeoutError) as exc:
+            raise AgentProviderTimeoutError() from exc
+        except APIError as exc:
+            raise _provider_error(exc) from exc
+        except Exception as exc:
+            raise AgentProviderError() from exc
+
+        status = _value(vector_store, "status")
+        if status == READY_VECTOR_STORE_STATUS:
+            return
+        if isinstance(status, str) and status in UNAVAILABLE_VECTOR_STORE_STATUSES:
+            raise VectorStoreUnavailableError(vector_store_id, status)
+        raise VectorStoreUnavailableError(vector_store_id, "unknown")
+
+
+def _normalize_response(response: Any) -> AgentRunPreview:
+    usage = _value(response, "usage")
+    response_id = _value(response, "id")
+    output_text = _value(response, "output_text")
+    return AgentRunPreview(
+        response_id=response_id if isinstance(response_id, str) else "",
+        output_text=output_text if isinstance(output_text, str) else "",
+        citations=_extract_citations(response),
+        input_tokens=_optional_int(_value(usage, "input_tokens")),
+        output_tokens=_optional_int(_value(usage, "output_tokens")),
+        total_tokens=_optional_int(_value(usage, "total_tokens")),
+        generated_artifacts=_extract_generated_artifacts(response),
+        container_ids=_extract_container_ids(response),
+    )
+
+
+def _extract_citations(response: Any) -> tuple[AgentCitation, ...]:
+    citations: list[AgentCitation] = []
+    seen: set[tuple[Any, ...]] = set()
+    for annotation in _response_annotations(response):
+        citation = _citation_from_annotation(annotation)
+        if citation is None:
+            continue
+        fingerprint = (
+            citation.kind,
+            citation.title,
+            citation.url,
+            citation.file_id,
+            citation.filename,
+        )
+        if fingerprint not in seen:
+            seen.add(fingerprint)
+            citations.append(citation)
+    return tuple(citations)
+
+
+def _extract_generated_artifacts(
+    response: Any,
+) -> tuple[RemoteArtifactReference, ...]:
+    references: list[RemoteArtifactReference] = []
+    for annotation in _response_annotations(response):
+        if _value(annotation, "type") != "container_file_citation":
+            continue
+        file_id = _optional_string(_value(annotation, "file_id"))
+        filename = _optional_string(_value(annotation, "filename"))
+        if not file_id or not filename:
+            continue
+        references.append(
+            RemoteArtifactReference(
+                file_id=file_id,
+                filename=filename,
+                container_id=_optional_string(_value(annotation, "container_id")),
+            )
+        )
+    return tuple(references)
+
+
+def _extract_container_ids(response: Any) -> tuple[str, ...]:
+    container_ids: list[str] = []
+    output = _value(response, "output")
+    if isinstance(output, Sequence) and not isinstance(
+        output,
+        str | bytes | bytearray,
+    ):
+        for item in output:
+            if _value(item, "type") != "code_interpreter_call":
+                continue
+            container_id = _optional_string(_value(item, "container_id"))
+            if container_id and container_id not in container_ids:
+                container_ids.append(container_id)
+    for reference in _extract_generated_artifacts(response):
+        if reference.container_id and reference.container_id not in container_ids:
+            container_ids.append(reference.container_id)
+    return tuple(container_ids)
+
+
+def _response_annotations(response: Any) -> tuple[Any, ...]:
+    annotations: list[Any] = []
+    output = _value(response, "output")
+    if not isinstance(output, Sequence) or isinstance(
+        output,
+        str | bytes | bytearray,
+    ):
+        return ()
+    for item in output:
+        content = _value(item, "content")
+        if not isinstance(content, Sequence) or isinstance(
+            content,
+            str | bytes | bytearray,
+        ):
+            continue
+        for content_item in content:
+            item_annotations = _value(content_item, "annotations")
+            if isinstance(item_annotations, Sequence) and not isinstance(
+                item_annotations,
+                str | bytes | bytearray,
+            ):
+                annotations.extend(item_annotations)
+    return tuple(annotations)
+
+
+def _citation_from_annotation(annotation: Any) -> AgentCitation | None:
+    annotation_type = _value(annotation, "type")
+    if annotation_type == "url_citation":
+        return AgentCitation(
+            kind="url",
+            title=_optional_string(_value(annotation, "title")),
+            url=_optional_string(_value(annotation, "url")),
+        )
+    if annotation_type in {"file_citation", "file_path"}:
+        filename = _optional_string(_value(annotation, "filename"))
+        return AgentCitation(
+            kind="file",
+            title=filename,
+            file_id=_optional_string(_value(annotation, "file_id")),
+            filename=filename,
+        )
+    return None
+
+
+def _provider_error(exc: APIError) -> AgentProviderError:
+    status_code = getattr(exc, "status_code", None)
+    code = getattr(exc, "code", None)
+    return AgentProviderError(
+        status_code=status_code if isinstance(status_code, int) else None,
+        error_code=code if isinstance(code, str) else None,
+    )
+
+
+def _value(source: Any, name: str) -> Any:
+    if isinstance(source, Mapping):
+        return source.get(name)
+    return getattr(source, name, None)
+
+
+def _optional_string(value: Any) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _optional_int(value: Any) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+ClientFactory = Callable[[AIStudioCredentials], Any]
+RunnerBuilder = Callable[[Any, str], AgentRunner]
+
+
+class YandexAgentRunnerFactory:
+    def __init__(
+        self,
+        client_factory: ClientFactory,
+        *,
+        runner_builder: RunnerBuilder | None = None,
+    ) -> None:
+        self._client_factory = client_factory
+        self._runner_builder = runner_builder or (
+            lambda client, folder_id: YandexResponsesAgentRunner(
+                client,
+                folder_id=folder_id,
+            )
+        )
+
+    def create(self, credentials: AIStudioCredentials) -> AgentRunner:
+        return self._runner_builder(
+            self._client_factory(credentials),
+            credentials.folder_id,
+        )
+
+
+__all__ = ["YandexAgentRunnerFactory", "YandexResponsesAgentRunner"]

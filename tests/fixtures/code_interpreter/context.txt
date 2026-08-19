@@ -1,0 +1,1 @@
+Apply multiplier 2 to the sum from the CSV input.

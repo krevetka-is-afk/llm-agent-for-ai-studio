@@ -1,0 +1,35 @@
+{
+  "agent_type": "one_prompt",
+  "audience": "",
+  "constraints": [
+    "Не используй сеть во время выполнения кода."
+  ],
+  "expected_result": "Ответ и созданный файл с результатом",
+  "inputs": [
+    "Тестовый запрос",
+    "CSV или TXT файлы"
+  ],
+  "instructions": "Используй Code Interpreter для вычислений и создания файлов.",
+  "knowledge_sources": [],
+  "parameters": {},
+  "purpose": "Анализировать пользовательские таблицы",
+  "schema_version": "1.0",
+  "status": "ready",
+  "template": "one_prompt",
+  "tools": [
+    {
+      "description": "Runs Python in an isolated Yandex AI Studio container.",
+      "parameters": {
+        "memory_limit": "1g",
+        "network_policy": "disabled"
+      },
+      "title": "Code Interpreter",
+      "tool_id": "code_interpreter"
+    }
+  ],
+  "validation": {
+    "issues": [],
+    "missing_fields": [],
+    "status": "ready"
+  }
+}
