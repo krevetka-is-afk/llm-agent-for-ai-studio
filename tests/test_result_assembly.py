@@ -2,6 +2,9 @@ import json
 import logging
 from types import SimpleNamespace
 
+import pytest
+from openai.types.responses import ResponseTextDeltaEvent
+
 from ai_studio_agent_builder.builder.agents.sdk_event_adapter import AgentRunCollector
 from ai_studio_agent_builder.builder.result_assembly import (
     AgentSpecificationResultPart,
@@ -16,6 +19,7 @@ from ai_studio_agent_builder.builder.result_assembly import (
     result_part_to_record,
 )
 from ai_studio_agent_builder.domain.routing import ConversationOptions
+from ai_studio_agent_builder.domain.content_policy import ContentPolicyViolationError
 from ai_studio_agent_builder.domain.specification import (
     build_one_prompt_specification,
 )
@@ -57,6 +61,24 @@ def test_collector_pairs_tool_call_with_its_authoritative_output() -> None:
             output="index-1",
         ),
     )
+
+
+def test_collector_stops_stream_when_prohibited_name_appears_across_deltas() -> None:
+    collector = AgentRunCollector()
+    collector.consume(
+        SimpleNamespace(
+            type="raw_response_event",
+            data=ResponseTextDeltaEvent.model_construct(delta="Владимир Владимирович "),
+        )
+    )
+
+    with pytest.raises(ContentPolicyViolationError):
+        collector.consume(
+            SimpleNamespace(
+                type="raw_response_event",
+                data=ResponseTextDeltaEvent.model_construct(delta="Путин"),
+            )
+        )
 
 
 def test_rag_result_contains_typed_index_and_model_markdown() -> None:

@@ -17,6 +17,12 @@ from ai_studio_agent_builder.application.ports.builder_run import (
 from ai_studio_agent_builder.application.ports.conversation_storage import (
     AttachmentReader,
 )
+from ai_studio_agent_builder.domain.content_policy import (
+    ContentPolicyViolationError,
+    POLICY_REFUSAL_MESSAGE,
+    assess_user_content,
+    ensure_model_output_allowed,
+)
 from ai_studio_agent_builder.domain.routing import resolve_explicit_route
 from ai_studio_agent_builder.domain.specification import (
     AgentSpecification,
@@ -65,8 +71,32 @@ class BuilderConversationService:
         return result
 
     async def _interact(self, request: InteractionRequest) -> InteractionResult:
+        input_decision = assess_user_content(
+            request.text,
+            tuple(
+                value
+                for attachment in self._attachments(request)
+                for value in (
+                    attachment.caption,
+                    attachment.display_name,
+                    attachment.filename,
+                )
+                if value is not None
+            ),
+        )
+        if input_decision.violation is not None:
+            self._log_policy_rejection(request, input_decision.violation.value)
+            return self._policy_refusal_result(request.conversation_state)
+
         working_state = request.conversation_state.copy()
-        imported_specification = self._imported_specification(request, working_state)
+        try:
+            imported_specification = self._imported_specification(
+                request,
+                working_state,
+            )
+        except ContentPolicyViolationError as exc:
+            self._log_policy_rejection(request, exc.kind.value)
+            return self._policy_refusal_result(request.conversation_state)
         if imported_specification is not None:
             return self._import_result(
                 request,
@@ -86,17 +116,22 @@ class BuilderConversationService:
                     routing_decision.reason.value,
                 )
 
-        outcome = await self._builder_run_port.run(
-            BuilderRunRequest(
-                user_id=request.user_id,
-                request_id=request.request_id,
-                text=request.text,
-                credentials=request.credentials,
-                conversation_state=working_state,
-                user_files_dir=request.user_files_dir,
-                attachments=self._attachments(request),
+        try:
+            outcome = await self._builder_run_port.run(
+                BuilderRunRequest(
+                    user_id=request.user_id,
+                    request_id=request.request_id,
+                    text=request.text,
+                    credentials=request.credentials,
+                    conversation_state=working_state,
+                    user_files_dir=request.user_files_dir,
+                    attachments=self._attachments(request),
+                )
             )
-        )
+            ensure_model_output_allowed(outcome.text, outcome.parts)
+        except ContentPolicyViolationError as exc:
+            self._log_policy_rejection(request, exc.kind.value)
+            return self._policy_refusal_result(request.conversation_state)
         result = InteractionResult(
             text=outcome.text,
             parts=outcome.parts,
@@ -142,6 +177,10 @@ class BuilderConversationService:
             raise AgentSpecificationImportError(
                 "Не удалось прочитать прикреплённый файл спецификации."
             ) from exc
+
+        decision = assess_user_content(content)
+        if decision.violation is not None:
+            raise ContentPolicyViolationError(decision.violation)
 
         try:
             specification = loads_agent_specification(content)
@@ -230,6 +269,26 @@ class BuilderConversationService:
         if request.attachment is not None:
             attachments = (*attachments, request.attachment)
         return attachments
+
+    @staticmethod
+    def _policy_refusal_result(state: ConversationState) -> InteractionResult:
+        return InteractionResult(
+            text=POLICY_REFUSAL_MESSAGE,
+            parts=({"kind": "markdown", "text": POLICY_REFUSAL_MESSAGE},),
+            selected_agent=state.state,
+            responded_by=state.state,
+            next_state=state.state,
+        )
+
+    @staticmethod
+    def _log_policy_rejection(
+        request: InteractionRequest,
+        reason: str,
+    ) -> None:
+        _bind_request_logger(request.user_id, request.request_id).warning(
+            "AI interaction blocked by content policy reason=%s",
+            reason,
+        )
 
 
 def _render_specification_summary(specification: AgentSpecification) -> str:

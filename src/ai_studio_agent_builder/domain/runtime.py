@@ -11,6 +11,11 @@ from .specification import (
     AgentSpecificationStatus,
 )
 from .catalog import TemplateId
+from .content_policy import (
+    RUNTIME_POLICY_INSTRUCTIONS,
+    RUNTIME_POLICY_REMINDER,
+    assess_user_content,
+)
 
 
 RUNTIME_SCHEMA_VERSION = "1.0"
@@ -40,6 +45,10 @@ class UnsupportedAgentToolError(AgentRuntimeCompilationError):
 
 
 class MissingRuntimeParameterError(AgentRuntimeCompilationError):
+    pass
+
+
+class ContentPolicyCompilationError(AgentRuntimeCompilationError):
     pass
 
 
@@ -91,6 +100,17 @@ def compile_agent_specification(
     if _contains_redacted_value(specification.to_record()):
         raise MissingRuntimeParameterError(
             "Specification contains redacted runtime values"
+        )
+    if not assess_user_content(
+        specification.purpose,
+        specification.audience,
+        specification.inputs,
+        specification.instructions,
+        specification.constraints,
+        specification.expected_result,
+    ).allowed:
+        raise ContentPolicyCompilationError(
+            "Specification violates the application content policy"
         )
 
     native_tools = tuple(_compile_tool(tool) for tool in specification.tools)
@@ -215,6 +235,7 @@ def _compile_tool(tool: Any) -> Mapping[str, Any]:
 
 def _compile_instructions(specification: AgentSpecification) -> str:
     sections = [
+        RUNTIME_POLICY_INSTRUCTIONS,
         _compile_identity_and_capabilities(specification),
         specification.instructions.strip(),
     ]
@@ -224,6 +245,7 @@ def _compile_instructions(specification: AgentSpecification) -> str:
         )
         sections.append(f"Constraints:\n{constraints}")
     sections.append(f"Expected result:\n{specification.expected_result.strip()}")
+    sections.append(RUNTIME_POLICY_REMINDER)
     return "\n\n".join(sections)
 
 

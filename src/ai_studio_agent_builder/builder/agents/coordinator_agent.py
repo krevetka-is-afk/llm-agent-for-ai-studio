@@ -3,6 +3,7 @@ import logging
 from agents.tool import Tool
 
 from ai_studio_agent_builder.application.settings import ModelConfig
+from ai_studio_agent_builder.domain.content_policy import with_builder_policy
 
 from .base_agent import CustomAgent, SessionFactory
 from .tools.delegate_tools import (
@@ -12,7 +13,7 @@ from .tools.delegate_tools import (
 
 logger = logging.getLogger(__name__)
 
-COORDINATOR_AGENT_INSTRUCTIONS = """
+_COORDINATOR_AGENT_INSTRUCTIONS = """
 Ты – ассистент‑координатор, задача которого — помочь пользователю сформировать LLM‑приложение и, когда тип решения ясен, передать работу делегирующему инструменту.
 
 В окружении доступны два инструмента, вызываются **без аргументов**:
@@ -84,6 +85,8 @@ COORDINATOR_AGENT_INSTRUCTIONS = """
 * Избегай технического жаргона, если пользователь сам его не использует.
 
 """.strip()
+
+COORDINATOR_AGENT_INSTRUCTIONS = with_builder_policy(_COORDINATOR_AGENT_INSTRUCTIONS)
 
 
 COORDINATOR_TOOLS_SETUP: list[Tool] = [

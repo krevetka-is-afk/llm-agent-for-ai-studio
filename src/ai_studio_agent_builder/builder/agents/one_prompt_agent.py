@@ -3,6 +3,7 @@ import logging
 from agents.tool import Tool
 
 from ai_studio_agent_builder.application.settings import ModelConfig
+from ai_studio_agent_builder.domain.content_policy import with_builder_policy
 
 from .base_agent import CustomAgent, SessionFactory
 from .tools.agent_specification import (
@@ -13,7 +14,7 @@ from .tools.finish_dialog import finish_dialog
 
 logger = logging.getLogger(__name__)
 
-ONE_PROMPT_AGENT_INSTRUCTIONS = """
+_ONE_PROMPT_AGENT_INSTRUCTIONS = """
 You are a helpful assistant whose job is to help the user craft a **system‑prompt** for their own LLM‑application model.
 Your workflow must follow these steps:
 
@@ -60,6 +61,8 @@ Your workflow must follow these steps:
 - **Never fabricate** a tool call; only call `finish_dialog` when you have received an explicit “Yes, it’s ready.” from the user.
 
 """.strip()
+
+ONE_PROMPT_AGENT_INSTRUCTIONS = with_builder_policy(_ONE_PROMPT_AGENT_INSTRUCTIONS)
 
 ONE_PROMPT_TOOLS_SETUP: list[Tool] = [
     update_agent_specification,

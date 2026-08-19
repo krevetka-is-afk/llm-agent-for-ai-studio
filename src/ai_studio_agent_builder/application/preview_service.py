@@ -5,6 +5,7 @@ import hashlib
 import logging
 import time
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import Any
 
 from ai_studio_agent_builder.application.file_lifecycle import (
@@ -24,6 +25,11 @@ from ai_studio_agent_builder.application.ports.agent_runner import (
     AgentRunPreview,
     AgentRunnerError,
     AgentRunnerFactory,
+)
+from ai_studio_agent_builder.domain.content_policy import (
+    POLICY_REFUSAL_MESSAGE,
+    assess_model_output,
+    assess_user_content,
 )
 from ai_studio_agent_builder.domain.runtime import (
     AgentRuntimeCompilationError,
@@ -67,6 +73,26 @@ class AgentPreviewService:
             raise AgentTestInputError(
                 f"Agent test input exceeds {MAX_AGENT_TEST_INPUT_LENGTH} characters"
             )
+        input_decision = assess_user_content(
+            user_input,
+            request.specification_record,
+            tuple(
+                value
+                for attachment in request.attachments
+                for value in (
+                    attachment.caption,
+                    attachment.display_name,
+                    attachment.filename,
+                )
+                if value is not None
+            ),
+        )
+        if input_decision.violation is not None:
+            logger.warning(
+                "Generated agent test blocked by content policy reason=%s",
+                input_decision.violation.value,
+            )
+            raise AgentTestInputError(POLICY_REFUSAL_MESSAGE)
 
         request_logger = logging.LoggerAdapter(
             logger,
@@ -143,6 +169,31 @@ class AgentPreviewService:
         ) as request_config:
             runner = self._runner_factory.create(request.credentials)
             preview = runner.run(request_config, user_input)
+            output_decision = assess_model_output(
+                preview.output_text,
+                preview.citations,
+                preview.generated_artifacts,
+            )
+            if output_decision.violation is not None:
+                logger.warning(
+                    "Generated agent output blocked by content policy reason=%s",
+                    output_decision.violation.value,
+                )
+                warnings = self._output_file_lifecycle.discard_outputs(
+                    request,
+                    preview,
+                )
+                return (
+                    replace(
+                        preview,
+                        output_text=POLICY_REFUSAL_MESSAGE,
+                        citations=(),
+                        generated_artifacts=(),
+                        container_ids=(),
+                    ),
+                    (),
+                    warnings,
+                )
             generated_files, warnings = self._output_file_lifecycle.materialize_outputs(
                 request,
                 preview,

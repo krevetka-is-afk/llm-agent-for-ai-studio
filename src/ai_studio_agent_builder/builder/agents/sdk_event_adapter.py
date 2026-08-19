@@ -7,6 +7,10 @@ from typing import Any
 
 from openai.types.responses import ResponseTextDeltaEvent
 
+from ai_studio_agent_builder.domain.content_policy import (
+    ensure_model_output_allowed,
+)
+
 from ..result_assembly import AgentRunResult, ToolExecution
 
 
@@ -18,6 +22,7 @@ class AgentRunCollector:
 
     def __init__(self) -> None:
         self._text = io.StringIO()
+        self._policy_tail = ""
         self._calls: dict[str, ToolExecution] = {}
         self._call_order: list[str] = []
         self._anonymous_call_number = 0
@@ -27,6 +32,8 @@ class AgentRunCollector:
             event.data, ResponseTextDeltaEvent
         ):
             self._text.write(event.data.delta)
+            self._policy_tail = (self._policy_tail + event.data.delta)[-4_096:]
+            ensure_model_output_allowed(self._policy_tail)
             return
         if event.type != "run_item_stream_event":
             return
@@ -36,6 +43,7 @@ class AgentRunCollector:
             self._consume_tool_output(event.item)
 
     def build(self) -> AgentRunResult:
+        ensure_model_output_allowed(self._text.getvalue())
         return AgentRunResult(
             text=self._text.getvalue(),
             tool_executions=tuple(self._calls[key] for key in self._call_order),

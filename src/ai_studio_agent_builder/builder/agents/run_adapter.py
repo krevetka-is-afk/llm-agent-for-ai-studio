@@ -31,6 +31,9 @@ from ai_studio_agent_builder.builder.result_assembly import (
     render_result_text,
     result_part_to_record,
 )
+from ai_studio_agent_builder.domain.content_policy import (
+    ensure_model_output_allowed,
+)
 from ai_studio_agent_builder.domain.routing import ConversationOptions
 
 from .sdk_event_adapter import AgentRunCollector
@@ -171,9 +174,11 @@ class BuilderAgentsRunAdapter:
             context.filenames_by_file_id,
             specification=state.latest_agent_specification,
         )
+        part_records = tuple(result_part_to_record(part) for part in parts)
+        ensure_model_output_allowed(part_records)
         return BuilderRunOutcome(
             text=render_result_text(parts),
-            parts=tuple(result_part_to_record(part) for part in parts),
+            parts=part_records,
             selected_agent=selected_agent,
             responded_by=responded_by,
             next_state=state.state,

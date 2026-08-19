@@ -3,6 +3,7 @@ import logging
 from agents.tool import Tool
 
 from ai_studio_agent_builder.application.settings import ModelConfig
+from ai_studio_agent_builder.domain.content_policy import with_builder_policy
 
 from .base_agent import CustomAgent, SessionFactory
 from .tools.agent_specification import (
@@ -14,7 +15,7 @@ from .tools.vector_index import create_search_index
 
 logger = logging.getLogger(__name__)
 
-RAG_AGENT_INSTRUCTIONS = """
+_RAG_AGENT_INSTRUCTIONS = """
 Ты — полезный RAG‑ассистент.
 Твоя задача — вести естественный диалог с пользователем, создать векторный поисковый индекс из предоставленных файлов и сгенерировать **system‑prompt** для будущего LLM‑приложения пользователя, в котором будет указано, как использовать созданный индекс как внешний источник знаний.
 
@@ -86,6 +87,8 @@ RAG_AGENT_INSTRUCTIONS = """
 - После выполнения всех целей всегда уточняй, нужно ли завершить сессию.
 - При подтверждении завершения сначала валидируй спецификацию через `finalize_agent_specification`; затем вызывай `finish_dialog` **без аргументов** и возвращай лишь вывод инструмента.
 """.strip()
+
+RAG_AGENT_INSTRUCTIONS = with_builder_policy(_RAG_AGENT_INSTRUCTIONS)
 
 RAG_TOOLS_SETUP: list[Tool] = [
     create_search_index,

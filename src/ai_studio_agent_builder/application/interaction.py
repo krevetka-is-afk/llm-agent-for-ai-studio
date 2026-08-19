@@ -61,6 +61,7 @@ GeneratedFileWarningCode = Literal[
     "too_many",
     "too_large",
     "download_failed",
+    "policy_blocked",
     "cleanup_failed",
 ]
 

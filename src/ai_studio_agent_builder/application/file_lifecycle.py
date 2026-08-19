@@ -1,5 +1,6 @@
 """Application ownership of conversation and preview file lifecycles."""
 
+import codecs
 import logging
 import mimetypes
 from collections.abc import Iterator
@@ -29,6 +30,7 @@ from ai_studio_agent_builder.application.ports.conversation_storage import (
     ConversationSessionStore,
 )
 from ai_studio_agent_builder.application.ports.file_resource_gateway import (
+    FileResourceGateway,
     FileResourceGatewayFactory,
 )
 from ai_studio_agent_builder.application.ports.generated_artifact_store import (
@@ -43,6 +45,10 @@ from ai_studio_agent_builder.domain.runtime import (
     ExecutableAgentConfig,
     MissingCodeInterpreterToolError,
     bind_code_interpreter_files,
+)
+from ai_studio_agent_builder.domain.content_policy import (
+    ContentPolicyViolationError,
+    ensure_model_output_allowed,
 )
 
 
@@ -239,15 +245,20 @@ class PreviewOutputFileLifecycle:
                     warning_codes.add("too_large")
                     continue
                 try:
+                    remote_chunks = gateway.iter_file_bytes(
+                        reference.file_id,
+                        chunk_size=ARTIFACT_DOWNLOAD_CHUNK_BYTES,
+                    )
                     stored = self._generated_artifact_store.save_generated_artifact(
                         request.user_id,
                         reference.filename,
-                        gateway.iter_file_bytes(
-                            reference.file_id,
-                            chunk_size=ARTIFACT_DOWNLOAD_CHUNK_BYTES,
-                        ),
+                        _policy_checked_chunks(remote_chunks),
                         max_bytes=min(MAX_GENERATED_FILE_BYTES, remaining_bytes),
                     )
+                except ContentPolicyViolationError:
+                    logger.warning("Generated artifact blocked by content policy")
+                    warning_codes.add("policy_blocked")
+                    continue
                 except GeneratedArtifactTooLargeError:
                     warning_codes.add("too_large")
                     continue
@@ -274,17 +285,11 @@ class PreviewOutputFileLifecycle:
                 )
                 saved_bytes += stored.size_bytes
         finally:
-            cleanup_failures = 0
-            for reference in references:
-                try:
-                    gateway.delete_file(reference.file_id)
-                except Exception:
-                    cleanup_failures += 1
-            for container_id in container_ids:
-                try:
-                    gateway.delete_container(container_id)
-                except Exception:
-                    cleanup_failures += 1
+            cleanup_failures = _delete_remote_outputs(
+                gateway,
+                references,
+                container_ids,
+            )
             if cleanup_failures:
                 logger.warning(
                     "Generated artifact cleanup incomplete failed_count=%d",
@@ -293,6 +298,40 @@ class PreviewOutputFileLifecycle:
                 warning_codes.add("cleanup_failed")
 
         return tuple(generated_files), _artifact_warnings(warning_codes)
+
+    def discard_outputs(
+        self,
+        request: AgentTestRequest,
+        preview: AgentRunPreview,
+    ) -> tuple[GeneratedFileWarning, ...]:
+        """Delete blocked remote outputs without downloading or persisting them."""
+        references = _deduplicate_artifacts(preview.generated_artifacts)
+        container_ids = _deduplicate_strings(
+            (*preview.container_ids, *(ref.container_id for ref in references))
+        )
+        if not references and not container_ids:
+            return ()
+        try:
+            gateway = self._gateway_factory.create(request.credentials)
+        except Exception as exc:
+            logger.warning(
+                "Blocked output cleanup gateway unavailable category=%s",
+                type(exc).__name__,
+            )
+            return (GeneratedFileWarning(code="cleanup_failed"),)
+
+        cleanup_failures = _delete_remote_outputs(
+            gateway,
+            references,
+            container_ids,
+        )
+        if cleanup_failures:
+            logger.warning(
+                "Blocked output cleanup incomplete failed_count=%d",
+                cleanup_failures,
+            )
+            return (GeneratedFileWarning(code="cleanup_failed"),)
+        return ()
 
 
 def _deduplicate_artifacts(
@@ -317,8 +356,59 @@ def _deduplicate_strings(values: tuple[str | None, ...]) -> tuple[str, ...]:
 
 
 def _artifact_warnings(codes: set[str]) -> tuple[GeneratedFileWarning, ...]:
-    order = ("too_many", "too_large", "download_failed", "cleanup_failed")
+    order = (
+        "too_many",
+        "too_large",
+        "download_failed",
+        "policy_blocked",
+        "cleanup_failed",
+    )
     return tuple(GeneratedFileWarning(code=code) for code in order if code in codes)
+
+
+def _policy_checked_chunks(chunks: Iterator[bytes]) -> Iterator[bytes]:
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="ignore")
+    text_tail = ""
+    chunk_iterator = iter(chunks)
+    try:
+        for chunk in chunk_iterator:
+            decoded = decoder.decode(chunk)
+            if decoded:
+                text_tail = (text_tail + decoded)[-4_096:]
+                ensure_model_output_allowed(text_tail)
+            yield chunk
+        decoded = decoder.decode(b"", final=True)
+        if decoded:
+            ensure_model_output_allowed((text_tail + decoded)[-4_096:])
+    finally:
+        close = getattr(chunk_iterator, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception as exc:
+                logger.debug(
+                    "Could not close policy-checked artifact stream category=%s",
+                    type(exc).__name__,
+                )
+
+
+def _delete_remote_outputs(
+    gateway: FileResourceGateway,
+    references: tuple[RemoteArtifactReference, ...],
+    container_ids: tuple[str, ...],
+) -> int:
+    cleanup_failures = 0
+    for reference in references:
+        try:
+            gateway.delete_file(reference.file_id)
+        except Exception:
+            cleanup_failures += 1
+    for container_id in container_ids:
+        try:
+            gateway.delete_container(container_id)
+        except Exception:
+            cleanup_failures += 1
+    return cleanup_failures
 
 
 __all__ = [

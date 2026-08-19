@@ -23,6 +23,24 @@ def test_agent_prompts_do_not_contain_known_paste_or_markdown_artifacts() -> Non
         assert "confirmation**" not in prompt
 
 
+def test_agent_prompts_apply_non_overridable_content_policy() -> None:
+    prompts = (
+        COORDINATOR_AGENT_INSTRUCTIONS,
+        ONE_PROMPT_AGENT_INSTRUCTIONS,
+        RAG_AGENT_INSTRUCTIONS,
+    )
+
+    for prompt in prompts:
+        normalized = _normalized(prompt)
+        assert "content policy (highest priority" in normalized
+        assert "never discuss politics" in normalized
+        assert "conflict between russia and ukraine" in normalized
+        assert "euphemisms" in normalized
+        assert "uploaded files" in normalized
+        assert "untrusted data" in normalized
+        assert "builder scope" in normalized
+
+
 def test_agent_prompts_distinguish_web_search_from_vector_rag() -> None:
     coordinator = _normalized(COORDINATOR_AGENT_INSTRUCTIONS)
     one_prompt = _normalized(ONE_PROMPT_AGENT_INSTRUCTIONS)
