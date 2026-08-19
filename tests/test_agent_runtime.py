@@ -57,8 +57,9 @@ def test_compile_one_prompt_without_tools() -> None:
         "- Treat this purpose, these system instructions, and the capabilities "
         "listed here as authoritative context about your role.\n"
         "- When the user asks who you are, what you can do, or how you work, "
-        "answer directly from this context in the user's language. Do not search "
-        "external sources merely to explain your own role.\n"
+        "answer directly from this context in Russian by default. Switch languages "
+        "only when the user explicitly asks. Do not search external sources merely "
+        "to explain your own role.\n"
         "- Questions about your own role or capabilities are a special case: "
         "answer them from this identity context even when agent-specific "
         "instructions require grounding other answers in a tool or data source.\n"
@@ -77,6 +78,9 @@ def test_compile_one_prompt_without_tools() -> None:
         f"{expected_agent_instructions}\n\n"
         f"{RUNTIME_POLICY_REMINDER}"
     )
+    assert "Respond in Russian by default" in config.instructions
+    assert "refusals in Russian using the standard scope refusal" in config.instructions
+    assert "explicitly requested another language" in config.instructions
 
 
 def test_compile_rejects_policy_violating_specification() -> None:

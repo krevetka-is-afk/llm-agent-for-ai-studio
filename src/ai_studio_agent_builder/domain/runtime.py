@@ -264,8 +264,9 @@ def _compile_identity_and_capabilities(
         ),
         (
             "- When the user asks who you are, what you can do, or how you work, "
-            "answer directly from this context in the user's language. Do not search "
-            "external sources merely to explain your own role."
+            "answer directly from this context in Russian by default. Switch languages "
+            "only when the user explicitly asks. Do not search external sources merely "
+            "to explain your own role."
         ),
         (
             "- Questions about your own role or capabilities are a special case: "

@@ -107,7 +107,7 @@ RUN_YANDEX_AI_STUDIO_E2E=1 uv run --env-file .env.e2e \
   pytest -q -x -m yandex_ai_studio_e2e tests/e2e
 ```
 
-Результат: `6 passed in 73.37s`. Пройдены builder RAG, generated One Prompt,
+Результат: `6 passed in 73.10s`. Пройдены builder RAG, generated One Prompt,
 quota-sensitive Web Search, generated RAG/File Search, service-backed Code
 Interpreter и отдельный provider-contract smoke. Service-backed сценарий
 подтвердил локальный `result.csv`, отсутствие credentials/remote IDs в public

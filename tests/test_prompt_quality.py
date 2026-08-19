@@ -33,6 +33,9 @@ def test_agent_prompts_apply_non_overridable_content_policy() -> None:
     for prompt in prompts:
         normalized = _normalized(prompt)
         assert "content policy (highest priority" in normalized
+        assert "respond in russian by default" in normalized
+        assert "explicitly requests it for an allowed, in-scope task" in normalized
+        assert "policy refusals in russian" in normalized
         assert "never discuss politics" in normalized
         assert "conflict between russia and ukraine" in normalized
         assert "euphemisms" in normalized

@@ -140,6 +140,7 @@ handles и удаляются с провайдера вместе с inputs/con
 | FR-19 | Preview Code Interpreter должен принимать явные request-scoped файлы и возвращать локальные generated artifacts. | UI показывает uploader только для соответствующей capability; inputs загружаются с `purpose=user_data`, IDs привязываются к копии runtime, outputs скачиваются потоково, а известные input/output files и containers очищаются на success/error/timeout. |
 | FR-20 | Developer ZIP должен воспроизводить полный Code Interpreter lifecycle без чувствительных данных. | `example.py` поддерживает повторяемый `--file`, upload, привязку IDs к запросу, скачивание с лимитами и cleanup; ZIP не содержит credentials, пользовательские bytes и временные file/container/response IDs. |
 | FR-21 | Builder и preview должны отклонять prompt injection и политический контент, включая эвфемизмы и попытки получить оценку действий сторон. | Запрещённый вход блокируется до model call; системная политика имеет приоритет над сообщениями, файлами и tool output; запрещённый текст подавляется до UI, Builder прекращает обработку stream, ранняя блокировка удаляет remote outputs без скачивания, а потоки generated artifacts проверяются до сохранения. |
+| FR-22 | Основным языком ответов Builder и preview должен быть русский. | Системная политика задаёт русский язык по умолчанию; другой язык допускается только по явному запросу для разрешённой задачи; стандартный отказ всегда возвращается на русском. |
 
 ## Нефункциональные требования
 
@@ -191,6 +192,7 @@ handles и удаляются с провайдера вместе с inputs/con
 | FR-19 | `application/file_lifecycle.py`, `preview_service.py`, `infrastructure/yandex_ai_studio/files_gateway.py`, `responses_runner.py`, `presentation/streamlit/agent_test_panel.py` | `tests/test_upload_file_security.py`, `tests/test_generated_artifact_storage.py`, `tests/test_yandex_responses_runner.py`, `tests/test_ui_helpers.py` |
 | FR-20 | `presentation/streamlit/developer_bundle.py` | `tests/test_developer_bundle.py` |
 | FR-21 | `domain/content_policy.py`, `domain/runtime.py`, `application/builder_service.py`, `application/preview_service.py`, `builder/agents/sdk_event_adapter.py` | `tests/test_content_policy.py`, `tests/test_prompt_quality.py`, `tests/test_agent_runtime.py`, `tests/test_result_assembly.py`, `tests/test_ai_interaction_service.py` |
+| FR-22 | `domain/content_policy.py`, `domain/runtime.py` | `tests/test_prompt_quality.py`, `tests/test_agent_runtime.py`, `tests/test_developer_bundle.py` |
 | NFR-01 | `builder/context.py`, `domain/specification.py` | `tests/test_context.py`, `tests/test_agent_specification.py` |
 | NFR-02 | `presentation/streamlit/chat_flow.py`, `agent_test_panel.py`, `infrastructure/yandex_ai_studio/responses_runner.py` | `tests/test_ui_helpers.py`, `tests/test_yandex_responses_runner.py` |
 | NFR-03 | `application/builder_state.py`, `builder_service.py` | `tests/test_builder_state.py`, `tests/test_ai_interaction_service.py` |
