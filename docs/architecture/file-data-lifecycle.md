@@ -116,12 +116,14 @@ provider IDs.
 ## Presentation contract
 
 Streamlit показывает multi-file uploader только если публичный descriptor
-`code_interpreter` присутствует в specification. Файлы Builder-чата не
-переиспользуются автоматически: пользователь выбирает inputs каждого stateless
-preview явно. До чтения bytes проверяются count/per-file/total metadata limits,
-после чего cache fingerprint включает canonical specification, имена, MIME,
-размеры и content digests выбранных файлов. Изменение любого input сбрасывает
-предыдущий preview result.
+`code_interpreter` присутствует в specification. Доверенные локальные handles
+файлов Builder-чата восстанавливаются из conversation history и автоматически
+добавляются к inputs; uploader добавляет файлы только для конкретного stateless
+preview. До чтения bytes проверяются count/per-file/total metadata limits, после
+чего cache fingerprint включает canonical specification, immutable handles
+унаследованных файлов, а также имена, MIME, размеры и content digests выбранных
+дополнительных файлов. Изменение любого input сбрасывает предыдущий preview
+result.
 
 ## Retention
 

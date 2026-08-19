@@ -72,9 +72,9 @@ sequenceDiagram
     participant Runner as AgentRunner
     participant API as Yandex AI Studio
 
-    User->>UI: Specification + input + explicitly selected files
-    UI->>UI: validate metadata + request fingerprint
-    UI->>UI: save files and retain only local handles
+    User->>UI: Specification + input + optional additional files
+    UI->>UI: restore Builder-chat handles + validate metadata + fingerprint
+    UI->>UI: save additional files and retain only local handles
     UI->>Preview: AgentTestRequest
     Preview->>Preview: strict import + input validation
     Preview->>Compiler: compile(specification)

@@ -44,6 +44,9 @@ E2E opt-in состоит из трёх наборов:
   inputs через обычный attachment store, проверяет request-scoped binding,
   читает локальный `result.csv`, отсутствие remote IDs в result и фактические
   вызовы удаления input/output files и container;
+- UI-регрессия проверяет, что файл Builder-чата восстанавливается после
+  промежуточных сообщений и попадает в Code Interpreter preview без повторной
+  загрузки пользователем;
 - provider-contract smoke загружает TXT и CSV в auto-container, проверяет
   `code_interpreter_call`, скачивает созданный `result.csv` по
   `container_file_citation` и удаляет input/output files, container и response.

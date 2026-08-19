@@ -102,11 +102,14 @@ provider state. Базовый runtime никогда не содержит `fil
 9. возвращает ответ, citations, usage, `response_id`, локальные generated files
    и типизированные предупреждения cleanup/download.
 
-Метод не принимает `ConversationState` и не изменяет builder-диалог. Файлы
-Builder-чата не переиспользуются: inputs каждого stateless preview выбираются
-явно. Streamlit хранит preview по fingerprint spec-card и метаданных/content
-digest выбранных файлов; изменение спецификации или inputs инвалидирует старый
-результат.
+Метод не принимает `ConversationState` и не изменяет builder-диалог.
+Presentation восстанавливает доверенные локальные handles файлов Builder-чата и
+добавляет их в `AgentTestRequest` для спецификаций с Code Interpreter. Это не
+переиспользование provider state: каждый stateless preview заново загружает
+request-scoped remote-копии и удаляет их после запуска. Streamlit хранит preview
+по fingerprint spec-card, immutable handles унаследованных файлов и
+метаданных/content digest дополнительных файлов; изменение спецификации или
+inputs инвалидирует старый результат.
 
 Технические поля снабжены tooltip-справкой: отдельно объясняются citations,
 input/output/total tokens, `response_id`, runtime config, template и Vector

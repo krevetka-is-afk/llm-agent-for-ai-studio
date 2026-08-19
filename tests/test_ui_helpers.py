@@ -39,6 +39,7 @@ from ai_studio_agent_builder.presentation.streamlit.attachments import (
 from ai_studio_agent_builder.presentation.streamlit.chat_flow import (
     build_agent_specification_actions,
     build_user_content,
+    conversation_attachments,
     interaction_error_message,
 )
 from ai_studio_agent_builder.presentation.streamlit.markdown_renderer import (
@@ -86,6 +87,44 @@ def test_chat_flow_builds_fallback_content_for_multiple_files() -> None:
     uploads = [SimpleNamespace(name="one.txt"), SimpleNamespace(name="two.txt")]
 
     assert build_user_content("", uploads) == "Прикреплены файлы: one.txt, two.txt"
+
+
+def test_chat_flow_recovers_attachment_after_interjected_turns() -> None:
+    messages = [
+        {
+            "role": "user",
+            "content": "Создай бота по этому файлу",
+            "attachments": [
+                {
+                    "filename": "stored-bakery.csv",
+                    "original_filename": "bakery.csv",
+                    "mime_type": "text/csv",
+                    "size": 12,
+                    "file_id": "untrusted-provider-id",
+                }
+            ],
+        },
+        {"role": "assistant", "content": "Уточните аудиторию"},
+        {
+            "role": "user",
+            "content": "Посторонний вброс",
+            "attachments": [
+                {
+                    "filename": "../outside.csv",
+                    "original_filename": "outside.csv",
+                }
+            ],
+        },
+        {"role": "assistant", "content": "Запрос вне рабочей области"},
+        {"role": "user", "content": "Продолжим: аудитория — покупатели"},
+    ]
+
+    assert conversation_attachments(messages) == (
+        Attachment(
+            filename="stored-bakery.csv",
+            display_name="bakery.csv",
+        ),
+    )
 
 
 def test_markdown_renderer_normalizes_model_latex_delimiters() -> None:
@@ -191,6 +230,32 @@ def test_preview_fingerprint_includes_validated_file_name_type_and_content() -> 
     assert first_fingerprint != preview_request_fingerprint(
         specification,
         (changed,),
+    )
+
+
+def test_preview_fingerprint_includes_inherited_conversation_files() -> None:
+    specification = {
+        "template": "one_prompt",
+        "tools": [{"tool_id": "code_interpreter", "parameters": {}}],
+    }
+    bakery = Attachment("stored-bakery.csv", display_name="bakery.csv")
+    prices = Attachment("stored-prices.csv", display_name="prices.csv")
+
+    bakery_fingerprint = preview_request_fingerprint(
+        specification,
+        (),
+        (bakery,),
+    )
+
+    assert bakery_fingerprint == preview_request_fingerprint(
+        specification,
+        (),
+        (bakery,),
+    )
+    assert bakery_fingerprint != preview_request_fingerprint(
+        specification,
+        (),
+        (prices,),
     )
 
 
@@ -335,3 +400,93 @@ def test_chat_flow_builds_callbacks_without_exposing_connection_to_result_view()
     assert connected.generated_file_reader is not None
     assert connected.generated_file_reader("stored.csv") == b"generated"
     assert service.generated_file_reads == [("web-user", "stored.csv")]
+
+
+def test_chat_flow_scopes_conversation_files_to_code_interpreter_preview() -> None:
+    class FakeService:
+        def __init__(self) -> None:
+            self.test_request: AgentTestRequest | None = None
+            self.saved_preview_files: list[str] = []
+
+        def prepare_agent_runtime(self, specification):
+            return SimpleNamespace(to_json=lambda: "{}")
+
+        async def test_agent_specification(self, request):
+            self.test_request = request
+            return AgentTestResult(
+                response_id="resp-1",
+                output_text="Answer",
+                citations=(),
+            )
+
+        def save_attachment(
+            self,
+            user_id: str,
+            original_filename: str,
+            content: bytes,
+            caption: str | None = None,
+        ) -> Attachment:
+            self.saved_preview_files.append(original_filename)
+            return Attachment(filename="unexpected-new-upload.csv")
+
+        def read_generated_file(self, user_id: str, local_name: str) -> bytes:
+            return b""
+
+    service = FakeService()
+    inherited = Attachment(
+        filename="stored-bakery.csv",
+        display_name="bakery.csv",
+    )
+    actions = build_agent_specification_actions(
+        cast(AIInteraction, cast(Any, service)),
+        ApiKeyConnection(api_key="AQAAAA-secret", folder_id="folder-1"),
+        "web-user",
+        conversation_files=(inherited,),
+    )
+
+    assert actions.test_agent is not None
+    actions.test_agent(
+        {
+            "template": "one_prompt",
+            "tools": [{"tool_id": "code_interpreter", "parameters": {}}],
+        },
+        "Построй график",
+        "request-1",
+        (),
+    )
+
+    assert service.test_request is not None
+    assert service.test_request.attachments == (inherited,)
+    assert service.saved_preview_files == []
+
+    actions.test_agent(
+        {"template": "one_prompt", "tools": []},
+        "Ответь без файлов",
+        "request-2",
+        (),
+    )
+
+    assert service.test_request.attachments == ()
+
+    overflow_actions = build_agent_specification_actions(
+        cast(AIInteraction, cast(Any, service)),
+        ApiKeyConnection(api_key="AQAAAA-secret", folder_id="folder-1"),
+        "web-user",
+        conversation_files=tuple(
+            Attachment(f"stored-{index}.csv") for index in range(5)
+        ),
+    )
+    assert overflow_actions.test_agent is not None
+
+    with pytest.raises(AgentTestInputError, match="не более 5 файлов"):
+        overflow_actions.test_agent(
+            {
+                "template": "one_prompt",
+                "tools": [{"tool_id": "code_interpreter", "parameters": {}}],
+            },
+            "Построй график",
+            "request-3",
+            (_PreviewUpload("extra.csv", b"value\n1\n", "text/csv"),),
+        )
+
+    assert service.saved_preview_files == []

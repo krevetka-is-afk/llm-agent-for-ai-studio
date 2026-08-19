@@ -70,4 +70,5 @@ def test_agent_prompts_distinguish_code_execution_from_vector_knowledge() -> Non
     assert "do not request or invent file_ids or container_id" in one_prompt
     assert "code_interpreter=true" in rag
     assert "code_interpreter=false" in rag
-    assert "не становятся файлами code interpreter автоматически" in rag
+    assert "provider-файлы векторного индекса не переиспользуются" in rag
+    assert "локальные исходники из builder-чата ui может приложить" in rag

@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from collections.abc import Coroutine, Mapping, Sequence
+from pathlib import Path
 from typing import Any, Protocol, TypeVar
 from uuid import uuid4
 
@@ -16,6 +17,7 @@ from ai_studio_agent_builder.application.interaction import (
     Attachment,
     InteractionRequest,
     InteractionResult,
+    MAX_ATTACHMENTS_PER_REQUEST,
     UploadValidationError,
 )
 from ai_studio_agent_builder.application.builder_state import ConversationState
@@ -23,12 +25,19 @@ from ai_studio_agent_builder.application.errors import (
     AIStudioRequestError,
     VectorIndexUnavailableError,
 )
-from ai_studio_agent_builder.application.file_policy import MAX_UPLOAD_BYTES
+from ai_studio_agent_builder.application.file_policy import (
+    MAX_UPLOAD_BYTES,
+    sanitize_filename,
+)
 from ai_studio_agent_builder.application.ports.api_key_store import (
     ApiKeyConnection,
 )
 
-from .agent_test_panel import AgentSpecificationActions, AgentTestCallback
+from .agent_test_panel import (
+    AgentSpecificationActions,
+    AgentTestCallback,
+    has_code_interpreter_tool,
+)
 from .attachments import render_attachment
 from .connection import credentials_from_connection
 from .markdown_renderer import render_markdown
@@ -61,6 +70,7 @@ def render_chat(
         ai_service,
         connection,
         connection_id,
+        conversation_files=conversation_attachments(st.session_state.messages),
     )
     _render_history(ai_service, connection_id, agent_actions)
 
@@ -113,6 +123,48 @@ def build_user_content(prompt: str, uploaded_files: Sequence[NamedUpload]) -> st
         return prompt or f"Прикреплён файл: {uploaded_files[0].name}"
     filenames = ", ".join(uploaded_file.name for uploaded_file in uploaded_files)
     return prompt or f"Прикреплены файлы: {filenames}"
+
+
+def conversation_attachments(messages: Sequence[Any]) -> tuple[Attachment, ...]:
+    """Restore trusted local attachment handles from the current chat history."""
+    recovered: list[Attachment] = []
+    seen_filenames: set[str] = set()
+    for raw_message in messages:
+        if not isinstance(raw_message, Mapping) or raw_message.get("role") != "user":
+            continue
+        raw_attachments = raw_message.get("attachments")
+        if isinstance(raw_attachments, list):
+            records = raw_attachments
+        else:
+            legacy_attachment = raw_message.get("attachment")
+            records = (
+                [legacy_attachment] if isinstance(legacy_attachment, Mapping) else []
+            )
+        for record in records:
+            if not isinstance(record, Mapping):
+                continue
+            filename = record.get("filename")
+            if (
+                not isinstance(filename, str)
+                or not filename
+                or filename in {".", ".."}
+                or Path(filename).name != filename
+                or filename in seen_filenames
+            ):
+                continue
+            original_filename = record.get("original_filename")
+            display_name = sanitize_filename(
+                original_filename if isinstance(original_filename, str) else filename,
+                fallback=filename,
+            )
+            recovered.append(
+                Attachment(
+                    filename=filename,
+                    display_name=display_name,
+                )
+            )
+            seen_filenames.add(filename)
+    return tuple(recovered)
 
 
 def interaction_error_message(exc: Exception) -> str:
@@ -353,6 +405,8 @@ def build_agent_specification_actions(
     ai_service: AIInteraction,
     connection: ApiKeyConnection | None,
     connection_id: str,
+    *,
+    conversation_files: tuple[Attachment, ...] = (),
 ) -> AgentSpecificationActions:
     test_callback: AgentTestCallback | None = None
     if connection is not None:
@@ -363,8 +417,17 @@ def build_agent_specification_actions(
             request_id: str,
             uploaded_files: tuple[UploadContent, ...],
         ) -> AgentTestResult:
+            inherited_files = (
+                conversation_files if has_code_interpreter_tool(specification) else ()
+            )
+            if len(inherited_files) + len(uploaded_files) > MAX_ATTACHMENTS_PER_REQUEST:
+                raise AgentTestInputError(
+                    "Для preview можно использовать не более "
+                    f"{MAX_ATTACHMENTS_PER_REQUEST} файлов, включая файлы "
+                    "Builder-чата."
+                )
             try:
-                attachments = _persist_uploaded_files(
+                uploaded_attachments = _persist_uploaded_files(
                     ai_service,
                     connection_id,
                     user_input,
@@ -380,6 +443,7 @@ def build_agent_specification_actions(
                 raise AgentTestInputError(
                     "Не удалось сохранить файлы для preview. Повторите попытку."
                 ) from exc
+            attachments = (*inherited_files, *uploaded_attachments)
             return _run_async(
                 ai_service.test_agent_specification(
                     AgentTestRequest(
@@ -404,4 +468,5 @@ def build_agent_specification_actions(
             connection_id,
             local_name,
         ),
+        conversation_files=conversation_files,
     )

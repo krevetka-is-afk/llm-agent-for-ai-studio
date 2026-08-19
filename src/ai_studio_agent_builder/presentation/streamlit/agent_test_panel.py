@@ -12,6 +12,7 @@ from ai_studio_agent_builder.application.file_policy import MAX_UPLOAD_BYTES
 from ai_studio_agent_builder.application.interaction import (
     AgentTestInputError,
     AgentTestResult,
+    Attachment,
     UploadValidationError,
 )
 from ai_studio_agent_builder.application.ports.agent_runner import (
@@ -37,8 +38,9 @@ TEST_INPUT_HELP = (
     "инструкцию или основной диалог Agent Builder."
 )
 TEST_FILES_HELP = (
-    "Эти файлы будут доступны только текущему stateless preview через "
-    "Code Interpreter. Файлы из Builder-чата автоматически не подставляются."
+    "Файлы из Builder-чата подставляются автоматически. Здесь можно добавить "
+    "файлы, которые будут доступны только текущему stateless preview через "
+    "Code Interpreter."
 )
 SOURCES_HELP = (
     "Ссылки или файлы, которые Web Search или File Search использовал при "
@@ -87,6 +89,7 @@ class AgentSpecificationActions:
     runtime_config_json: RuntimeConfigCallback
     test_agent: AgentTestCallback | None = None
     generated_file_reader: GeneratedFileReader | None = None
+    conversation_files: tuple[Attachment, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -177,6 +180,7 @@ def render_agent_test_panel(
     user_input = ""
     submitted = False
     uploaded_files: tuple[UploadContent, ...] = ()
+    inherited_files: tuple[Attachment, ...] = ()
     if actions.test_agent is None:
         st.info("Подключитесь к AI Studio, чтобы протестировать агента.")
     else:
@@ -188,6 +192,14 @@ def render_agent_test_panel(
                 help=TEST_INPUT_HELP,
             )
             if has_code_interpreter_tool(specification):
+                inherited_files = actions.conversation_files
+                if inherited_files:
+                    inherited_names = ", ".join(
+                        file.display_name or file.filename for file in inherited_files
+                    )
+                    st.caption(
+                        f"Автоматически приложены из Builder-чата: {inherited_names}"
+                    )
                 selected_files = st.file_uploader(
                     "Файлы для Code Interpreter",
                     accept_multiple_files=True,
@@ -215,6 +227,7 @@ def render_agent_test_panel(
         request_fingerprint = preview_request_fingerprint(
             specification,
             uploaded_files,
+            inherited_files,
         )
     except UploadValidationError as exc:
         request_fingerprint = None
@@ -415,10 +428,19 @@ def specification_fingerprint(specification: Mapping[str, Any]) -> str:
 def preview_request_fingerprint(
     specification: Mapping[str, Any],
     uploaded_files: tuple[UploadContent, ...],
+    inherited_files: tuple[Attachment, ...] = (),
 ) -> str:
     digest = hashlib.sha256()
     digest.update(specification_fingerprint(specification).encode("ascii"))
     digest.update(uploaded_files_fingerprint(uploaded_files).encode("ascii"))
+    digest.update(len(inherited_files).to_bytes(4, "big"))
+    for attachment in inherited_files:
+        for value in (
+            attachment.filename,
+            attachment.display_name or "",
+        ):
+            digest.update(value.encode("utf-8"))
+            digest.update(b"\0")
     return digest.hexdigest()
 
 
